@@ -1,50 +1,120 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useState } from 'react';
+import type { Composition } from './types';
+import { SceneEditor } from './components/SceneEditor';
+import { PreviewCanvas } from './components/PreviewCanvas';
+import { RenderPanel } from './components/RenderPanel';
+import './App.css';
+
+const DEFAULT_COMPOSITION: Composition = {
+  id: 'demo-1',
+  name: 'Demo Composition',
+  scenes: [
+    {
+      id: 'scene-1',
+      label: 'Intro',
+      durationFrames: 90,
+      backgroundColor: '#1a1a2e',
+      textLayers: [
+        {
+          content: 'Local Content Studio',
+          fontSize: 64,
+          fontFamily: 'sans-serif',
+          color: '#e94560',
+          x: 0.5,
+          y: 0.4,
+          align: 'center',
+          animation: {
+            type: 'fade-in',
+            durationFrames: 30,
+            delayFrames: 10,
+            easing: 'ease-out',
+          },
+        },
+        {
+          content: 'Canvas + FFmpeg Render Pipeline',
+          fontSize: 28,
+          fontFamily: 'sans-serif',
+          color: '#ffffff',
+          x: 0.5,
+          y: 0.55,
+          align: 'center',
+          animation: {
+            type: 'slide-up',
+            durationFrames: 30,
+            delayFrames: 30,
+            easing: 'ease-out',
+          },
+        },
+      ],
+      transition: 'fade',
+    },
+    {
+      id: 'scene-2',
+      label: 'Feature',
+      durationFrames: 90,
+      backgroundColor: '#0f3460',
+      textLayers: [
+        {
+          content: 'Deterministic Rendering',
+          fontSize: 48,
+          fontFamily: 'sans-serif',
+          color: '#e94560',
+          x: 0.5,
+          y: 0.45,
+          align: 'center',
+          animation: {
+            type: 'slide-left',
+            durationFrames: 20,
+            delayFrames: 5,
+            easing: 'ease-in-out',
+          },
+        },
+      ],
+      transition: 'cut',
+    },
+  ],
+  output: {
+    id: 'vertical-1080x1920',
+    label: 'Vertical (1080x1920)',
+    width: 1080,
+    height: 1920,
+    fps: 30,
+  },
+};
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [composition, setComposition] = useState<Composition>(DEFAULT_COMPOSITION);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  function updateScene(index: number, updated: Composition['scenes'][0]) {
+    const scenes = [...composition.scenes];
+    scenes[index] = updated;
+    setComposition({ ...composition, scenes });
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app">
+      <header className="app-header">
+        <h1>Local Content Studio</h1>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="app-body">
+        <aside className="sidebar">
+          <h2>Scenes</h2>
+          {composition.scenes.map((scene, i) => (
+            <SceneEditor
+              key={scene.id}
+              scene={scene}
+              onChange={(s) => updateScene(i, s)}
+            />
+          ))}
+        </aside>
+
+        <main className="main-content">
+          <PreviewCanvas composition={composition} />
+          <RenderPanel composition={composition} />
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 
