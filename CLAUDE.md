@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-**Local Content Studio** is a cross-platform desktop application for planning, generating, previewing, and rendering short-form video animations entirely on the local machine. It combines a project workspace, an AI-assisted content generation layer, and a render pipeline built on top of [Remotion](https://www.remotion.dev/).
+**Local Content Studio** is a cross-platform desktop application for planning, generating, previewing, and rendering short-form video animations entirely on the local machine. It combines a project workspace, an AI-assisted content generation layer, and a custom render pipeline built on HTML5 Canvas + FFmpeg.
 
 Key constraint: **local-first**. All critical flows (generation, preview, rendering) must work offline after installation. No mandatory cloud services.
 
@@ -45,14 +45,14 @@ src-tauri/
 The Tauri backend (`src-tauri/`) handles windowing, file system access, and process orchestration. The React frontend (`src/`) provides the UI. Communication between them uses Tauri's `invoke` API for calling Rust commands from TypeScript and Tauri's event system for async notifications.
 
 Future layers (not yet built):
-- **Render worker** — Node.js + Remotion renderer for bundling compositions and rendering video
+- **Render worker** — Custom Canvas renderer (HTML5 Canvas/OffscreenCanvas for frame generation) + FFmpeg (frame encoding → video output)
 - **Generation worker** — AI/language model orchestration for script and content generation
 - **Storage** — JSON project manifests + optional SQLite for indexes
 
 ## Core Domain Concepts
 
 - **Projects** — portable local folders with JSON manifests. Contain metadata, brand profile, template selection, script versions, scene graph, asset references, output presets, and render history.
-- **Templates** — reusable Remotion compositions with defined input schemas, scene schemas, motion presets, typography tokens, and output presets.
+- **Templates** — reusable Canvas compositions with defined input schemas, scene schemas, motion presets, typography tokens, and output presets.
 - **Scenes** — storyboard cards (not freeform timeline tracks). Each has text layers, duration, motion preset, background media, caption rules, audio cues, and transition type.
 - **Brand kits** — reusable visual systems (colors, typography, motion style, logo, watermark rules).
 - **Render queue** — local jobs as first-class objects. Supports single render, batch render from CSV/JSON, multi-format export, retry, and log inspection.

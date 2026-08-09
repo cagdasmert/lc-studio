@@ -1,19 +1,19 @@
 # Local Content Studio — Product Definition
 
 ## Product overview
-Local Content Studio is a desktop-first creative application for planning, generating, previewing, and rendering short-form video animations on a fully local machine. The product is designed for macOS, Windows, and Linux and uses a local rendering engine based on Remotion, which supports local CLI rendering, Node-based server-side rendering APIs, and browser-side rendering capabilities without requiring server infrastructure.[cite:10][cite:16][cite:18]
+Local Content Studio is a desktop-first creative application for planning, generating, previewing, and rendering short-form video animations on a fully local machine. The product is designed for macOS, Windows, and Linux and uses a custom local rendering engine built on HTML5 Canvas (for frame generation) and FFmpeg (for video encoding), requiring no external rendering services or proprietary dependencies.
 
-The application combines three functions in one interface: a project workspace for managing assets and templates, an AI-assisted content generation layer for scripts and scene structures, and a render pipeline for exporting social-media-ready videos. Remotion is particularly suitable for this because it supports reusable compositions, template-driven workflows, and dataset-based batch rendering.[cite:27][cite:11][cite:29]
+The application combines three functions in one interface: a project workspace for managing assets and templates, an AI-assisted content generation layer for scripts and scene structures, and a render pipeline for exporting social-media-ready videos. The custom Canvas + FFmpeg pipeline supports reusable compositions, template-driven workflows, and dataset-based batch rendering with full control over the rendering stack and no licensing constraints.
 
 ## Vision
 The product should feel like a hybrid of a lightweight motion design studio, a campaign asset factory, and a developer-grade automation tool. Its core promise is simple: create many high-quality short videos locally, with a strong visual system, reusable templates, and enough control to satisfy technical users who want deterministic outputs.
 
-The experience should favor repeatability over manual timeline editing. Instead of building every video from scratch, users should define reusable compositions, feed them structured inputs, preview variants, and render optimized vertical or square outputs from one workspace. This aligns with Remotion’s composition model and programmatic rendering workflow.[cite:14][cite:3][cite:34]
+The experience should favor repeatability over manual timeline editing. Instead of building every video from scratch, users should define reusable compositions, feed them structured inputs, preview variants, and render optimized vertical or square outputs from one workspace. The custom Canvas rendering pipeline is designed around this programmatic composition model.
 
 ## Problem statement
 Short-form content production is fragmented across too many tools. Scriptwriting happens in one place, captions in another, asset organization in folders, rendering in a video editor, and variant generation in spreadsheets or ad hoc scripts.
 
-For technical creators, local-first teams, and privacy-sensitive workflows, cloud-only editors create friction. They introduce upload delays, API dependencies, inconsistent reproducibility, and infrastructure overhead that are unnecessary when the rendering engine can run locally through Node or the CLI.[cite:8][cite:19][cite:21]
+For technical creators, local-first teams, and privacy-sensitive workflows, cloud-only editors create friction. They introduce upload delays, API dependencies, inconsistent reproducibility, and infrastructure overhead that are unnecessary when the rendering engine can run locally using Canvas frame capture and FFmpeg encoding.
 
 ## Goals
 - Run fully locally on macOS, Windows, and Linux, with no mandatory cloud service for generation, preview, or rendering.
@@ -44,11 +44,11 @@ For technical creators, local-first teams, and privacy-sensitive workflows, clou
 3. Review generated scenes in a visual storyboard and edit text, timing, media, colors, typography, and transitions.
 4. Preview the selected composition in-app using a player-based interface before rendering.
 5. Render one or many outputs locally in formats such as 1080x1920, 1080x1080, or 1920x1080.
-6. Batch-produce variants for different audiences, languages, CTAs, or openings using structured data. Remotion documents dataset-based rendering and template workflows that support this approach.[cite:11][cite:27]
+6. Batch-produce variants for different audiences, languages, CTAs, or openings using structured data. The custom render pipeline supports dataset-based rendering by iterating over structured inputs and producing one output per data row.
 
 ## Product principles
 ### Local-first by default
-All critical flows should work without an internet connection after installation, except optional model downloads or third-party media acquisition. Rendering should use the local Remotion pipeline rather than requiring a hosted API.[cite:10][cite:16]
+All critical flows should work without an internet connection after installation, except optional model downloads or third-party media acquisition. Rendering should use the local Canvas + FFmpeg pipeline rather than requiring a hosted API.
 
 ### Structured creativity
 The system should encourage users to think in terms of scenes, props, templates, and variants rather than freeform timelines. Creativity comes from flexible building blocks, not hidden state.
@@ -60,9 +60,9 @@ A given composition, prop set, and asset package should render the same way acro
 AI suggestions should accelerate production, not trap the user. Every generated line, scene, caption, and asset choice must remain editable.
 
 ## Proposed solution
-The product will be a cross-platform desktop application with a local web-style UI shell and a local render worker. The UI manages projects, templates, generation sessions, and render jobs, while a background Node service bundles compositions, resolves props, and calls Remotion rendering APIs locally.[cite:8][cite:3]
+The product will be a cross-platform desktop application with a local web-style UI shell and a custom render worker. The UI manages projects, templates, generation sessions, and render jobs, while a background render process draws each frame to an HTML5 Canvas (or OffscreenCanvas in a Web Worker), captures the frame as image data, and pipes it to FFmpeg for video encoding.
 
-A recommended architecture is a Python or local-model orchestration layer for language and planning tasks, paired with a Node worker for actual Remotion rendering. This separation matches Remotion’s documented server-side rendering APIs and keeps the rendering path stable.[cite:8][cite:16]
+A recommended architecture is a Python or local-model orchestration layer for language and planning tasks, paired with the Canvas + FFmpeg render worker for actual video output. FFmpeg is bundled or resolved locally; the Tauri/Rust backend orchestrates the FFmpeg child process and streams progress events back to the UI.
 
 ## UX concept
 The app should feel cinematic, tactical, and production-oriented without resembling a traditional timeline editor. The mental model is “workspace plus factory” rather than “canvas plus manual timeline.”
@@ -105,7 +105,7 @@ Each project contains:
 Projects should be stored as portable local folders with JSON manifests so they can be versioned with Git or copied between machines.
 
 ### 2. Template library
-The app should ship with editable starter templates inspired by common short-form content patterns. Remotion provides starter templates and reusable composition resources, which supports building a local template catalog on top of documented patterns.[cite:27][cite:13][cite:36]
+The app should ship with editable starter templates inspired by common short-form content patterns. Each template is a self-contained Canvas composition module that defines how to draw frames given structured input props.
 
 Suggested templates:
 - Kinetic text opener
@@ -156,7 +156,7 @@ The storyboard is the heart of the product. Each scene card should include:
 Users should be able to duplicate, lock, reorder, disable, or branch scenes into variants.
 
 ### 5. Preview system
-The app should provide a local preview player powered by Remotion’s playback capabilities. Remotion offers player APIs and browser-based rendering options, making an embedded preview workflow feasible without depending on an external service.[cite:17][cite:18][cite:30]
+The app should provide a local preview player that renders compositions in real time using HTML5 Canvas within the Tauri webview. The same Canvas rendering functions used for export are reused for preview, ensuring WYSIWYG fidelity between preview and final output.
 
 Preview modes:
 - Full composition preview
@@ -167,7 +167,7 @@ Preview modes:
 - Side-by-side variant comparison
 
 ### 6. Render queue
-The render queue should expose local jobs as first-class objects. Remotion’s CLI and renderer APIs support rendering media locally and specifying output locations, which fits a desktop queue model.[cite:19][cite:3]
+The render queue should expose local jobs as first-class objects. The Canvas + FFmpeg pipeline renders frames locally and writes output to user-specified locations, fitting a desktop queue model with no external dependencies.
 
 Render capabilities:
 - Single render
@@ -221,7 +221,7 @@ Advanced users should be able to trigger jobs through:
 - Local webhooks, optional
 - Scheduled generation profiles
 
-REST should remain optional. The core app must work by directly invoking the local renderer and job runner, because Remotion supports local CLI and local renderer APIs without requiring network services.[cite:19][cite:16]
+REST should remain optional. The core app must work by directly invoking the local Canvas renderer and FFmpeg encoder without requiring network services.
 
 ## Delight features
 To make the product memorable, add a few signature features:
@@ -290,10 +290,10 @@ Each exported video records the “genome” of its composition: template, promp
 |---|---|---|
 | Desktop shell | Windowing, file access, process orchestration | Tauri or Electron |
 | UI frontend | Project UI, forms, preview, queue, inspector | React + TypeScript |
-| Render worker | Bundle compositions and render outputs | Node.js + Remotion renderer [cite:16] |
+| Render worker | Draw frames and encode video | HTML5 Canvas/OffscreenCanvas + FFmpeg (bundled or system) |
 | Generation worker | Prompting, local model orchestration, text processing | Python or Node |
 | Storage | Local project folders, manifests, cache, logs | JSON + SQLite optional |
-| Preview | In-app playback and inspection | Remotion Player / browser preview [cite:17][cite:30] |
+| Preview | In-app playback and inspection | HTML5 Canvas in Tauri webview (same render functions as export) |
 
 ## Data model
 ### Project manifest
@@ -342,7 +342,7 @@ A power-user panel for entering structured instructions with fields for objectiv
 A dedicated control surface for typography scales, color tokens, caption presets, transition presets, motion pack assignment, and safe-area overlays.
 
 ### Batch lab
-A grid interface for importing CSV or JSON rows and mapping fields to template inputs. This matches Remotion’s documented dataset-rendering approach and should become one of the product’s strongest differentiators.[cite:11]
+A grid interface for importing CSV or JSON rows and mapping fields to template inputs. The custom render pipeline iterates over each data row to produce one video per entry, making batch production one of the product’s strongest differentiators.
 
 ### Queue theater
 A cinematic queue screen with live statuses, mini thumbnails, ETA, warnings, and post-render actions such as open folder, reveal asset, duplicate job, or generate alternate cuts.
@@ -398,10 +398,10 @@ A cinematic queue screen with live statuses, mini thumbnails, ETA, warnings, and
 - At least 50 percent of users reuse a template or brand kit within their first five projects.
 
 ## Positioning
-Local Content Studio should be positioned as a local-first short-video operating system for technical creators and content teams. It is not merely a wrapper around Remotion; it is a management layer, creative engine, and render command center built on top of a local programmatic video foundation that already supports compositions, templates, and local rendering workflows.[cite:14][cite:27][cite:19]
+Local Content Studio should be positioned as a local-first short-video operating system for technical creators and content teams. It is a management layer, creative engine, and render command center built on a fully custom, open-standards rendering foundation (HTML5 Canvas + FFmpeg) with no proprietary dependencies or licensing constraints.
 
 ## Release recommendation
-The first release should focus on one strong wedge: batchable short-form social videos with editable storyboard scenes and deterministic local rendering. That wedge is realistic because Remotion already supports local rendering, template-driven project creation, and data-driven generation workflows that map directly to the proposed product architecture.[cite:10][cite:2][cite:11]
+The first release should focus on one strong wedge: batchable short-form social videos with editable storyboard scenes and deterministic local rendering. That wedge is realistic because the Canvas + FFmpeg pipeline gives full control over frame-level rendering, template-driven composition, and data-driven batch workflows with no external service or licensing dependencies.
 
 ## Naming ideas
 - Local Content Studio
