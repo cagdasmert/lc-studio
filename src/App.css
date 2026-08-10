@@ -262,6 +262,36 @@ body {
 .render-error { color: #f44336; font-size: 12px; }
 .render-cancelled { color: #ff9800; font-size: 12px; }
 
+/* ── Project Menu ────────────────────────────────────── */
+
+.project-menu { position: relative; }
+
+.project-menu-trigger {
+  padding: 4px 10px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 3px; color: #ccc; cursor: pointer; font-size: 12px;
+  white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+}
+.project-menu-trigger:hover { background: #2a2a2a; }
+
+.project-menu-dropdown {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+  min-width: 180px; z-index: 50; padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.project-menu-dropdown button {
+  display: block; width: 100%; text-align: left; padding: 6px 12px;
+  background: none; border: none; color: #ccc; cursor: pointer; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.project-menu-dropdown button:hover { background: #2a2a2a; }
+
+.menu-divider { height: 1px; background: #333; margin: 4px 0; }
+.menu-label {
+  padding: 4px 12px; font-size: 10px; text-transform: uppercase;
+  color: #666; letter-spacing: 0.04em;
+}
+
 /* ── Toolbar ─────────────────────────────────────────── */
 
 .toolbar {
@@ -275,7 +305,8 @@ body {
   border-radius: 3px; color: #ccc; cursor: pointer; font-size: 11px;
   min-width: 26px; text-align: center;
 }
-.toolbar-btn:hover { background: #2a2a2a; }
+.toolbar-btn:hover:not(:disabled) { background: #2a2a2a; }
+.toolbar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .toolbar-btn.active { background: #2a3a5a; border-color: #4a7abf; color: #8abfff; }
 
 .toolbar-divider {

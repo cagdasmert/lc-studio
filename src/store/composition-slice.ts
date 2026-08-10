@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { Composition, Scene, Layer, KeyframeTrack, TextLayerData } from '../types';
 
-function createDefaultComposition(): Composition {
+export function createDefaultComposition(): Composition {
   const introTitle: TextLayerData = {
     id: 'text-intro-title',
     name: 'Title',
@@ -181,7 +181,11 @@ function createDefaultComposition(): Composition {
 
 export interface CompositionSlice {
   composition: Composition;
+  projectPath: string | null;
+  isDirty: boolean;
   setComposition: (composition: Composition) => void;
+  setProjectPath: (path: string | null) => void;
+  markClean: () => void;
   updateScene: (sceneIndex: number, patch: Partial<Scene>) => void;
   addScene: (scene: Scene, insertIndex?: number) => void;
   removeScene: (sceneIndex: number) => void;
@@ -209,14 +213,18 @@ export interface CompositionSlice {
 
 export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => ({
   composition: createDefaultComposition(),
+  projectPath: null,
+  isDirty: false,
 
-  setComposition: (composition) => set({ composition }),
+  setComposition: (composition) => set({ composition, isDirty: false }),
+  setProjectPath: (path) => set({ projectPath: path }),
+  markClean: () => set({ isDirty: false }),
 
   updateScene: (sceneIndex, patch) =>
     set((state) => {
       const scenes = [...state.composition.scenes];
       scenes[sceneIndex] = { ...scenes[sceneIndex], ...patch };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   addScene: (scene, insertIndex) =>
@@ -224,13 +232,13 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
       const scenes = [...state.composition.scenes];
       const idx = insertIndex ?? scenes.length;
       scenes.splice(idx, 0, scene);
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   removeScene: (sceneIndex) =>
     set((state) => {
       const scenes = state.composition.scenes.filter((_, i) => i !== sceneIndex);
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   reorderScenes: (fromIndex, toIndex) =>
@@ -238,7 +246,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
       const scenes = [...state.composition.scenes];
       const [moved] = scenes.splice(fromIndex, 1);
       scenes.splice(toIndex, 0, moved);
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   duplicateScene: (sceneIndex) =>
@@ -255,7 +263,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
         })),
       };
       scenes.splice(sceneIndex + 1, 0, dup);
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   addLayer: (sceneIndex, layer) =>
@@ -265,7 +273,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
         ...scenes[sceneIndex],
         layers: [...scenes[sceneIndex].layers, layer],
       };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   updateLayer: (sceneIndex, layerId, patch) =>
@@ -277,7 +285,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
           l.id === layerId ? ({ ...l, ...patch } as Layer) : l,
         ),
       };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   removeLayer: (sceneIndex, layerId) =>
@@ -287,7 +295,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
         ...scenes[sceneIndex],
         layers: scenes[sceneIndex].layers.filter((l) => l.id !== layerId),
       };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   reorderLayers: (sceneIndex, fromIndex, toIndex) =>
@@ -297,7 +305,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
       const [moved] = layers.splice(fromIndex, 1);
       layers.splice(toIndex, 0, moved);
       scenes[sceneIndex] = { ...scenes[sceneIndex], layers };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   setKeyframe: (sceneIndex, layerId, property, frame, value, easing = 'ease-out') =>
@@ -325,7 +333,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
           return { ...l, keyframes } as Layer;
         }),
       };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
   removeKeyframe: (sceneIndex, layerId, property, frame) =>
@@ -344,6 +352,6 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
           return { ...l, keyframes } as Layer;
         }),
       };
-      return { composition: { ...state.composition, scenes } };
+      return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 });

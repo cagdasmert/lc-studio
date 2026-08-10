@@ -19,8 +19,33 @@ export function Toolbar() {
   const snapToGrid = useStore((s) => s.snapToGrid);
   const toggleSnap = useStore((s) => s.toggleSnap);
 
+  const temporal = useStore.temporal;
+  const canUndo = temporal.getState().pastStates.length > 0;
+  const canRedo = temporal.getState().futureStates.length > 0;
+
   return (
     <div className="toolbar">
+      <div className="toolbar-group">
+        <button
+          className="toolbar-btn"
+          onClick={() => temporal.getState().undo()}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={() => temporal.getState().redo()}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          Redo
+        </button>
+      </div>
+
+      <div className="toolbar-divider" />
+
       <div className="toolbar-group">
         {TOOLS.map((t) => (
           <button
