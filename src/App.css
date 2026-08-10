@@ -15,8 +15,11 @@ body {
   padding: 8px 16px;
   background: #111;
   border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
-.app-header h1 { font-size: 16px; font-weight: 600; color: #e94560; }
+.app-header h1 { font-size: 16px; font-weight: 600; color: #e94560; white-space: nowrap; }
 
 .app-body { display: flex; flex: 1; overflow: hidden; }
 
@@ -258,3 +261,67 @@ body {
 .render-success { color: #4caf50; font-size: 13px; font-weight: 600; }
 .render-error { color: #f44336; font-size: 12px; }
 .render-cancelled { color: #ff9800; font-size: 12px; }
+
+/* ── Toolbar ─────────────────────────────────────────── */
+
+.toolbar {
+  display: flex; align-items: center; gap: 4px; flex: 1;
+}
+
+.toolbar-group { display: flex; align-items: center; gap: 2px; }
+
+.toolbar-btn {
+  padding: 4px 8px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 3px; color: #ccc; cursor: pointer; font-size: 11px;
+  min-width: 26px; text-align: center;
+}
+.toolbar-btn:hover { background: #2a2a2a; }
+.toolbar-btn.active { background: #2a3a5a; border-color: #4a7abf; color: #8abfff; }
+
+.toolbar-divider {
+  width: 1px; height: 18px; background: #333; margin: 0 4px;
+}
+
+.zoom-select {
+  padding: 3px 4px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 3px; color: #ccc; font-size: 11px; width: 60px;
+}
+
+/* ── Add Layer Dialog ────────────────────────────────── */
+
+.dialog-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+
+.dialog-panel {
+  background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+  padding: 20px; min-width: 320px;
+}
+.dialog-panel h3 {
+  font-size: 14px; color: #e0e0e0; margin-bottom: 16px;
+}
+
+.dialog-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dialog-option {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 16px 8px; background: #222; border: 1px solid #333;
+  border-radius: 6px; color: #ccc; cursor: pointer; font-size: 12px;
+}
+.dialog-option:hover { background: #2a2a2a; border-color: #4a7abf; }
+.dialog-option:disabled { opacity: 0.5; cursor: wait; }
+
+.dialog-icon {
+  font-size: 18px; font-weight: 700; color: #e94560;
+}
+
+.dialog-close {
+  width: 100%; padding: 6px; background: #222; border: 1px solid #333;
+  border-radius: 4px; color: #999; cursor: pointer; font-size: 12px;
+}
+.dialog-close:hover { background: #2a2a2a; color: #ccc; }

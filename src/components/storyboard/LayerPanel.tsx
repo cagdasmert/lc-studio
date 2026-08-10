@@ -79,7 +79,7 @@ function createDefaultShapeLayer(scene: import('../../types').Scene): ShapeLayer
   };
 }
 
-export function LayerPanel() {
+export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
   const composition = useStore((s) => s.composition);
   const selectedSceneIndex = useStore((s) => s.selectedSceneIndex);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
@@ -100,6 +100,7 @@ export function LayerPanel() {
         <div className="layer-add-buttons">
           <button onClick={() => addLayer(selectedSceneIndex, createDefaultTextLayer(scene))} title="Add text layer">T+</button>
           <button onClick={() => addLayer(selectedSceneIndex, createDefaultShapeLayer(scene))} title="Add shape layer">S+</button>
+          {onAddLayer && <button onClick={onAddLayer} title="Add layer (all types)">+</button>}
         </div>
       </div>
 

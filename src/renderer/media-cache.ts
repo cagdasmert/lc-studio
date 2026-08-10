@@ -13,22 +13,35 @@ export async function loadImage(
   if (cache.has(src)) return;
 
   try {
-    // Try fetching as a URL (works for Tauri asset:// protocol and blob URLs)
+    // Works for blob URLs, data URLs, http URLs, and asset:// URLs
     const response = await fetch(src);
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
     cache.set(src, bitmap);
   } catch {
-    // Fallback: try loading via Image element
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
-      img.src = src;
-    });
-    const bitmap = await createImageBitmap(img);
-    cache.set(src, bitmap);
+    // Fallback: try loading via Image element (handles more URL schemes)
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        img.src = src;
+      });
+      const bitmap = await createImageBitmap(img);
+      cache.set(src, bitmap);
+    } catch {
+      // If it's a local file path, try reading via fs plugin
+      try {
+        const { readFile } = await import('@tauri-apps/plugin-fs');
+        const bytes = await readFile(src);
+        const blob = new Blob([bytes]);
+        const bitmap = await createImageBitmap(blob);
+        cache.set(src, bitmap);
+      } catch {
+        console.warn(`Could not load image: ${src}`);
+      }
+    }
   }
 }
 
