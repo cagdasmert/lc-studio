@@ -4,8 +4,9 @@ import { createCompositionSlice, type CompositionSlice } from './composition-sli
 import { createSelectionSlice, type SelectionSlice } from './selection-slice';
 import { createPlaybackSlice, type PlaybackSlice } from './playback-slice';
 import { createUISlice, type UISlice } from './ui-slice';
+import { createRenderSlice, type RenderSlice } from './render-slice';
 
-export type StoreState = CompositionSlice & SelectionSlice & PlaybackSlice & UISlice;
+export type StoreState = CompositionSlice & SelectionSlice & PlaybackSlice & UISlice & RenderSlice;
 
 export const useStore = create<StoreState>()(
   temporal(
@@ -14,6 +15,7 @@ export const useStore = create<StoreState>()(
       ...createSelectionSlice(...a),
       ...createPlaybackSlice(...a),
       ...createUISlice(...a),
+      ...createRenderSlice(...a),
     }),
     {
       // Only track composition changes for undo/redo, not UI state

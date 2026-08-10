@@ -1,20 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RenderStatus } from '../types';
 import { useStore } from '../store';
-import { checkFfmpeg, onRenderProgress, cancelRender } from '../lib/tauri-bridge';
+import type { RenderJob } from '../store/render-slice';
+import { checkFfmpeg, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
 
 export function RenderPanel() {
   const composition = useStore((s) => s.composition);
+  const renderQueue = useStore((s) => s.renderQueue);
+  const addRenderJob = useStore((s) => s.addRenderJob);
+  const updateJob = useStore((s) => s.updateJob);
+  const removeJob = useStore((s) => s.removeJob);
+  const retryJob = useStore((s) => s.retryJob);
+  const cancelJob = useStore((s) => s.cancelJob);
+  const setActiveJob = useStore((s) => s.setActiveJob);
+  const clearCompleted = useStore((s) => s.clearCompleted);
 
   const [ffmpegVersion, setFfmpegVersion] = useState<string | null>(null);
   const [ffmpegError, setFfmpegError] = useState<string | null>(null);
-  const [status, setStatus] = useState<RenderStatus>('idle');
-  const [progress, setProgress] = useState(0);
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const [totalFrames, setTotalFrames] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const renderingRef = useRef(false);
 
   useEffect(() => {
     checkFfmpeg()
@@ -22,73 +27,170 @@ export function RenderPanel() {
       .catch((e) => setFfmpegError(String(e)));
   }, []);
 
-  useEffect(() => {
-    const unlisten = onRenderProgress((p) => {
-      setProgress(p.percent);
-      setCurrentFrame(p.current_frame);
-      setTotalFrames(p.total_frames);
-      if (p.status === 'completed' || p.status === 'failed' || p.status === 'cancelled') {
-        setStatus(p.status as RenderStatus);
-        if (p.error) setError(p.error);
-      }
+  // Process queue: start next idle job when no active render
+  const processQueue = useCallback(async () => {
+    if (renderingRef.current) return;
+
+    const state = useStore.getState();
+    const nextJob = state.renderQueue.find((j) => j.status === 'idle');
+    if (!nextJob) return;
+
+    renderingRef.current = true;
+    setActiveJob(nextJob.id);
+    updateJob(nextJob.id, {
+      status: 'rendering',
+      startedAt: new Date().toISOString(),
     });
-    return () => { unlisten.then((fn) => fn()); };
-  }, []);
-
-  async function handleRender() {
-    setError(null);
-    const outputPath = await pickOutputFile();
-    if (!outputPath) return;
-
-    setStatus('rendering');
-    setProgress(0);
 
     try {
-      await renderComposition(composition, outputPath, (current, total) => {
-        setCurrentFrame(current);
-        setTotalFrames(total);
-        setProgress((current / total) * 100);
+      await renderComposition(
+        nextJob.composition,
+        nextJob.outputPath,
+        (current, total) => {
+          // Check if cancelled mid-render
+          const currentJob = useStore.getState().renderQueue.find((j) => j.id === nextJob.id);
+          if (currentJob?.status === 'cancelled') {
+            throw new Error('__CANCELLED__');
+          }
+          updateJob(nextJob.id, {
+            currentFrame: current,
+            totalFrames: total,
+            progress: (current / total) * 100,
+          });
+        },
+      );
+      updateJob(nextJob.id, {
+        status: 'completed',
+        progress: 100,
+        completedAt: new Date().toISOString(),
       });
-      setStatus('completed');
     } catch (err) {
-      setStatus('failed');
-      setError(String(err));
+      const msg = String(err);
+      if (msg.includes('__CANCELLED__')) {
+        try { await cancelRender(); } catch { /* ignore */ }
+        updateJob(nextJob.id, {
+          status: 'cancelled',
+          completedAt: new Date().toISOString(),
+        });
+      } else {
+        updateJob(nextJob.id, {
+          status: 'failed',
+          error: msg,
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } finally {
+      renderingRef.current = false;
+      setActiveJob(null);
+    }
+
+    // Process next in queue
+    setTimeout(() => processQueue(), 100);
+  }, [setActiveJob, updateJob]);
+
+  // Trigger queue processing when jobs change
+  useEffect(() => {
+    const hasIdle = renderQueue.some((j) => j.status === 'idle');
+    if (hasIdle && !renderingRef.current) {
+      processQueue();
+    }
+  }, [renderQueue, processQueue]);
+
+  async function handleRenderNow() {
+    const outputPath = await pickOutputFile();
+    if (!outputPath) return;
+    addRenderJob(composition, outputPath);
+  }
+
+  function handleCancel(job: RenderJob) {
+    cancelJob(job.id);
+    if (job.status === 'rendering') {
+      cancelRender().catch(() => {});
     }
   }
 
-  async function handleCancel() {
-    try { await cancelRender(); } catch { /* ignore */ }
-  }
+  const canRender = ffmpegVersion && !ffmpegError;
 
-  const canRender = ffmpegVersion && status !== 'rendering';
+  const statusIcon = (status: RenderStatus) => {
+    switch (status) {
+      case 'idle': return '~';
+      case 'rendering': return '...';
+      case 'completed': return 'OK';
+      case 'failed': return '!';
+      case 'cancelled': return 'X';
+      default: return '';
+    }
+  };
+
+  const statusClass = (status: RenderStatus) => {
+    switch (status) {
+      case 'completed': return 'job-completed';
+      case 'failed': return 'job-failed';
+      case 'cancelled': return 'job-cancelled';
+      case 'rendering': return 'job-rendering';
+      default: return '';
+    }
+  };
 
   return (
     <div className="render-panel">
-      <div className="ffmpeg-status">
-        {ffmpegVersion && <span className="ffmpeg-ok">FFmpeg: {ffmpegVersion}</span>}
-        {ffmpegError && <span className="ffmpeg-err">FFmpeg: {ffmpegError}</span>}
-        {!ffmpegVersion && !ffmpegError && <span>Checking FFmpeg...</span>}
+      <div className="render-header">
+        <div className="ffmpeg-status">
+          {ffmpegVersion && <span className="ffmpeg-ok">FFmpeg: {ffmpegVersion}</span>}
+          {ffmpegError && <span className="ffmpeg-err">FFmpeg: {ffmpegError}</span>}
+          {!ffmpegVersion && !ffmpegError && <span>Checking FFmpeg...</span>}
+        </div>
+        <div className="render-actions">
+          <button disabled={!canRender} onClick={handleRenderNow}>
+            Render MP4
+          </button>
+          {renderQueue.some((j) => j.status === 'completed' || j.status === 'failed' || j.status === 'cancelled') && (
+            <button onClick={clearCompleted} className="clear-btn">Clear done</button>
+          )}
+        </div>
       </div>
 
-      <div className="render-actions">
-        <button disabled={!canRender} onClick={handleRender}>Render MP4</button>
-        {status === 'rendering' && (
-          <button onClick={handleCancel} className="cancel-btn">Cancel</button>
-        )}
-      </div>
+      {renderQueue.length > 0 && (
+        <div className="render-queue">
+          {renderQueue.map((job) => (
+            <div key={job.id} className={`queue-item ${statusClass(job.status)}`}>
+              <div className="queue-item-header">
+                <span className="queue-status">{statusIcon(job.status)}</span>
+                <span className="queue-name">{job.name}</span>
+                <span className="queue-path" title={job.outputPath}>
+                  {job.outputPath.split(/[/\\]/).pop()}
+                </span>
+                <div className="queue-item-actions">
+                  {job.status === 'failed' && (
+                    <button onClick={() => retryJob(job.id)} title="Retry">R</button>
+                  )}
+                  {(job.status === 'idle' || job.status === 'rendering') && (
+                    <button onClick={() => handleCancel(job)} title="Cancel">X</button>
+                  )}
+                  {(job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && (
+                    <button onClick={() => removeJob(job.id)} title="Remove">x</button>
+                  )}
+                </div>
+              </div>
 
-      {status === 'rendering' && (
-        <div className="progress-container">
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-          <span>Frame {currentFrame} / {totalFrames} ({progress.toFixed(1)}%)</span>
+              {job.status === 'rendering' && (
+                <div className="queue-progress">
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${job.progress}%` }} />
+                  </div>
+                  <span className="queue-progress-text">
+                    {job.currentFrame} / {job.totalFrames} ({job.progress.toFixed(0)}%)
+                  </span>
+                </div>
+              )}
+
+              {job.status === 'failed' && job.error && (
+                <div className="queue-error">{job.error}</div>
+              )}
+            </div>
+          ))}
         </div>
       )}
-
-      {status === 'completed' && <div className="render-success">Render complete!</div>}
-      {status === 'failed' && <div className="render-error">Render failed: {error}</div>}
-      {status === 'cancelled' && <div className="render-cancelled">Render cancelled</div>}
     </div>
   );
 }

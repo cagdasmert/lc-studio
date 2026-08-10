@@ -267,28 +267,78 @@ body {
   padding: 10px; background: #131313; border: 1px solid #2a2a2a; border-radius: 4px;
 }
 
-.ffmpeg-status { font-size: 11px; margin-bottom: 8px; }
+.render-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ffmpeg-status { font-size: 11px; }
 .ffmpeg-ok { color: #4caf50; }
 .ffmpeg-err { color: #f44336; }
 
-.render-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.render-actions { display: flex; gap: 6px; }
 .render-actions button {
-  padding: 6px 16px; border: none; border-radius: 4px; font-size: 13px;
+  padding: 5px 12px; border: none; border-radius: 4px; font-size: 12px;
   cursor: pointer; font-weight: 600;
 }
 .render-actions button:first-child { background: #e94560; color: #fff; }
 .render-actions button:first-child:hover { background: #d63851; }
 .render-actions button:disabled { background: #333; color: #666; cursor: not-allowed; }
-.cancel-btn { background: #333 !important; color: #ccc !important; }
+.clear-btn { background: #222 !important; color: #888 !important; font-weight: 400 !important; }
+.clear-btn:hover { color: #ccc !important; }
 
-.progress-container { display: flex; align-items: center; gap: 8px; }
-.progress-bar { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+/* ── Render queue ────────────────────────────────────── */
+
+.render-queue {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 200px; overflow-y: auto;
+}
+
+.queue-item {
+  padding: 6px 8px; background: #1a1a1a; border: 1px solid #2a2a2a;
+  border-radius: 4px; font-size: 11px;
+}
+.queue-item.job-rendering { border-color: #e94560; }
+.queue-item.job-completed { border-color: #2a5a2a; }
+.queue-item.job-failed { border-color: #5a2a2a; }
+.queue-item.job-cancelled { border-color: #4a3a1a; }
+
+.queue-item-header {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.queue-status {
+  width: 20px; text-align: center; font-weight: 700; font-size: 10px;
+}
+.job-rendering .queue-status { color: #e94560; }
+.job-completed .queue-status { color: #4caf50; }
+.job-failed .queue-status { color: #f44336; }
+.job-cancelled .queue-status { color: #ff9800; }
+
+.queue-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ccc;
+}
+.queue-path {
+  color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px;
+}
+
+.queue-item-actions { display: flex; gap: 2px; }
+.queue-item-actions button {
+  width: 18px; height: 18px; padding: 0; border: none; background: transparent;
+  color: #666; cursor: pointer; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.queue-item-actions button:hover { color: #ccc; }
+
+.queue-progress { margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.progress-bar { flex: 1; height: 4px; background: #0a0a0a; border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: #e94560; transition: width 0.1s; }
-.progress-container span { font-size: 11px; color: #888; white-space: nowrap; }
+.queue-progress-text { font-size: 10px; color: #888; white-space: nowrap; }
 
-.render-success { color: #4caf50; font-size: 13px; font-weight: 600; }
-.render-error { color: #f44336; font-size: 12px; }
-.render-cancelled { color: #ff9800; font-size: 12px; }
+.queue-error {
+  margin-top: 4px; font-size: 10px; color: #f44336;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ── Project Menu ────────────────────────────────────── */
 
