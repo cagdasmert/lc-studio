@@ -11,6 +11,10 @@ export function resolveFrame(
   composition: Composition,
   globalFrame: number,
 ): { sceneIndex: number; frameInScene: number } {
+  if (composition.scenes.length === 0) {
+    return { sceneIndex: -1, frameInScene: 0 };
+  }
+
   let remaining = globalFrame;
   for (let i = 0; i < composition.scenes.length; i++) {
     const scene = composition.scenes[i];
@@ -34,6 +38,11 @@ export function drawCompositionFrame(
 ): void {
   const { width, height } = composition.output;
   const { sceneIndex, frameInScene } = resolveFrame(composition, globalFrame);
+  if (sceneIndex < 0) {
+    // No scenes — just clear the canvas
+    ctx.clearRect(0, 0, width, height);
+    return;
+  }
   const scene = composition.scenes[sceneIndex];
 
   // Check if we're in a transition zone at the end of this scene
