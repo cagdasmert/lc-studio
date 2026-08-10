@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(shopt -s dotglob)",
+      "Bash(mv temp-scaffold/* .)",
+      "Bash(rmdir temp-scaffold:*)"
+    ]
+  }
+}
