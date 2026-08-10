@@ -109,10 +109,12 @@ body {
 /* ── Canvas workspace ─────────────────────────────────── */
 
 .canvas-workspace {
-  flex: 1; display: flex; align-items: center; justify-content: center;
+  flex: 1; position: relative;
   background: #0a0a0a; border-radius: 4px; overflow: hidden;
 }
-.canvas-workspace canvas { background: #000; }
+.canvas-workspace canvas {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+}
 
 /* ── Property inspector ───────────────────────────────── */
 
@@ -149,6 +151,32 @@ body {
 .prop-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
 
 .prop-hint { color: #555; font-size: 11px; padding: 12px; text-align: center; }
+
+/* ── Effects ──────────────────────────────────────────── */
+
+.effect-row {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 4px;
+}
+.effect-label {
+  width: 65px; flex-shrink: 0; font-size: 10px; color: #999;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.effect-slider { flex: 1; min-width: 50px; }
+.effect-value {
+  width: 32px; font-size: 10px; color: #888; text-align: right;
+}
+.effect-move-btn, .effect-remove-btn {
+  width: 16px; height: 16px; padding: 0; border: none; background: transparent;
+  color: #555; cursor: pointer; font-size: 10px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.effect-move-btn:hover { color: #aaa; }
+.effect-remove-btn:hover { color: #f44336; }
+
+.effect-add-select {
+  width: 100%; padding: 3px 6px; background: #1a1a1a; border: 1px solid #2a2a2a;
+  border-radius: 3px; color: #888; font-size: 11px; margin-top: 4px;
+}
 
 .keyframe-btn {
   width: 18px; height: 18px; padding: 0; border: none; background: transparent;

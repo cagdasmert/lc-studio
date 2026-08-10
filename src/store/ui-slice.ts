@@ -7,10 +7,16 @@ export interface UISlice {
   canvasZoom: number;
   showGrid: boolean;
   snapToGrid: boolean;
+  gridSize: number;
+  panX: number;
+  panY: number;
   setToolMode: (mode: ToolMode) => void;
   setCanvasZoom: (zoom: number) => void;
   toggleGrid: () => void;
   toggleSnap: () => void;
+  setGridSize: (size: number) => void;
+  setPan: (x: number, y: number) => void;
+  resetView: () => void;
 }
 
 export const createUISlice: StateCreator<UISlice> = (set) => ({
@@ -18,9 +24,15 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
   canvasZoom: 1,
   showGrid: false,
   snapToGrid: false,
+  gridSize: 20,
+  panX: 0,
+  panY: 0,
 
   setToolMode: (mode) => set({ toolMode: mode }),
   setCanvasZoom: (zoom) => set({ canvasZoom: Math.max(0.1, Math.min(5, zoom)) }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleSnap: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  setGridSize: (size) => set({ gridSize: Math.max(5, Math.min(100, size)) }),
+  setPan: (x, y) => set({ panX: x, panY: y }),
+  resetView: () => set({ canvasZoom: 1, panX: 0, panY: 0 }),
 });

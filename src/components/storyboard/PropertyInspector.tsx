@@ -1,7 +1,7 @@
 import { useStore } from '../../store';
 import type {
-  Layer, TextLayerData, ShapeLayerData, ImageLayerData,
-  TransitionType, BlendMode, FontWeight,
+  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
+  TransitionType, BlendMode, FontWeight, LayerEffect,
 } from '../../types';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn'];
@@ -203,6 +203,114 @@ function ImageSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex
   );
 }
 
+function VideoSection({ layer, sceneIndex }: { layer: VideoLayerData; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const update = (patch: Partial<VideoLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+
+  return (
+    <div className="prop-section">
+      <h4>Video</h4>
+      <label className="prop-field">
+        <span>Source</span>
+        <input type="text" value={layer.src} onChange={(e) => update({ src: e.target.value })} placeholder="Video URL or path" />
+      </label>
+      <NumericField label="Start (s)" value={layer.startTime} onChange={(v) => update({ startTime: v })} min={0} step={0.1} />
+      <NumericField label="End (s)" value={layer.endTime} onChange={(v) => update({ endTime: v })} min={0} step={0.1} />
+      <NumericField label="Speed" value={layer.playbackRate} onChange={(v) => update({ playbackRate: v })} min={0.1} max={4} step={0.1} />
+      <label className="prop-field">
+        <span>Muted</span>
+        <input type="checkbox" checked={layer.muted} onChange={(e) => update({ muted: e.target.checked })} />
+      </label>
+    </div>
+  );
+}
+
+const EFFECT_TYPES: LayerEffect['type'][] = [
+  'blur', 'brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'hue-rotate',
+];
+
+const EFFECT_DEFAULTS: Record<string, number> = {
+  blur: 5, brightness: 1, contrast: 1, saturate: 1, grayscale: 0, sepia: 0, 'hue-rotate': 0,
+};
+
+const EFFECT_RANGES: Record<string, { min: number; max: number; step: number }> = {
+  blur: { min: 0, max: 50, step: 1 },
+  brightness: { min: 0, max: 3, step: 0.05 },
+  contrast: { min: 0, max: 3, step: 0.05 },
+  saturate: { min: 0, max: 3, step: 0.05 },
+  grayscale: { min: 0, max: 1, step: 0.05 },
+  sepia: { min: 0, max: 1, step: 0.05 },
+  'hue-rotate': { min: 0, max: 360, step: 5 },
+};
+
+function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+
+  function addEffect(type: LayerEffect['type']) {
+    const effects = [...layer.effects, { type, value: EFFECT_DEFAULTS[type] ?? 0 }];
+    updateLayer(sceneIndex, layer.id, { effects } as Partial<Layer>);
+  }
+
+  function updateEffect(index: number, value: number) {
+    const effects = [...layer.effects];
+    effects[index] = { ...effects[index], value };
+    updateLayer(sceneIndex, layer.id, { effects } as Partial<Layer>);
+  }
+
+  function removeEffect(index: number) {
+    const effects = layer.effects.filter((_, i) => i !== index);
+    updateLayer(sceneIndex, layer.id, { effects } as Partial<Layer>);
+  }
+
+  function moveEffect(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= layer.effects.length) return;
+    const effects = [...layer.effects];
+    [effects[index], effects[target]] = [effects[target], effects[index]];
+    updateLayer(sceneIndex, layer.id, { effects } as Partial<Layer>);
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>Effects</h4>
+      {layer.effects.map((effect, i) => {
+        const range = EFFECT_RANGES[effect.type] || { min: 0, max: 100, step: 1 };
+        return (
+          <div key={i} className="effect-row">
+            <span className="effect-label">{effect.type}</span>
+            <input
+              type="range"
+              min={range.min}
+              max={range.max}
+              step={range.step}
+              value={effect.value as number}
+              onChange={(e) => updateEffect(i, Number(e.target.value))}
+              className="effect-slider"
+            />
+            <span className="effect-value">{Number(effect.value).toFixed(1)}</span>
+            <button className="effect-move-btn" onClick={() => moveEffect(i, -1)} title="Move up">&uarr;</button>
+            <button className="effect-move-btn" onClick={() => moveEffect(i, 1)} title="Move down">&darr;</button>
+            <button className="effect-remove-btn" onClick={() => removeEffect(i)} title="Remove">x</button>
+          </div>
+        );
+      })}
+      <select
+        className="effect-add-select"
+        value=""
+        onChange={(e) => {
+          if (e.target.value) {
+            addEffect(e.target.value as LayerEffect['type']);
+            e.target.value = '';
+          }
+        }}
+      >
+        <option value="">+ Add effect...</option>
+        {EFFECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+    </div>
+  );
+}
+
 export function PropertyInspector() {
   const composition = useStore((s) => s.composition);
   const selectedSceneIndex = useStore((s) => s.selectedSceneIndex);
@@ -294,6 +402,9 @@ export function PropertyInspector() {
           {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'shape' && <ShapeSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'image' && <ImageSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
+
+          <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
         </>
       )}
 

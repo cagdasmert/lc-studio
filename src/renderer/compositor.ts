@@ -1,5 +1,6 @@
 import type { Composition } from '../types';
 import type { MediaCache } from './media-cache';
+import type { VideoCache } from './video-cache';
 import { drawScene } from './draw';
 import { drawTransition } from './transitions';
 
@@ -35,11 +36,11 @@ export function drawCompositionFrame(
   composition: Composition,
   globalFrame: number,
   mediaCache: MediaCache,
+  videoCache?: VideoCache,
 ): void {
-  const { width, height } = composition.output;
+  const { width, height, fps } = composition.output;
   const { sceneIndex, frameInScene } = resolveFrame(composition, globalFrame);
   if (sceneIndex < 0) {
-    // No scenes — just clear the canvas
     ctx.clearRect(0, 0, width, height);
     return;
   }
@@ -60,22 +61,14 @@ export function drawCompositionFrame(
   if (isInTransition) {
     const progress = (frameInScene - transitionStart) / transitionDuration;
 
-    // Fill background of incoming scene
     ctx.fillStyle = nextScene.backgroundColor;
     ctx.fillRect(0, 0, width, height);
 
     drawTransition(
-      ctx,
-      scene,
-      nextScene,
-      frameInScene,
-      progress,
-      scene.transition,
-      width,
-      height,
-      mediaCache,
+      ctx, scene, nextScene, frameInScene, progress,
+      scene.transition, width, height, mediaCache, fps, videoCache,
     );
   } else {
-    drawScene(ctx, scene, frameInScene, width, height, mediaCache);
+    drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
   }
 }

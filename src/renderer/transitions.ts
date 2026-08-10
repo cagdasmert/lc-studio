@@ -1,5 +1,6 @@
 import type { Scene, TransitionType } from '../types';
 import type { MediaCache } from './media-cache';
+import type { VideoCache } from './video-cache';
 import { drawSceneLayers } from './draw';
 
 export function drawTransition(
@@ -12,61 +13,66 @@ export function drawTransition(
   width: number,
   height: number,
   mediaCache: MediaCache,
+  fps: number = 30,
+  videoCache?: VideoCache,
 ): void {
+  const draw = (scene: Scene, frame: number) =>
+    drawSceneLayers(ctx, scene, frame, width, height, mediaCache, fps, videoCache);
+
   switch (type) {
     case 'fade':
-      drawFade(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache);
+      ctx.globalAlpha = 1 - progress;
+      draw(outgoing, outgoingFrame);
+      ctx.globalAlpha = progress;
+      draw(incoming, 0);
+      ctx.globalAlpha = 1;
       break;
+
     case 'slide-left':
-      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, -1, 0);
+      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, -1, 0);
       break;
     case 'slide-right':
-      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, 1, 0);
+      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, 1, 0);
       break;
     case 'slide-up':
-      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, 0, -1);
+      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, 0, -1);
       break;
     case 'slide-down':
-      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, 0, 1);
+      drawSlide(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, 0, 1);
       break;
+
     case 'wipe-horizontal':
-      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, true);
+      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true);
       break;
     case 'wipe-vertical':
-      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, false);
+      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false);
       break;
+
     case 'zoom-in':
-      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, true);
+      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true);
       break;
     case 'zoom-out':
-      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache, false);
+      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false);
       break;
+
     case 'dissolve':
     default:
-      // Dissolve is the same as fade for now
-      drawFade(ctx, outgoing, incoming, outgoingFrame, progress, width, height, mediaCache);
+      ctx.globalAlpha = 1 - progress;
+      draw(outgoing, outgoingFrame);
+      ctx.globalAlpha = progress;
+      draw(incoming, 0);
+      ctx.globalAlpha = 1;
       break;
   }
 }
 
-function drawFade(
-  ctx: CanvasRenderingContext2D,
-  outgoing: Scene, incoming: Scene,
-  outgoingFrame: number, progress: number,
-  width: number, height: number, mediaCache: MediaCache,
-) {
-  ctx.globalAlpha = 1 - progress;
-  drawSceneLayers(ctx, outgoing, outgoingFrame, width, height, mediaCache);
-  ctx.globalAlpha = progress;
-  drawSceneLayers(ctx, incoming, 0, width, height, mediaCache);
-  ctx.globalAlpha = 1;
-}
+type DrawFn = (scene: Scene, frame: number) => void;
 
 function drawSlide(
   ctx: CanvasRenderingContext2D,
   outgoing: Scene, incoming: Scene,
   outgoingFrame: number, progress: number,
-  width: number, height: number, mediaCache: MediaCache,
+  width: number, height: number, draw: DrawFn,
   dirX: number, dirY: number,
 ) {
   const offsetX = dirX * progress * width;
@@ -74,12 +80,12 @@ function drawSlide(
 
   ctx.save();
   ctx.translate(offsetX, offsetY);
-  drawSceneLayers(ctx, outgoing, outgoingFrame, width, height, mediaCache);
+  draw(outgoing, outgoingFrame);
   ctx.restore();
 
   ctx.save();
   ctx.translate(offsetX - dirX * width, offsetY - dirY * height);
-  drawSceneLayers(ctx, incoming, 0, width, height, mediaCache);
+  draw(incoming, 0);
   ctx.restore();
 }
 
@@ -87,13 +93,11 @@ function drawWipe(
   ctx: CanvasRenderingContext2D,
   outgoing: Scene, incoming: Scene,
   outgoingFrame: number, progress: number,
-  width: number, height: number, mediaCache: MediaCache,
+  width: number, height: number, draw: DrawFn,
   horizontal: boolean,
 ) {
-  // Draw outgoing full
-  drawSceneLayers(ctx, outgoing, outgoingFrame, width, height, mediaCache);
+  draw(outgoing, outgoingFrame);
 
-  // Draw incoming clipped
   ctx.save();
   ctx.beginPath();
   if (horizontal) {
@@ -102,11 +106,10 @@ function drawWipe(
     ctx.rect(0, 0, width, height * progress);
   }
   ctx.clip();
-  // Clear the clipped area and draw incoming
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = incoming.backgroundColor;
   ctx.fillRect(0, 0, width, height);
-  drawSceneLayers(ctx, incoming, 0, width, height, mediaCache);
+  draw(incoming, 0);
   ctx.restore();
 }
 
@@ -114,13 +117,11 @@ function drawZoom(
   ctx: CanvasRenderingContext2D,
   outgoing: Scene, incoming: Scene,
   outgoingFrame: number, progress: number,
-  width: number, height: number, mediaCache: MediaCache,
+  width: number, height: number, draw: DrawFn,
   zoomIn: boolean,
 ) {
-  // Draw incoming behind
-  drawSceneLayers(ctx, incoming, 0, width, height, mediaCache);
+  draw(incoming, 0);
 
-  // Draw outgoing with zoom + fade
   ctx.save();
   ctx.globalAlpha = 1 - progress;
   const scale = zoomIn ? 1 + progress * 0.3 : 1 - progress * 0.3;
@@ -129,6 +130,6 @@ function drawZoom(
   ctx.translate(-width / 2, -height / 2);
   ctx.fillStyle = outgoing.backgroundColor;
   ctx.fillRect(0, 0, width, height);
-  drawSceneLayers(ctx, outgoing, outgoingFrame, width, height, mediaCache);
+  draw(outgoing, outgoingFrame);
   ctx.restore();
 }

@@ -1,10 +1,12 @@
 import type { Scene, Layer } from '../types';
 import type { MediaCache } from './media-cache';
+import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
 import { drawTextLayer } from './draw-text';
 import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
+import { drawVideoLayer } from './draw-video';
 
 /**
  * Draw all layers of a scene at the given frame.
@@ -17,6 +19,8 @@ export function drawSceneLayers(
   _width: number,
   _height: number,
   mediaCache: MediaCache,
+  fps: number = 30,
+  videoCache?: VideoCache,
 ): void {
   // Sort by zIndex (lowest first = drawn first = behind)
   const sorted = [...scene.layers]
@@ -59,7 +63,7 @@ export function drawSceneLayers(
     ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
 
     // Dispatch to type-specific drawer
-    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache);
+    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
 
     ctx.restore();
   }
@@ -71,6 +75,8 @@ function drawLayer(
   resolved: import('../types').ResolvedTransform,
   frameInLayer: number,
   mediaCache: MediaCache,
+  fps: number,
+  videoCache?: VideoCache,
 ): void {
   switch (layer.type) {
     case 'text':
@@ -83,7 +89,9 @@ function drawLayer(
       drawImageLayer(ctx, layer, resolved, mediaCache);
       break;
     case 'video':
-      // Video layer rendering deferred to Phase 5 (media management)
+      if (videoCache) {
+        drawVideoLayer(ctx, layer, resolved, frameInLayer, fps, videoCache);
+      }
       break;
   }
 }
@@ -98,10 +106,12 @@ export function drawScene(
   width: number,
   height: number,
   mediaCache: MediaCache,
+  fps: number = 30,
+  videoCache?: VideoCache,
 ): void {
   // Background
   ctx.fillStyle = scene.backgroundColor;
   ctx.fillRect(0, 0, width, height);
 
-  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache);
+  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
 }
