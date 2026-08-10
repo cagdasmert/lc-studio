@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { Composition, RenderStatus } from '../types';
+import type { RenderStatus } from '../types';
+import { useStore } from '../store';
 import { checkFfmpeg, onRenderProgress, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
 
-interface RenderPanelProps {
-  composition: Composition;
-}
+export function RenderPanel() {
+  const composition = useStore((s) => s.composition);
 
-export function RenderPanel({ composition }: RenderPanelProps) {
   const [ffmpegVersion, setFfmpegVersion] = useState<string | null>(null);
   const [ffmpegError, setFfmpegError] = useState<string | null>(null);
   const [status, setStatus] = useState<RenderStatus>('idle');
@@ -33,9 +32,7 @@ export function RenderPanel({ composition }: RenderPanelProps) {
         if (p.error) setError(p.error);
       }
     });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
+    return () => { unlisten.then((fn) => fn()); };
   }, []);
 
   async function handleRender() {
@@ -60,11 +57,7 @@ export function RenderPanel({ composition }: RenderPanelProps) {
   }
 
   async function handleCancel() {
-    try {
-      await cancelRender();
-    } catch {
-      // ignore
-    }
+    try { await cancelRender(); } catch { /* ignore */ }
   }
 
   const canRender = ffmpegVersion && status !== 'rendering';
@@ -78,13 +71,9 @@ export function RenderPanel({ composition }: RenderPanelProps) {
       </div>
 
       <div className="render-actions">
-        <button disabled={!canRender} onClick={handleRender}>
-          Render MP4
-        </button>
+        <button disabled={!canRender} onClick={handleRender}>Render MP4</button>
         {status === 'rendering' && (
-          <button onClick={handleCancel} className="cancel-btn">
-            Cancel
-          </button>
+          <button onClick={handleCancel} className="cancel-btn">Cancel</button>
         )}
       </div>
 
@@ -93,9 +82,7 @@ export function RenderPanel({ composition }: RenderPanelProps) {
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
-          <span>
-            Frame {currentFrame} / {totalFrames} ({progress.toFixed(1)}%)
-          </span>
+          <span>Frame {currentFrame} / {totalFrames} ({progress.toFixed(1)}%)</span>
         </div>
       )}
 

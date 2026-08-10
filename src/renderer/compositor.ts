@@ -1,7 +1,7 @@
 import type { Composition } from '../types';
+import type { MediaCache } from './media-cache';
 import { drawScene } from './draw';
-
-const FADE_OVERLAP_FRAMES = 15;
+import { drawTransition } from './transitions';
 
 export function getTotalFrames(composition: Composition): number {
   return composition.scenes.reduce((sum, s) => sum + s.durationFrames, 0);
@@ -19,7 +19,6 @@ export function resolveFrame(
     }
     remaining -= scene.durationFrames;
   }
-  // Clamp to last frame of last scene
   const last = composition.scenes.length - 1;
   return {
     sceneIndex: last,
@@ -31,33 +30,43 @@ export function drawCompositionFrame(
   ctx: CanvasRenderingContext2D,
   composition: Composition,
   globalFrame: number,
+  mediaCache: MediaCache,
 ): void {
   const { width, height } = composition.output;
   const { sceneIndex, frameInScene } = resolveFrame(composition, globalFrame);
   const scene = composition.scenes[sceneIndex];
 
-  // Check if we're in a fade transition zone at the end of this scene
+  // Check if we're in a transition zone at the end of this scene
   const nextScene = composition.scenes[sceneIndex + 1];
-  const isInFadeZone =
+  const transitionDuration = scene.transitionDurationFrames || 0;
+  const transitionStart = scene.durationFrames - transitionDuration;
+
+  const isInTransition =
     nextScene &&
-    scene.transition === 'fade' &&
-    frameInScene >= scene.durationFrames - FADE_OVERLAP_FRAMES;
+    scene.transition !== 'none' &&
+    scene.transition !== 'cut' &&
+    transitionDuration > 0 &&
+    frameInScene >= transitionStart;
 
-  if (isInFadeZone) {
-    const fadeProgress =
-      (frameInScene - (scene.durationFrames - FADE_OVERLAP_FRAMES)) /
-      FADE_OVERLAP_FRAMES;
+  if (isInTransition) {
+    const progress = (frameInScene - transitionStart) / transitionDuration;
 
-    // Draw outgoing scene
-    ctx.globalAlpha = 1 - fadeProgress;
-    drawScene(ctx, scene, frameInScene, width, height);
+    // Fill background of incoming scene
+    ctx.fillStyle = nextScene.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
 
-    // Draw incoming scene on top
-    ctx.globalAlpha = fadeProgress;
-    drawScene(ctx, nextScene, 0, width, height);
-
-    ctx.globalAlpha = 1;
+    drawTransition(
+      ctx,
+      scene,
+      nextScene,
+      frameInScene,
+      progress,
+      scene.transition,
+      width,
+      height,
+      mediaCache,
+    );
   } else {
-    drawScene(ctx, scene, frameInScene, width, height);
+    drawScene(ctx, scene, frameInScene, width, height, mediaCache);
   }
 }

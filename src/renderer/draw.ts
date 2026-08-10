@@ -1,75 +1,107 @@
-import type { Scene, TextLayer } from '../types';
-import { getEasing } from './easing';
+import type { Scene, Layer } from '../types';
+import type { MediaCache } from './media-cache';
+import { resolveLayerTransform } from './interpolation';
+import { buildFilterString } from './effects';
+import { drawTextLayer } from './draw-text';
+import { drawShapeLayer } from './draw-shape';
+import { drawImageLayer } from './draw-image';
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+/**
+ * Draw all layers of a scene at the given frame.
+ * Exported for use by transitions (which need to draw two scenes).
+ */
+export function drawSceneLayers(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  frameInScene: number,
+  _width: number,
+  _height: number,
+  mediaCache: MediaCache,
+): void {
+  // Sort by zIndex (lowest first = drawn first = behind)
+  const sorted = [...scene.layers]
+    .filter((l) => l.visible && l.type !== 'audio')
+    .sort((a, b) => a.zIndex - b.zIndex);
+
+  for (const layer of sorted) {
+    // Check if layer is active at this frame
+    if (frameInScene < layer.startFrame || frameInScene >= layer.endFrame) {
+      continue;
+    }
+
+    const frameInLayer = frameInScene - layer.startFrame;
+    const resolved = resolveLayerTransform(layer, frameInLayer);
+
+    ctx.save();
+
+    // Opacity
+    ctx.globalAlpha *= resolved.opacity;
+    if (ctx.globalAlpha <= 0) {
+      ctx.restore();
+      continue;
+    }
+
+    // Blend mode
+    if (layer.blendMode !== 'normal') {
+      ctx.globalCompositeOperation = layer.blendMode;
+    }
+
+    // Effects (CSS filters)
+    if (layer.effects.length > 0) {
+      ctx.filter = buildFilterString(layer.effects);
+    }
+
+    // Apply 2D transform: translate → anchor → rotate → scale → draw at origin
+    ctx.translate(resolved.x, resolved.y);
+    ctx.translate(resolved.width * resolved.anchorX, resolved.height * resolved.anchorY);
+    ctx.rotate((resolved.rotation * Math.PI) / 180);
+    ctx.scale(resolved.scaleX, resolved.scaleY);
+    ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
+
+    // Dispatch to type-specific drawer
+    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache);
+
+    ctx.restore();
+  }
 }
 
-function drawTextLayer(
+function drawLayer(
   ctx: CanvasRenderingContext2D,
-  layer: TextLayer,
-  frameInScene: number,
-  width: number,
-  height: number,
+  layer: Layer,
+  resolved: import('../types').ResolvedTransform,
+  frameInLayer: number,
+  mediaCache: MediaCache,
 ): void {
-  const { animation } = layer;
-  const rawProgress =
-    animation.durationFrames > 0
-      ? (frameInScene - animation.delayFrames) / animation.durationFrames
-      : 1;
-  const progress = clamp(rawProgress, 0, 1);
-  const eased = getEasing(animation.easing)(progress);
-
-  const pixelX = layer.x * width;
-  const pixelY = layer.y * height;
-  const slideDistance = height * 0.1;
-
-  ctx.save();
-  ctx.font = `${layer.fontSize}px ${layer.fontFamily}`;
-  ctx.fillStyle = layer.color;
-  ctx.textAlign = layer.align;
-  ctx.textBaseline = 'middle';
-
-  let drawX = pixelX;
-  let drawY = pixelY;
-  let text = layer.content;
-
-  switch (animation.type) {
-    case 'fade-in':
-      ctx.globalAlpha = eased;
+  switch (layer.type) {
+    case 'text':
+      drawTextLayer(ctx, layer, resolved, frameInLayer);
       break;
-    case 'slide-up':
-      ctx.globalAlpha = eased;
-      drawY += (1 - eased) * slideDistance;
+    case 'shape':
+      drawShapeLayer(ctx, layer, resolved);
       break;
-    case 'slide-left':
-      ctx.globalAlpha = eased;
-      drawX += (1 - eased) * slideDistance;
+    case 'image':
+      drawImageLayer(ctx, layer, resolved, mediaCache);
       break;
-    case 'typewriter':
-      text = layer.content.slice(0, Math.floor(layer.content.length * eased));
-      break;
-    case 'none':
+    case 'video':
+      // Video layer rendering deferred to Phase 5 (media management)
       break;
   }
-
-  ctx.fillText(text, drawX, drawY);
-  ctx.restore();
 }
 
+/**
+ * Draw a complete scene (background + all layers).
+ */
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
   frameInScene: number,
   width: number,
   height: number,
+  mediaCache: MediaCache,
 ): void {
   // Background
   ctx.fillStyle = scene.backgroundColor;
   ctx.fillRect(0, 0, width, height);
 
-  // Text layers
-  for (const layer of scene.textLayers) {
-    drawTextLayer(ctx, layer, frameInScene, width, height);
-  }
+  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache);
 }

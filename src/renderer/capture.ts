@@ -1,5 +1,6 @@
 import type { Composition } from '../types';
 import { getTotalFrames, drawCompositionFrame } from './compositor';
+import { createMediaCache, preloadComposition, clearCache } from './media-cache';
 import { startRender, writeFrame, finishRender } from '../lib/tauri-bridge';
 
 function yieldToEventLoop(): Promise<void> {
@@ -13,6 +14,10 @@ export async function renderComposition(
 ): Promise<void> {
   const { width, height, fps } = composition.output;
   const totalFrames = getTotalFrames(composition);
+
+  // Preload all image assets
+  const mediaCache = createMediaCache();
+  await preloadComposition(mediaCache, composition.scenes);
 
   // Create an offscreen canvas at the output resolution
   const canvas = document.createElement('canvas');
@@ -33,7 +38,7 @@ export async function renderComposition(
   try {
     for (let frame = 0; frame < totalFrames; frame++) {
       // Draw the frame
-      drawCompositionFrame(ctx, composition, frame);
+      drawCompositionFrame(ctx, composition, frame, mediaCache);
 
       // Extract raw RGBA pixels
       const imageData = ctx.getImageData(0, 0, width, height);
@@ -61,5 +66,7 @@ export async function renderComposition(
       // ignore cleanup errors
     }
     throw err;
+  } finally {
+    clearCache(mediaCache);
   }
 }

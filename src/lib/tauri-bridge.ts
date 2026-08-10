@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { RenderProgress } from '../types';
+import type { RenderProgress, AudioTrackSpec } from '../types';
 
 export async function checkFfmpeg(): Promise<string> {
   return invoke<string>('check_ffmpeg');
@@ -12,6 +12,7 @@ export async function startRender(params: {
   height: number;
   fps: number;
   totalFrames: number;
+  audioTracks?: AudioTrackSpec[];
 }): Promise<void> {
   return invoke('start_render', {
     output_path: params.outputPath,
@@ -19,6 +20,12 @@ export async function startRender(params: {
     height: params.height,
     fps: params.fps,
     total_frames: params.totalFrames,
+    audio_tracks: params.audioTracks?.map((t) => ({
+      path: t.path,
+      start_time_secs: t.startTimeSecs,
+      duration_secs: t.durationSecs,
+      volume: t.volume,
+    })),
   });
 }
 

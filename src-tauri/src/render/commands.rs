@@ -26,6 +26,7 @@ pub fn start_render(
     height: u32,
     fps: u32,
     total_frames: u32,
+    audio_tracks: Option<Vec<ffmpeg::AudioTrackSpec>>,
 ) -> Result<(), String> {
     let mut guard = state
         .active_job
@@ -36,7 +37,8 @@ pub fn start_render(
         return Err("A render is already in progress".into());
     }
 
-    let process = ffmpeg::spawn_ffmpeg(width, height, fps, &output_path)?;
+    let tracks = audio_tracks.unwrap_or_default();
+    let process = ffmpeg::spawn_ffmpeg(width, height, fps, &output_path, &tracks)?;
 
     *guard = Some(RenderJob {
         ffmpeg: process,
