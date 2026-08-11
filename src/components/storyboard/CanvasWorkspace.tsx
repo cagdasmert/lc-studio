@@ -222,7 +222,15 @@ export function CanvasWorkspace() {
     [composition, selectedLayerId, selectedSceneIndex, canvasZoom, panX, panY, width, height, showGrid, gridSize, getSelectedLayerBounds],
   );
 
-  // Resize canvas to fill container
+  // Stable refs for values used in effects that shouldn't trigger re-creation
+  const drawFrameRef = useRef(drawFrame);
+  drawFrameRef.current = drawFrame;
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+  const frameRef = useRef(currentFrame);
+  frameRef.current = currentFrame;
+
+  // Resize canvas to fill container — uses refs to avoid recreating the observer
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
@@ -234,16 +242,12 @@ export function CanvasWorkspace() {
       canvas.height = container.clientHeight * dpr;
       canvas.style.width = `${container.clientWidth}px`;
       canvas.style.height = `${container.clientHeight}px`;
-      if (!playing) drawFrame(currentFrame);
+      if (!playingRef.current) drawFrameRef.current(frameRef.current);
     });
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [playing, currentFrame, drawFrame]);
-
-  // Playback loop — uses refs to avoid re-creating the loop on every frame
-  const frameRef = useRef(currentFrame);
-  frameRef.current = currentFrame;
+  }, []);
 
   useEffect(() => {
     if (!playing) return;
@@ -256,6 +260,8 @@ export function CanvasWorkspace() {
     function tick(time: number) {
       if (lastTime === 0) {
         lastTime = time;
+        // Draw immediately on first tick so canvas isn't blank
+        drawFrameRef.current(frame);
       }
       if (time - lastTime >= frameDuration) {
         lastTime = time;
@@ -269,14 +275,14 @@ export function CanvasWorkspace() {
           }
         }
         setCurrentFrame(frame);
-        drawFrame(frame);
+        drawFrameRef.current(frame);
       }
       animId = requestAnimationFrame(tick);
     }
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [playing, fps, speed, loop, totalFrames, drawFrame, setCurrentFrame, setPlaying]);
+  }, [playing, fps, speed, loop, totalFrames, setCurrentFrame, setPlaying]);
 
   // Redraw on state change when paused
   useEffect(() => {
