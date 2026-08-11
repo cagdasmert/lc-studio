@@ -3,6 +3,7 @@ import type {
   Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
   TransitionType, BlendMode, FontWeight, LayerEffect,
 } from '../../types';
+import { OUTPUT_PRESETS } from '../../lib/output-presets';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn'];
 const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
@@ -318,6 +319,7 @@ export function PropertyInspector() {
   const currentFrame = useStore((s) => s.currentFrame);
   const updateScene = useStore((s) => s.updateScene);
   const updateLayer = useStore((s) => s.updateLayer);
+  const setComposition = useStore((s) => s.setComposition);
 
   const scene = composition.scenes[selectedSceneIndex];
   if (!scene) return <div className="property-inspector"><p>No scene</p></div>;
@@ -376,6 +378,32 @@ export function PropertyInspector() {
             max={scene.durationFrames}
           />
         )}
+      </div>
+
+      {/* Output preset */}
+      <div className="prop-section">
+        <h4>Output</h4>
+        <label className="prop-field">
+          <span>Preset</span>
+          <select
+            value={composition.output.id}
+            onChange={(e) => {
+              const preset = OUTPUT_PRESETS.find((p) => p.id === e.target.value);
+              if (preset && preset.id !== 'custom') {
+                setComposition({ ...composition, output: { ...preset } });
+              } else if (preset) {
+                setComposition({ ...composition, output: { ...composition.output, id: 'custom', label: 'Custom' } });
+              }
+            }}
+          >
+            {OUTPUT_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </label>
+        <div className="prop-row">
+          <NumericField label="W" value={composition.output.width} onChange={(v) => setComposition({ ...composition, output: { ...composition.output, id: 'custom', label: 'Custom', width: v } })} min={100} />
+          <NumericField label="H" value={composition.output.height} onChange={(v) => setComposition({ ...composition, output: { ...composition.output, id: 'custom', label: 'Custom', height: v } })} min={100} />
+        </div>
+        <NumericField label="FPS" value={composition.output.fps} onChange={(v) => setComposition({ ...composition, output: { ...composition.output, id: 'custom', label: 'Custom', fps: v } })} min={1} max={120} />
       </div>
 
       {/* Layer properties */}

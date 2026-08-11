@@ -434,3 +434,145 @@ body {
   border-radius: 4px; color: #999; cursor: pointer; font-size: 12px;
 }
 .dialog-close:hover { background: #2a2a2a; color: #ccc; }
+
+/* ── Header actions ──────────────────────────────────── */
+
+.header-actions { display: flex; gap: 4px; }
+
+/* ── Drag-and-drop ───────────────────────────────────── */
+
+.layer-drag-handle {
+  cursor: grab; color: #444; font-size: 11px; letter-spacing: -1px;
+  user-select: none; width: 12px; flex-shrink: 0;
+}
+.layer-item:hover .layer-drag-handle { color: #888; }
+.layer-item.dragging { opacity: 0.4; }
+.timeline-scene.dragging { opacity: 0.4; }
+
+/* ── Asset panel ─────────────────────────────────────── */
+
+.asset-panel-dialog { min-width: 400px; max-height: 500px; display: flex; flex-direction: column; }
+
+.asset-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 12px;
+}
+
+.asset-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; background: #222; border-radius: 4px;
+}
+
+.asset-type-badge {
+  padding: 2px 6px; background: #333; border-radius: 3px;
+  font-size: 9px; font-weight: 700; color: #888;
+}
+
+.asset-info { flex: 1; overflow: hidden; }
+
+.asset-path {
+  display: block; font-size: 12px; color: #ccc;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.asset-usages {
+  display: block; font-size: 10px; color: #666; margin-top: 2px;
+}
+
+/* ── Brand kit editor ────────────────────────────────── */
+
+.brand-panel-dialog { min-width: 420px; max-height: 600px; display: flex; flex-direction: column; }
+
+.brand-kit-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 12px;
+}
+
+.brand-kit-item {
+  padding: 8px; background: #222; border: 1px solid #333; border-radius: 6px;
+  cursor: pointer;
+}
+.brand-kit-item:hover { border-color: #444; }
+.brand-kit-item.active { border-color: #4a7abf; }
+
+.brand-kit-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+
+.brand-kit-name-input {
+  flex: 1; padding: 2px 6px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 3px; color: #ccc; font-size: 12px; font-weight: 600;
+}
+
+.brand-kit-actions { display: flex; gap: 4px; }
+.brand-kit-actions button {
+  padding: 2px 8px; background: #333; border: none; border-radius: 3px;
+  color: #ccc; cursor: pointer; font-size: 11px;
+}
+.brand-kit-actions button:hover { background: #444; }
+
+.brand-color-swatches { display: flex; gap: 4px; }
+
+.brand-swatch {
+  width: 24px; height: 24px; border-radius: 4px; border: 1px solid #444;
+}
+
+.brand-kit-details {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;
+}
+.brand-kit-details h4 {
+  font-size: 10px; text-transform: uppercase; color: #666;
+  margin: 8px 0 4px; letter-spacing: 0.04em;
+}
+
+.brand-kit-footer { display: flex; gap: 8px; }
+.brand-kit-footer .dialog-option { flex: 1; }
+.brand-kit-footer .dialog-close { flex: 1; }
+
+/* ── Template browser ────────────────────────────────── */
+
+.template-browser-dialog { min-width: 600px; max-height: 600px; display: flex; flex-direction: column; }
+
+.template-browser-body { display: flex; gap: 16px; flex: 1; overflow: hidden; margin-bottom: 12px; }
+
+.template-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+}
+
+.template-card {
+  background: #222; border: 1px solid #333; border-radius: 6px;
+  cursor: pointer; overflow: hidden;
+}
+.template-card:hover { border-color: #444; }
+.template-card.selected { border-color: #4a7abf; }
+
+.template-card-preview {
+  height: 60px; display: flex; align-items: flex-end; padding: 4px 8px;
+}
+
+.template-card-category {
+  font-size: 9px; text-transform: uppercase; color: #888;
+  background: rgba(0,0,0,0.4); padding: 1px 6px; border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.template-card-info { padding: 6px 8px; }
+
+.template-card-name { display: block; font-size: 12px; font-weight: 600; color: #ccc; }
+.template-card-desc { display: block; font-size: 10px; color: #666; margin-top: 2px; }
+
+.template-customize {
+  width: 240px; flex-shrink: 0; overflow-y: auto;
+}
+.template-customize h4 { font-size: 13px; color: #ccc; margin-bottom: 4px; }
+.template-desc { font-size: 11px; color: #888; margin-bottom: 12px; }
+
+.template-placeholders { margin-bottom: 12px; }
+.template-placeholders h4 {
+  font-size: 10px; text-transform: uppercase; color: #666;
+  margin-bottom: 6px; letter-spacing: 0.04em;
+}
+
+.template-create-btn {
+  width: 100%; padding: 8px; background: #e94560; border: none; border-radius: 4px;
+  color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.template-create-btn:hover { background: #d63851; }

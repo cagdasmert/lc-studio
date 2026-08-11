@@ -9,6 +9,9 @@ import { Toolbar } from './components/storyboard/Toolbar';
 import { ProjectMenu } from './components/storyboard/ProjectMenu';
 import { AddLayerDialog } from './components/storyboard/AddLayerDialog';
 import { RenderPanel } from './components/RenderPanel';
+import { AssetPanel } from './components/storyboard/AssetPanel';
+import { BrandKitEditor } from './components/storyboard/BrandKitEditor';
+import { TemplateBrowser } from './components/storyboard/TemplateBrowser';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { saveProject, saveProjectAs, openProject } from './lib/project-io';
 import './App.css';
@@ -17,6 +20,9 @@ const AUTO_SAVE_INTERVAL = 60_000; // 60 seconds
 
 function App() {
   const [addLayerOpen, setAddLayerOpen] = useState(false);
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const composition = useStore((s) => s.composition);
   const projectPath = useStore((s) => s.projectPath);
@@ -79,8 +85,13 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>Local Content Studio</h1>
-        <ProjectMenu />
+        <ProjectMenu onNewFromTemplate={() => setTemplatesOpen(true)} />
         <Toolbar />
+        <div className="header-actions">
+          <button className="toolbar-btn" onClick={() => setAssetsOpen(true)} title="Assets">Assets</button>
+          <button className="toolbar-btn" onClick={() => setBrandOpen(true)} title="Brand Kits">Brand</button>
+          <button className="toolbar-btn" onClick={() => setTemplatesOpen(true)} title="Templates">Tmpl</button>
+        </div>
       </header>
 
       <div className="app-body">
@@ -104,6 +115,9 @@ function App() {
       </footer>
 
       <AddLayerDialog open={addLayerOpen} onClose={() => setAddLayerOpen(false)} />
+      {assetsOpen && <AssetPanel onClose={() => setAssetsOpen(false)} />}
+      {brandOpen && <BrandKitEditor onClose={() => setBrandOpen(false)} />}
+      {templatesOpen && <TemplateBrowser onClose={() => setTemplatesOpen(false)} />}
     </div>
   );
 }

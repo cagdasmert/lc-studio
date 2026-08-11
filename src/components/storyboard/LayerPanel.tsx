@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '../../store';
 import type { Layer, TextLayerData, ShapeLayerData } from '../../types';
 
@@ -87,11 +88,40 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
   const addLayer = useStore((s) => s.addLayer);
   const removeLayer = useStore((s) => s.removeLayer);
   const updateLayer = useStore((s) => s.updateLayer);
+  const reorderLayers = useStore((s) => s.reorderLayers);
+
+  const [dragLayerId, setDragLayerId] = useState<string | null>(null);
 
   const scene = composition.scenes[selectedSceneIndex];
   if (!scene) return <div className="layer-panel"><p>No scene selected</p></div>;
 
   const sortedLayers = [...scene.layers].sort((a, b) => b.zIndex - a.zIndex);
+
+  function handleDragStart(e: React.DragEvent, layerId: string) {
+    setDragLayerId(layerId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', layerId);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDrop(e: React.DragEvent, targetLayerId: string) {
+    e.preventDefault();
+    if (!dragLayerId || dragLayerId === targetLayerId) return;
+    const fromIndex = scene.layers.findIndex((l) => l.id === dragLayerId);
+    const toIndex = scene.layers.findIndex((l) => l.id === targetLayerId);
+    if (fromIndex >= 0 && toIndex >= 0) {
+      reorderLayers(selectedSceneIndex, fromIndex, toIndex);
+    }
+    setDragLayerId(null);
+  }
+
+  function handleDragEnd() {
+    setDragLayerId(null);
+  }
 
   return (
     <div className="layer-panel">
@@ -108,9 +138,16 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
         {sortedLayers.map((layer) => (
           <div
             key={layer.id}
-            className={`layer-item ${layer.id === selectedLayerId ? 'selected' : ''} ${layer.locked ? 'locked' : ''}`}
+            className={`layer-item ${layer.id === selectedLayerId ? 'selected' : ''} ${layer.locked ? 'locked' : ''} ${dragLayerId === layer.id ? 'dragging' : ''}`}
             onClick={() => !layer.locked && selectLayer(layer.id)}
+            draggable={!layer.locked}
+            onDragStart={(e) => handleDragStart(e, layer.id)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, layer.id)}
+            onDragEnd={handleDragEnd}
           >
+            <span className="layer-drag-handle">::</span>
+
             <button
               className={`layer-visibility ${layer.visible ? 'visible' : ''}`}
               onClick={(e) => {

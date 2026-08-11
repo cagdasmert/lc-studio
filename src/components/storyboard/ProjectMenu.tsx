@@ -5,7 +5,7 @@ import {
   getRecentProjects, removeFromRecent, type RecentProject,
 } from '../../lib/project-io';
 
-export function ProjectMenu() {
+export function ProjectMenu({ onNewFromTemplate }: { onNewFromTemplate?: () => void } = {}) {
   const composition = useStore((s) => s.composition);
   const projectPath = useStore((s) => s.projectPath);
   const isDirty = useStore((s) => s.isDirty);
@@ -107,6 +107,7 @@ export function ProjectMenu() {
       {menuOpen && (
         <div className="project-menu-dropdown">
           <button onClick={handleNew}>New Project</button>
+          {onNewFromTemplate && <button onClick={() => { setMenuOpen(false); onNewFromTemplate(); }}>New from Template...</button>}
           <button onClick={handleOpen}>Open...</button>
           <button onClick={handleSave}>Save</button>
           <button onClick={handleSaveAs}>Save As...</button>

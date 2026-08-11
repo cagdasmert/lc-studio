@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '../../store';
 import { getTotalFrames } from '../../renderer/compositor';
 import type { Scene, TextLayerData } from '../../types';
@@ -59,21 +60,45 @@ export function SceneTimeline() {
   const selectScene = useStore((s) => s.selectScene);
   const addScene = useStore((s) => s.addScene);
   const removeScene = useStore((s) => s.removeScene);
+  const reorderScenes = useStore((s) => s.reorderScenes);
   const duplicateScene = useStore((s) => s.duplicateScene);
   const setCurrentFrame = useStore((s) => s.setCurrentFrame);
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const totalFrames = getTotalFrames(composition);
   const fps = composition.output.fps;
 
-  // Calculate the frame offset where the cursor clicked in the timeline
   function handleSceneClick(sceneIndex: number) {
     selectScene(sceneIndex);
-    // Jump playback to the start of this scene
     let frameOffset = 0;
     for (let i = 0; i < sceneIndex; i++) {
       frameOffset += composition.scenes[i].durationFrames;
     }
     setCurrentFrame(frameOffset);
+  }
+
+  function handleDragStart(e: React.DragEvent, index: number) {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault();
+    if (dragIndex !== null && dragIndex !== targetIndex) {
+      reorderScenes(dragIndex, targetIndex);
+    }
+    setDragIndex(null);
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null);
   }
 
   return (
@@ -98,13 +123,14 @@ export function SceneTimeline() {
           return (
             <div
               key={scene.id}
-              className={`timeline-scene ${i === selectedSceneIndex ? 'selected' : ''}`}
+              className={`timeline-scene ${i === selectedSceneIndex ? 'selected' : ''} ${dragIndex === i ? 'dragging' : ''}`}
               style={{ width: `${widthPercent}%` }}
               onClick={() => handleSceneClick(i)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                // Simple context actions via prompt for now
-              }}
+              draggable
+              onDragStart={(e) => handleDragStart(e, i)}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, i)}
+              onDragEnd={handleDragEnd}
             >
               <span className="scene-label">{scene.label}</span>
               <span className="scene-duration">{(scene.durationFrames / fps).toFixed(1)}s</span>
@@ -134,7 +160,6 @@ export function SceneTimeline() {
           );
         })}
 
-        {/* Playback cursor */}
         {totalFrames > 0 && (
           <div
             className="timeline-cursor"
