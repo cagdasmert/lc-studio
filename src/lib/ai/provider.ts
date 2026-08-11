@@ -1,5 +1,6 @@
 import type { AIProviderConfig } from '../../types/ai';
 import { createOllamaProvider } from './ollama';
+import { createLMStudioProvider } from './lmstudio';
 import { createOpenAICompatProvider } from './openai-compat';
 
 export interface ChatMessage {
@@ -23,6 +24,8 @@ export function createProvider(config: AIProviderConfig): LLMProvider {
   switch (config.type) {
     case 'ollama':
       return createOllamaProvider(config);
+    case 'lmstudio':
+      return createLMStudioProvider(config);
     case 'openai-compatible':
       return createOpenAICompatProvider(config);
   }

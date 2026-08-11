@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../../store';
-import type { AIProviderConfig, OllamaConfig, OpenAICompatConfig } from '../../types/ai';
+import type { AIProviderConfig, OllamaConfig, LMStudioConfig, OpenAICompatConfig } from '../../types/ai';
 import { createProvider } from '../../lib/ai/provider';
 
 export function AISettings({ onClose }: { onClose: () => void }) {
@@ -14,6 +14,12 @@ export function AISettings({ onClose }: { onClose: () => void }) {
   );
   const [ollamaModel, setOllamaModel] = useState(
     aiProvider.type === 'ollama' ? aiProvider.model : 'llama3',
+  );
+  const [lmstudioUrl, setLmstudioUrl] = useState(
+    aiProvider.type === 'lmstudio' ? aiProvider.baseUrl : 'http://localhost:1234/v1',
+  );
+  const [lmstudioModel, setLmstudioModel] = useState(
+    aiProvider.type === 'lmstudio' ? aiProvider.model : '',
   );
   const [apiUrl, setApiUrl] = useState(
     aiProvider.type === 'openai-compatible' ? aiProvider.baseUrl : 'https://api.openai.com/v1',
@@ -31,6 +37,9 @@ export function AISettings({ onClose }: { onClose: () => void }) {
   function buildConfig(): AIProviderConfig {
     if (providerType === 'ollama') {
       return { type: 'ollama', baseUrl: ollamaUrl, model: ollamaModel } as OllamaConfig;
+    }
+    if (providerType === 'lmstudio') {
+      return { type: 'lmstudio', baseUrl: lmstudioUrl, model: lmstudioModel } as LMStudioConfig;
     }
     return { type: 'openai-compatible', baseUrl: apiUrl, apiKey, model: apiModel } as OpenAICompatConfig;
   }
@@ -77,6 +86,7 @@ export function AISettings({ onClose }: { onClose: () => void }) {
             <span>Provider</span>
             <select value={providerType} onChange={(e) => setProviderType(e.target.value as AIProviderConfig['type'])}>
               <option value="ollama">Ollama (Local)</option>
+              <option value="lmstudio">LM Studio (Local)</option>
               <option value="openai-compatible">OpenAI-Compatible API</option>
             </select>
           </label>
@@ -101,6 +111,29 @@ export function AISettings({ onClose }: { onClose: () => void }) {
             </label>
             <p className="ai-settings-hint">
               Install Ollama from ollama.com, then run: ollama pull llama3
+            </p>
+          </div>
+        )}
+
+        {providerType === 'lmstudio' && (
+          <div className="prop-section">
+            <h4>LM Studio</h4>
+            <label className="prop-field">
+              <span>URL</span>
+              <input type="text" value={lmstudioUrl} onChange={(e) => setLmstudioUrl(e.target.value)} />
+            </label>
+            <label className="prop-field">
+              <span>Model</span>
+              {models.length > 0 ? (
+                <select value={lmstudioModel} onChange={(e) => setLmstudioModel(e.target.value)}>
+                  {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={lmstudioModel} onChange={(e) => setLmstudioModel(e.target.value)} placeholder="loaded model name" />
+              )}
+            </label>
+            <p className="ai-settings-hint">
+              Start LM Studio's local server (Developer tab), then load a model.
             </p>
           </div>
         )}

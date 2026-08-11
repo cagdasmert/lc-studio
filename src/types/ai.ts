@@ -1,9 +1,15 @@
-export type AIProviderType = 'ollama' | 'openai-compatible';
+export type AIProviderType = 'ollama' | 'lmstudio' | 'openai-compatible';
 
 export interface OllamaConfig {
   type: 'ollama';
   baseUrl: string;    // default: http://localhost:11434
   model: string;      // e.g. 'llama3', 'mistral', 'gemma2'
+}
+
+export interface LMStudioConfig {
+  type: 'lmstudio';
+  baseUrl: string;    // default: http://localhost:1234/v1
+  model: string;      // e.g. 'lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF'
 }
 
 export interface OpenAICompatConfig {
@@ -13,7 +19,7 @@ export interface OpenAICompatConfig {
   model: string;      // e.g. 'gpt-4o', 'claude-sonnet-4-20250514'
 }
 
-export type AIProviderConfig = OllamaConfig | OpenAICompatConfig;
+export type AIProviderConfig = OllamaConfig | LMStudioConfig | OpenAICompatConfig;
 
 export type GenerationMode = 'full-composition' | 'template-fill' | 'add-scenes' | 'rewrite-text';
 
