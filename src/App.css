@@ -702,9 +702,11 @@ body {
   display: flex; align-items: center; gap: 8px;
 }
 
-.ai-test-result { font-size: 11px; }
-.ai-test-result.success { color: #4caf50; }
-.ai-test-result.error { color: #f44336; }
+.ai-test-banner {
+  padding: 6px 10px; border-radius: 4px; font-size: 11px; margin-top: 8px;
+}
+.ai-test-banner.success { background: #1a2e1a; color: #4caf50; border: 1px solid #2a5a2a; }
+.ai-test-banner.error { background: #2a1515; color: #f44336; border: 1px solid #5a2a2a; }
 
 .ai-settings-buttons { display: flex; gap: 8px; }
 
@@ -713,3 +715,4 @@ body {
   color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
 }
 .ai-save-btn:hover { background: #6d28d9; }
+.ai-save-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
