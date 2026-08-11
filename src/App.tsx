@@ -12,6 +12,8 @@ import { RenderPanel } from './components/RenderPanel';
 import { AssetPanel } from './components/storyboard/AssetPanel';
 import { BrandKitEditor } from './components/storyboard/BrandKitEditor';
 import { TemplateBrowser } from './components/storyboard/TemplateBrowser';
+import { AIPanel } from './components/storyboard/AIPanel';
+import { AISettings } from './components/storyboard/AISettings';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { saveProject, saveProjectAs, openProject } from './lib/project-io';
 import './App.css';
@@ -23,6 +25,7 @@ function App() {
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [brandOpen, setBrandOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
 
   const composition = useStore((s) => s.composition);
   const projectPath = useStore((s) => s.projectPath);
@@ -106,6 +109,7 @@ function App() {
 
         <aside className="panel-right">
           <PropertyInspector />
+          <AIPanel onSettings={() => setAiSettingsOpen(true)} />
         </aside>
       </div>
 
@@ -118,6 +122,7 @@ function App() {
       {assetsOpen && <AssetPanel onClose={() => setAssetsOpen(false)} />}
       {brandOpen && <BrandKitEditor onClose={() => setBrandOpen(false)} />}
       {templatesOpen && <TemplateBrowser onClose={() => setTemplatesOpen(false)} />}
+      {aiSettingsOpen && <AISettings onClose={() => setAiSettingsOpen(false)} />}
     </div>
   );
 }

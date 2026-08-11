@@ -576,3 +576,140 @@ body {
   color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
 }
 .template-create-btn:hover { background: #d63851; }
+
+/* ── AI Panel ────────────────────────────────────────── */
+
+.ai-panel {
+  padding: 8px; border-top: 1px solid #2a2a2a;
+}
+
+.ai-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ai-panel-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #888; font-weight: 600;
+}
+
+.ai-panel-status { display: flex; align-items: center; gap: 4px; }
+
+.ai-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.ai-status-dot.connected { background: #4caf50; }
+.ai-status-dot.disconnected { background: #f44336; }
+.ai-status-dot.checking { background: #ff9800; }
+
+.ai-provider-label { font-size: 10px; color: #666; }
+
+.ai-mode-selector {
+  display: flex; gap: 2px; margin-bottom: 8px; flex-wrap: wrap;
+}
+
+.ai-mode-btn {
+  padding: 3px 6px; background: #1a1a1a; border: 1px solid #333;
+  border-radius: 3px; color: #888; cursor: pointer; font-size: 10px;
+}
+.ai-mode-btn:hover { background: #222; color: #ccc; }
+.ai-mode-btn.active { background: #2a3a5a; border-color: #4a7abf; color: #8abfff; }
+
+.ai-prompt-area { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+
+.ai-prompt-area textarea {
+  width: 100%; padding: 6px 8px; background: #1a1a1a; border: 1px solid #2a2a2a;
+  border-radius: 4px; color: #e0e0e0; font-size: 12px; font-family: inherit;
+  resize: vertical; min-height: 50px;
+}
+.ai-prompt-area textarea:focus { border-color: #4a7abf; outline: none; }
+
+.ai-generate-btn {
+  padding: 6px 12px; background: #7c3aed; border: none; border-radius: 4px;
+  color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.ai-generate-btn:hover { background: #6d28d9; }
+.ai-generate-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+.ai-error {
+  padding: 6px 8px; background: #2a1515; border: 1px solid #5a2a2a;
+  border-radius: 4px; color: #f44336; font-size: 11px; margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.ai-preview {
+  background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px;
+  padding: 8px; margin-bottom: 8px;
+}
+
+.ai-preview-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.ai-preview-summary {
+  font-size: 11px; color: #ccc; white-space: pre-wrap; line-height: 1.5;
+  max-height: 120px; overflow-y: auto;
+}
+
+.ai-raw-response {
+  font-size: 10px; color: #888; white-space: pre-wrap; word-break: break-all;
+  max-height: 120px; overflow-y: auto; background: #111; padding: 6px;
+  border-radius: 3px; font-family: monospace;
+}
+
+.ai-preview-actions {
+  display: flex; gap: 6px; margin-top: 8px;
+}
+
+.ai-apply-btn {
+  flex: 1; padding: 5px 10px; background: #4caf50; border: none; border-radius: 4px;
+  color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.ai-apply-btn:hover { background: #43a047; }
+
+.ai-discard-btn {
+  padding: 5px 10px; background: #333; border: none; border-radius: 4px;
+  color: #ccc; cursor: pointer; font-size: 12px;
+}
+.ai-discard-btn:hover { background: #444; }
+
+.ai-brand-indicator {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; color: #666; margin-top: 6px;
+}
+
+.ai-brand-colors { display: flex; gap: 2px; }
+
+.brand-swatch-mini {
+  width: 12px; height: 12px; border-radius: 2px; border: 1px solid #444;
+}
+
+/* ── AI Settings dialog ──────────────────────────────── */
+
+.ai-settings-dialog { min-width: 420px; }
+
+.ai-settings-hint {
+  font-size: 10px; color: #555; margin-top: 4px; font-style: italic;
+}
+
+.ai-settings-footer {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 12px;
+}
+
+.ai-test-section {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.ai-test-result { font-size: 11px; }
+.ai-test-result.success { color: #4caf50; }
+.ai-test-result.error { color: #f44336; }
+
+.ai-settings-buttons { display: flex; gap: 8px; }
+
+.ai-save-btn {
+  flex: 1; padding: 6px; background: #7c3aed; border: none; border-radius: 4px;
+  color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.ai-save-btn:hover { background: #6d28d9; }
