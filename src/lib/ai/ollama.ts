@@ -1,12 +1,13 @@
 import type { OllamaConfig } from '../../types/ai';
 import type { LLMProvider, ChatMessage, LLMResponse } from './provider';
+import { aiFetch } from './http';
 
 export function createOllamaProvider(config: OllamaConfig): LLMProvider {
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
   return {
     async chat(messages: ChatMessage[]): Promise<LLMResponse> {
-      const res = await fetch(`${baseUrl}/api/chat`, {
+      const res = await aiFetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -34,7 +35,7 @@ export function createOllamaProvider(config: OllamaConfig): LLMProvider {
     },
 
     async listModels(): Promise<string[]> {
-      const res = await fetch(`${baseUrl}/api/tags`);
+      const res = await aiFetch(`${baseUrl}/api/tags`);
       if (!res.ok) return [];
       const data = await res.json();
       return (data.models ?? []).map((m: { name: string }) => m.name);
@@ -42,7 +43,7 @@ export function createOllamaProvider(config: OllamaConfig): LLMProvider {
 
     async isAvailable(): Promise<boolean> {
       try {
-        const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+        const res = await aiFetch(`${baseUrl}/api/tags`);
         return res.ok;
       } catch {
         return false;

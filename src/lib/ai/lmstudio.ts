@@ -1,12 +1,13 @@
 import type { LMStudioConfig } from '../../types/ai';
 import type { LLMProvider, ChatMessage, LLMResponse } from './provider';
+import { aiFetch } from './http';
 
 export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
   return {
     async chat(messages: ChatMessage[]): Promise<LLMResponse> {
-      const res = await fetch(`${baseUrl}/chat/completions`, {
+      const res = await aiFetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -33,7 +34,7 @@ export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
 
     async listModels(): Promise<string[]> {
       try {
-        const res = await fetch(`${baseUrl}/models`);
+        const res = await aiFetch(`${baseUrl}/models`);
         if (!res.ok) return [];
         const data = await res.json();
         return (data.data ?? []).map((m: { id: string }) => m.id);
@@ -44,7 +45,7 @@ export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
 
     async isAvailable(): Promise<boolean> {
       try {
-        const res = await fetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(3000) });
+        const res = await aiFetch(`${baseUrl}/models`);
         return res.ok;
       } catch {
         return false;

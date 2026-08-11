@@ -1,12 +1,13 @@
 import type { OpenAICompatConfig } from '../../types/ai';
 import type { LLMProvider, ChatMessage, LLMResponse } from './provider';
+import { aiFetch } from './http';
 
 export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvider {
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
 
   return {
     async chat(messages: ChatMessage[]): Promise<LLMResponse> {
-      const res = await fetch(`${baseUrl}/chat/completions`, {
+      const res = await aiFetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -36,7 +37,7 @@ export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvi
 
     async listModels(): Promise<string[]> {
       try {
-        const res = await fetch(`${baseUrl}/models`, {
+        const res = await aiFetch(`${baseUrl}/models`, {
           headers: { 'Authorization': `Bearer ${config.apiKey}` },
         });
         if (!res.ok) return [];
@@ -49,9 +50,8 @@ export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvi
 
     async isAvailable(): Promise<boolean> {
       try {
-        const res = await fetch(`${baseUrl}/models`, {
+        const res = await aiFetch(`${baseUrl}/models`, {
           headers: { 'Authorization': `Bearer ${config.apiKey}` },
-          signal: AbortSignal.timeout(5000),
         });
         return res.ok;
       } catch {
