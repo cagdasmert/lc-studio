@@ -241,16 +241,22 @@ export function CanvasWorkspace() {
     return () => observer.disconnect();
   }, [playing, currentFrame, drawFrame]);
 
-  // Playback loop
+  // Playback loop — uses refs to avoid re-creating the loop on every frame
+  const frameRef = useRef(currentFrame);
+  frameRef.current = currentFrame;
+
   useEffect(() => {
     if (!playing) return;
 
     let animId: number;
     let lastTime = 0;
     const frameDuration = 1000 / (fps * speed);
-    let frame = currentFrame;
+    let frame = frameRef.current;
 
     function tick(time: number) {
+      if (lastTime === 0) {
+        lastTime = time;
+      }
       if (time - lastTime >= frameDuration) {
         lastTime = time;
         frame++;
@@ -270,7 +276,7 @@ export function CanvasWorkspace() {
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [playing, fps, speed, loop, totalFrames, drawFrame, setCurrentFrame, setPlaying, currentFrame]);
+  }, [playing, fps, speed, loop, totalFrames, drawFrame, setCurrentFrame, setPlaying]);
 
   // Redraw on state change when paused
   useEffect(() => {
