@@ -14,6 +14,7 @@ import { BrandKitEditor } from './components/storyboard/BrandKitEditor';
 import { TemplateBrowser } from './components/storyboard/TemplateBrowser';
 import { AIPanel } from './components/storyboard/AIPanel';
 import { AISettings } from './components/storyboard/AISettings';
+import { KeyframeEditor } from './components/storyboard/KeyframeEditor';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { saveProject, saveProjectAs, openProject } from './lib/project-io';
 import './App.css';
@@ -104,6 +105,7 @@ function App() {
 
         <main className="panel-center">
           <CanvasWorkspace />
+          <KeyframeEditor />
           <RenderPanel />
         </main>
 

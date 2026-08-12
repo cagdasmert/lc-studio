@@ -17,6 +17,8 @@ export interface UISlice {
   setGridSize: (size: number) => void;
   setPan: (x: number, y: number) => void;
   resetView: () => void;
+  keyframeEditorOpen: boolean;
+  toggleKeyframeEditor: () => void;
 }
 
 export const createUISlice: StateCreator<UISlice> = (set) => ({
@@ -35,4 +37,6 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
   setGridSize: (size) => set({ gridSize: Math.max(5, Math.min(100, size)) }),
   setPan: (x, y) => set({ panX: x, panY: y }),
   resetView: () => set({ canvasZoom: 1, panX: 0, panY: 0 }),
+  keyframeEditorOpen: true,
+  toggleKeyframeEditor: () => set((s) => ({ keyframeEditorOpen: !s.keyframeEditorOpen })),
 });
