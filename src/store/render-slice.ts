@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { Composition, RenderStatus } from '../types';
+import type { Composition, RenderStatus, ExportFormat, QualityPreset } from '../types';
 import { getTotalFrames } from '../renderer/compositor';
 
 export interface RenderJob {
@@ -7,6 +7,8 @@ export interface RenderJob {
   name: string;
   composition: Composition;
   outputPath: string;
+  format: ExportFormat;
+  quality: QualityPreset;
   status: RenderStatus;
   progress: number;
   currentFrame: number;
@@ -20,7 +22,7 @@ export interface RenderJob {
 export interface RenderSlice {
   renderQueue: RenderJob[];
   activeJobId: string | null;
-  addRenderJob: (composition: Composition, outputPath: string) => string;
+  addRenderJob: (composition: Composition, outputPath: string, format?: ExportFormat, quality?: QualityPreset) => string;
   updateJob: (id: string, patch: Partial<RenderJob>) => void;
   removeJob: (id: string) => void;
   retryJob: (id: string) => void;
@@ -33,13 +35,15 @@ export const createRenderSlice: StateCreator<RenderSlice> = (set) => ({
   renderQueue: [],
   activeJobId: null,
 
-  addRenderJob: (composition, outputPath) => {
+  addRenderJob: (composition, outputPath, format = 'mp4', quality = 'medium') => {
     const id = `render-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const job: RenderJob = {
       id,
       name: composition.name,
       composition: JSON.parse(JSON.stringify(composition)), // snapshot
       outputPath,
+      format,
+      quality,
       status: 'idle',
       progress: 0,
       currentFrame: 0,

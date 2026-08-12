@@ -189,6 +189,12 @@ export interface Composition {
   output: OutputPreset;
 }
 
+// ── Export formats & quality ──────────────────────────
+
+export type ExportFormat = 'mp4' | 'webm' | 'gif' | 'png-sequence' | 'mov';
+
+export type QualityPreset = 'low' | 'medium' | 'high' | 'lossless';
+
 // ── Render progress ────────────────────────────────────
 
 export type RenderStatus = 'idle' | 'rendering' | 'completed' | 'failed' | 'cancelled';

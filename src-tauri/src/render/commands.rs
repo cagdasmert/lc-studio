@@ -27,6 +27,8 @@ pub fn start_render(
     fps: u32,
     total_frames: u32,
     audio_tracks: Option<Vec<ffmpeg::AudioTrackSpec>>,
+    format: Option<String>,
+    quality: Option<String>,
 ) -> Result<(), String> {
     let mut guard = state
         .active_job
@@ -38,7 +40,9 @@ pub fn start_render(
     }
 
     let tracks = audio_tracks.unwrap_or_default();
-    let process = ffmpeg::spawn_ffmpeg(width, height, fps, &output_path, &tracks)?;
+    let fmt = format.as_deref().unwrap_or("mp4");
+    let qual = quality.as_deref().unwrap_or("medium");
+    let process = ffmpeg::spawn_ffmpeg(width, height, fps, &output_path, &tracks, fmt, qual)?;
 
     *guard = Some(RenderJob {
         ffmpeg: process,

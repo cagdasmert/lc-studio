@@ -29,4 +29,6 @@ export type {
   RenderProgress,
   AudioTrackSpec,
   ResolvedTransform,
+  ExportFormat,
+  QualityPreset,
 } from './scene';

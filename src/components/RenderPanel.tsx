@@ -1,10 +1,33 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { RenderStatus } from '../types';
+import type { RenderStatus, ExportFormat, QualityPreset } from '../types';
 import { useStore } from '../store';
 import type { RenderJob } from '../store/render-slice';
 import { checkFfmpeg, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
+
+const FORMAT_LABELS: Record<ExportFormat, string> = {
+  mp4: 'MP4 (H.264)',
+  webm: 'WebM (VP9)',
+  gif: 'GIF',
+  'png-sequence': 'PNG Sequence',
+  mov: 'MOV (ProRes)',
+};
+
+const QUALITY_LABELS: Record<QualityPreset, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  lossless: 'Lossless',
+};
+
+const RENDER_BUTTON_LABELS: Record<ExportFormat, string> = {
+  mp4: 'Render MP4',
+  webm: 'Render WebM',
+  gif: 'Render GIF',
+  'png-sequence': 'Export PNGs',
+  mov: 'Render MOV',
+};
 
 export function RenderPanel() {
   const composition = useStore((s) => s.composition);
@@ -19,6 +42,8 @@ export function RenderPanel() {
 
   const [ffmpegVersion, setFfmpegVersion] = useState<string | null>(null);
   const [ffmpegError, setFfmpegError] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
+  const [qualityPreset, setQualityPreset] = useState<QualityPreset>('medium');
   const renderingRef = useRef(false);
 
   useEffect(() => {
@@ -58,6 +83,8 @@ export function RenderPanel() {
             progress: (current / total) * 100,
           });
         },
+        nextJob.format,
+        nextJob.quality,
       );
       updateJob(nextJob.id, {
         status: 'completed',
@@ -97,9 +124,9 @@ export function RenderPanel() {
   }, [renderQueue, processQueue]);
 
   async function handleRenderNow() {
-    const outputPath = await pickOutputFile();
+    const outputPath = await pickOutputFile(exportFormat);
     if (!outputPath) return;
-    addRenderJob(composition, outputPath);
+    addRenderJob(composition, outputPath, exportFormat, qualityPreset);
   }
 
   function handleCancel(job: RenderJob) {
@@ -109,7 +136,7 @@ export function RenderPanel() {
     }
   }
 
-  const canRender = ffmpegVersion && !ffmpegError;
+  const canRender = exportFormat === 'png-sequence' || (ffmpegVersion && !ffmpegError);
 
   const statusIcon = (status: RenderStatus) => {
     switch (status) {
@@ -141,8 +168,28 @@ export function RenderPanel() {
           {!ffmpegVersion && !ffmpegError && <span>Checking FFmpeg...</span>}
         </div>
         <div className="render-actions">
+          <select
+            className="render-format-select"
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+          >
+            {(Object.keys(FORMAT_LABELS) as ExportFormat[]).map((f) => (
+              <option key={f} value={f}>{FORMAT_LABELS[f]}</option>
+            ))}
+          </select>
+          <select
+            className="render-quality-select"
+            value={qualityPreset}
+            onChange={(e) => setQualityPreset(e.target.value as QualityPreset)}
+            disabled={exportFormat === 'png-sequence'}
+            title={exportFormat === 'png-sequence' ? 'PNG is always lossless' : 'Quality preset'}
+          >
+            {(Object.keys(QUALITY_LABELS) as QualityPreset[]).map((q) => (
+              <option key={q} value={q}>{QUALITY_LABELS[q]}</option>
+            ))}
+          </select>
           <button disabled={!canRender} onClick={handleRenderNow}>
-            Render MP4
+            {RENDER_BUTTON_LABELS[exportFormat]}
           </button>
           {renderQueue.some((j) => j.status === 'completed' || j.status === 'failed' || j.status === 'cancelled') && (
             <button onClick={clearCompleted} className="clear-btn">Clear done</button>
@@ -157,6 +204,7 @@ export function RenderPanel() {
               <div className="queue-item-header">
                 <span className="queue-status">{statusIcon(job.status)}</span>
                 <span className="queue-name">{job.name}</span>
+                <span className="format-badge">{job.format.toUpperCase()}</span>
                 <span className="queue-path" title={job.outputPath}>
                   {job.outputPath.split(/[/\\]/).pop()}
                 </span>
