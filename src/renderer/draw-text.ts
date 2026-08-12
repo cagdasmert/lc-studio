@@ -56,7 +56,7 @@ export function drawTextLayer(
       ctx.strokeStyle = layer.textStroke.color;
       ctx.lineWidth = layer.textStroke.width;
       ctx.lineJoin = 'round';
-      if (letterSpacing > 0) {
+      if (letterSpacing !== 0) {
         drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, true);
       } else {
         ctx.strokeText(lines[i], xOffset, ly);
@@ -64,7 +64,7 @@ export function drawTextLayer(
     }
 
     // Fill
-    if (letterSpacing > 0) {
+    if (letterSpacing !== 0) {
       drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, false);
     } else {
       ctx.fillText(lines[i], xOffset, ly);

@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import { useStore } from '../../store';
 import type { ToolMode } from '../../store/ui-slice';
 
@@ -20,8 +21,14 @@ export function Toolbar() {
   const toggleSnap = useStore((s) => s.toggleSnap);
 
   const temporal = useStore.temporal;
-  const canUndo = temporal.getState().pastStates.length > 0;
-  const canRedo = temporal.getState().futureStates.length > 0;
+  const canUndo = useSyncExternalStore(
+    temporal.subscribe,
+    () => temporal.getState().pastStates.length > 0,
+  );
+  const canRedo = useSyncExternalStore(
+    temporal.subscribe,
+    () => temporal.getState().futureStates.length > 0,
+  );
 
   return (
     <div className="toolbar">

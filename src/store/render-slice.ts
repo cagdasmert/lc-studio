@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { Composition, RenderStatus } from '../types';
+import { getTotalFrames } from '../renderer/compositor';
 
 export interface RenderJob {
   id: string;
@@ -42,7 +43,7 @@ export const createRenderSlice: StateCreator<RenderSlice> = (set) => ({
       status: 'idle',
       progress: 0,
       currentFrame: 0,
-      totalFrames: 0,
+      totalFrames: getTotalFrames(composition),
       error: null,
       createdAt: new Date().toISOString(),
       startedAt: null,

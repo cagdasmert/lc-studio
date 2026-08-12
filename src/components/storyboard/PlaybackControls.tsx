@@ -17,8 +17,8 @@ export function PlaybackControls() {
   const stepForward = useStore((s) => s.stepForward);
   const stepBackward = useStore((s) => s.stepBackward);
 
-  const totalFrames = getTotalFrames(composition);
-  const fps = composition.output.fps;
+  const totalFrames = Math.max(1, getTotalFrames(composition));
+  const fps = composition.output.fps || 30;
   const timeSecs = (currentFrame / fps).toFixed(1);
   const totalSecs = (totalFrames / fps).toFixed(1);
 

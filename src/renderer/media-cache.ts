@@ -15,6 +15,7 @@ export async function loadImage(
   try {
     // Works for blob URLs, data URLs, http URLs, and asset:// URLs
     const response = await fetch(src);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
     cache.set(src, bitmap);

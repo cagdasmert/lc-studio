@@ -22,13 +22,21 @@ export async function saveProjectAs(composition: Composition): Promise<string | 
   });
   if (!path) return null;
 
-  await writeProjectFile(path, composition);
+  try {
+    await writeProjectFile(path, composition);
+  } catch (err) {
+    throw new Error(`Failed to save project: ${err instanceof Error ? err.message : String(err)}`);
+  }
   addToRecent(path, composition.name);
   return path;
 }
 
 export async function saveProject(path: string, composition: Composition): Promise<void> {
-  await writeProjectFile(path, composition);
+  try {
+    await writeProjectFile(path, composition);
+  } catch (err) {
+    throw new Error(`Failed to save project: ${err instanceof Error ? err.message : String(err)}`);
+  }
   addToRecent(path, composition.name);
 }
 
@@ -62,7 +70,13 @@ async function writeProjectFile(path: string, composition: Composition): Promise
 
 async function readProjectFile(path: string): Promise<Composition> {
   const text = await readTextFile(path);
-  const file = JSON.parse(text) as ProjectFile;
+
+  let file: ProjectFile;
+  try {
+    file = JSON.parse(text) as ProjectFile;
+  } catch {
+    throw new Error('Invalid project file: corrupted or malformed JSON');
+  }
 
   if (!file.composition || !file.composition.scenes) {
     throw new Error('Invalid project file: missing composition data');

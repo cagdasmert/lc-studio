@@ -71,7 +71,7 @@ function migrateTextLayer(
       ],
     };
   } else if (anim.type === 'slide-left') {
-    const offset = canvasHeight * 0.1;
+    const offset = canvasWidth * 0.1;
     keyframes['opacity'] = {
       keyframes: [
         { frame: anim.delayFrames, value: 0, easing: anim.easing },

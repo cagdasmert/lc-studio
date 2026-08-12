@@ -46,7 +46,10 @@ export function AISettings({ onClose }: { onClose: () => void }) {
   }
 
   // Fetch available models from the current provider
+  const fetchRequestId = useState({ current: 0 })[0];
+
   const fetchModels = useCallback(async (type: string, url: string, key?: string) => {
+    const requestId = ++fetchRequestId.current;
     setLoadingModels(true);
     setModels([]);
     setTestResult(null);
@@ -63,8 +66,10 @@ export function AISettings({ onClose }: { onClose: () => void }) {
     const provider = createProvider(config);
     try {
       const available = await provider.isAvailable();
+      if (requestId !== fetchRequestId.current) return; // stale
       if (available) {
         const modelList = await provider.listModels();
+        if (requestId !== fetchRequestId.current) return; // stale
         setModels(modelList);
         if (modelList.length > 0) {
           setTestResult(`Connected — ${modelList.length} model${modelList.length > 1 ? 's' : ''} found`);
@@ -79,10 +84,11 @@ export function AISettings({ onClose }: { onClose: () => void }) {
         setTestResult('Cannot connect — is the service running?');
       }
     } catch (err) {
+      if (requestId !== fetchRequestId.current) return; // stale
       setTestResult(`Error: ${err}`);
     }
     setLoadingModels(false);
-  }, [ollamaModel, lmstudioModel, apiModel]);
+  }, [ollamaModel, lmstudioModel, apiModel, fetchRequestId]);
 
   // Auto-fetch models when provider type changes
   useEffect(() => {

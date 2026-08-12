@@ -45,12 +45,17 @@ export function AIPanel({ onSettings }: { onSettings: () => void }) {
   const activeBrandKit = brandKits.find((k) => k.id === activeBrandKitId) ?? null;
   const selectedTemplate = BUILT_IN_TEMPLATES.find((t) => t.id === selectedTemplateId) ?? null;
 
-  // Check provider availability on mount
+  // Check provider availability on mount or provider change
   useEffect(() => {
-    if (aiAvailable === null) {
-      const provider = createProvider(aiProvider);
-      provider.isAvailable().then(setAIAvailable);
-    }
+    if (aiAvailable !== null) return;
+    let stale = false;
+    const provider = createProvider(aiProvider);
+    provider.isAvailable().then((ok) => {
+      if (!stale) setAIAvailable(ok);
+    }).catch(() => {
+      if (!stale) setAIAvailable(false);
+    });
+    return () => { stale = true; };
   }, [aiProvider, aiAvailable, setAIAvailable]);
 
   const handleGenerate = useCallback(async () => {

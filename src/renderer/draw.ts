@@ -38,8 +38,8 @@ export function drawSceneLayers(
 
     ctx.save();
 
-    // Opacity
-    ctx.globalAlpha *= resolved.opacity;
+    // Opacity (clamp to valid range)
+    ctx.globalAlpha *= Math.max(0, Math.min(1, resolved.opacity));
     if (ctx.globalAlpha <= 0) {
       ctx.restore();
       continue;

@@ -55,12 +55,10 @@ export function useKeyboardShortcuts(actions: {
                 const scene = state.composition.scenes[selectedSceneIndex];
                 const layer = scene?.layers.find((l) => l.id === selectedLayerId);
                 if (layer) {
-                  const dup = {
-                    ...layer,
-                    id: `${layer.id}-dup-${Date.now()}`,
-                    name: `${layer.name} (copy)`,
-                    y: layer.y + 20,
-                  };
+                  const dup: import('../types').Layer = JSON.parse(JSON.stringify(layer));
+                  dup.id = `${layer.id}-dup-${Date.now()}`;
+                  dup.name = `${layer.name} (copy)`;
+                  dup.y = layer.y + 20;
                   state.addLayer(selectedSceneIndex, dup);
                 }
               }
