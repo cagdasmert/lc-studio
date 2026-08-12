@@ -50,13 +50,19 @@ src/                              # React frontend
   types/
     scene.ts                      # Core type system (layers, keyframes, composition)
     migration.ts                  # V1 → V2 migration utility
+    ai.ts                         # AI provider config + generation types
+    brand.ts                      # Brand kit types
+    template.ts                   # Template + placeholder types
     index.ts                      # Barrel exports
   store/
-    index.ts                      # Zustand store (4 slices + zundo temporal)
-    composition-slice.ts          # Composition CRUD + default composition
+    index.ts                      # Zustand store (7 slices + zundo temporal)
+    composition-slice.ts          # Composition CRUD + project path/dirty tracking
     selection-slice.ts            # Scene/layer/property selection
     playback-slice.ts             # Frame, playing, loop, speed
-    ui-slice.ts                   # Tool mode, zoom, grid, snap
+    ui-slice.ts                   # Tool mode, zoom, grid, snap, pan
+    render-slice.ts               # Render queue jobs + lifecycle
+    brand-slice.ts                # Brand kit CRUD + active kit
+    ai-slice.ts                   # AI provider config + generation state
   renderer/
     easing.ts                     # 28+ easing functions + cubic-bezier/spring
     interpolation.ts              # Keyframe interpolation engine
@@ -64,6 +70,8 @@ src/                              # React frontend
     draw-text.ts                  # Text rendering (word wrap, stroke, shadow)
     draw-shape.ts                 # Shape rendering (rect, circle, ellipse, line)
     draw-image.ts                 # Image rendering (fit modes, border radius)
+    draw-video.ts                 # Video layer rendering (frame-accurate seek)
+    video-cache.ts                # HTMLVideoElement management + seek cache
     effects.ts                    # CSS filter string builder
     transitions.ts                # 12 scene transition implementations
     compositor.ts                 # Frame resolver + composition drawer
@@ -80,10 +88,39 @@ src/                              # React frontend
       PlaybackControls.tsx         # Play/pause, scrubber, speed, loop
       Toolbar.tsx                  # Tool mode, zoom, grid/snap toggles
       AddLayerDialog.tsx           # Modal to add any layer type
+      AIPanel.tsx                  # AI generation prompt + preview + apply
+      AISettings.tsx               # AI provider configuration dialog
+      AssetPanel.tsx               # Asset manager panel
+      BrandKitEditor.tsx           # Brand kit editor panel
+      TemplateBrowser.tsx          # Template library browser
+      ProjectMenu.tsx              # Project save/open/recent menu
+  hooks/
+    useKeyboardShortcuts.ts       # Global keyboard shortcut handler
   lib/
     tauri-bridge.ts               # Tauri invoke wrappers for render commands
     dialog.ts                     # Save file dialog wrapper
     file-utils.ts                 # File picker + blob URL conversion
+    project-io.ts                 # Project save/load (.lcs.json format)
+    output-presets.ts             # 8 output presets (IG Story, TikTok, etc.)
+    asset-utils.ts                # Asset scanning across scenes
+    brand-utils.ts                # Brand kit application utilities
+    template-utils.ts             # Template instantiation + placeholder fill
+    templates/
+      index.ts                    # Template registry
+      kinetic-text.ts             # Kinetic text template
+      quote-card.ts               # Quote card template
+      countdown.ts                # Countdown template
+      product-highlight.ts        # Product highlight template
+      announcement-teaser.ts      # Announcement teaser template
+    ai/
+      provider.ts                 # LLM provider factory
+      ollama.ts                   # Ollama provider (localhost:11434)
+      lmstudio.ts                 # LM Studio provider (localhost:1234/v1)
+      openai-compat.ts            # OpenAI-compatible provider
+      http.ts                     # Tauri HTTP fetch wrapper (CORS bypass)
+      generate.ts                 # Generation orchestrator
+      parse.ts                    # JSON extraction from LLM responses
+      prompts.ts                  # System prompts for each generation mode
 
 src-tauri/                        # Rust backend
   src/
@@ -95,7 +132,7 @@ src-tauri/                        # Rust backend
       commands.rs                 # Tauri commands (check, start, write, finish, cancel)
       ffmpeg.rs                   # FFmpeg process spawning + audio mixing
   tauri.conf.json                 # Tauri config (window, build, bundle)
-  capabilities/default.json       # Permissions (core, opener, dialog, fs)
+  capabilities/default.json       # Permissions (core, opener, dialog, fs, http)
   Cargo.toml                      # Rust dependencies
 ```
 
@@ -157,14 +194,17 @@ translate(x, y)
 
 ### State Management
 
-The Zustand store combines 4 slices:
+The Zustand store combines 7 slices:
 
 | Slice | Responsibilities |
 |-------|-----------------|
-| **Composition** | Full composition tree (scenes, layers, keyframes). All mutations. Default composition. |
+| **Composition** | Full composition tree (scenes, layers, keyframes). All mutations. Project path, dirty tracking. |
 | **Selection** | Currently selected scene index, layer ID, property name. |
 | **Playback** | Current frame, playing flag, loop, speed (0.25x-2x). |
-| **UI** | Tool mode (select/move/hand), canvas zoom, grid/snap toggles. |
+| **UI** | Tool mode (select/move/hand), canvas zoom, grid/snap toggles, pan offset. |
+| **Render** | Render queue jobs, active job ID, job lifecycle (idle/rendering/completed/failed/cancelled). |
+| **Brand** | Brand kit CRUD, active brand kit selection. |
+| **AI** | AI provider config, availability check, generation mode, loading/error state. |
 
 The `zundo` temporal middleware wraps the store to provide undo/redo, tracking only composition changes (not UI/selection/playback state). History limit: 50 steps.
 
@@ -210,8 +250,9 @@ The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-
 | Opener | `tauri-plugin-opener` | (bundled) | Open URLs/files in system apps |
 | Dialog | `tauri-plugin-dialog` | `@tauri-apps/plugin-dialog` | Native save/open file dialogs |
 | FS | `tauri-plugin-fs` | `@tauri-apps/plugin-fs` | Read local files for media import |
+| HTTP | `tauri-plugin-http` | `@tauri-apps/plugin-http` | HTTP requests via Rust (CORS bypass for local AI services) |
 
-Permissions are declared in `src-tauri/capabilities/default.json`.
+Permissions are declared in `src-tauri/capabilities/default.json`. The HTTP plugin is scoped to `http://localhost:*`, `http://127.0.0.1:*`, and `https://*`.
 
 ## FFmpeg Arguments
 

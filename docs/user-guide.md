@@ -26,15 +26,15 @@ npm run tauri build
 The editor is organized into five regions:
 
 ```
-+------------------------------------------------------+
-| Header: App Title | Toolbar                          |
-+------+-------------------------------+---------------+
-| Layer|  Canvas Workspace             | Property      |
-| Panel|  (preview + interaction)      | Inspector     |
-| 200px|                               | 280px         |
-+------+-------------------------------+---------------+
-| Scene Timeline                       | Playback Ctrl |
-+--------------------------------------+---------------+
++--------------------------------------------------------------+
+| ProjectMenu | App Title | Toolbar                            |
++------+-------------------------------+-----------+-----------+
+| Layer|  Canvas Workspace             | Property  | AI Panel  |
+| Panel|  (preview + interaction)      | Inspector | 300px     |
+| 200px|                               | 280px     |           |
++------+-------------------------------+-----------+-----------+
+| Scene Timeline                       | Playback Controls     |
++--------------------------------------+-----------------------+
 ```
 
 ### Header & Toolbar
@@ -231,12 +231,133 @@ The Render Panel (below the canvas) shows the detected FFmpeg version. If FFmpeg
 - **Audio:** AAC at 192kbps (if audio layers are present)
 - **Resolution & FPS:** Matches the composition's output preset (default 1080x1920 @ 30fps)
 
+## Project Management
+
+### Saving a Project
+
+- **Ctrl/Cmd+S** — Save (overwrites current file, or prompts Save As if new)
+- **Ctrl/Cmd+Shift+S** — Save As (always prompts for location)
+- Projects are saved as `.lcs.json` files containing the full composition data
+- A dot indicator appears in the header when there are unsaved changes
+
+### Opening a Project
+
+- **Ctrl/Cmd+O** — Open a project file
+- **Recent Projects** — Click the project menu (top left) to see recently opened projects
+
+### New Project
+
+Use File > New or load a template from the Template Browser to start fresh.
+
+## AI Generation
+
+The AI Panel (right sidebar) provides AI-assisted content generation.
+
+### Setup
+
+1. Open **AI Settings** (gear icon in the AI Panel header)
+2. Select a provider: **Ollama**, **LM Studio**, or **OpenAI-compatible**
+3. The app auto-fetches available models from your provider
+4. Select a model from the dropdown
+5. Click **Test Connection** to verify
+
+### Generating Content
+
+1. Select a **generation mode**:
+   - **Full Composition** — Generate an entire multi-scene composition from a prompt
+   - **Add Scenes** — Append new scenes to the current composition
+   - **Template Fill** — Fill a template's placeholders with AI content
+   - **Rewrite Text** — Rewrite text on selected layers
+2. Type your prompt
+3. Click **Generate**
+4. Preview the generated result
+5. Click **Apply** to use it or **Discard** to cancel
+
+When a brand kit is active, generated content will follow your brand colors and fonts.
+
+## Brand Kits
+
+Brand kits ensure consistent visual identity across compositions.
+
+### Creating a Brand Kit
+
+1. Open the **Brand Kit Editor** from the toolbar
+2. Click **Add Brand Kit**
+3. Configure colors (primary, secondary, accent, background, text)
+4. Set heading and body fonts
+5. Optionally add a logo or watermark
+
+### Using a Brand Kit
+
+Select a brand kit to make it active. Active brand kits influence AI generation prompts and can be applied to templates.
+
+## Templates
+
+### Browsing Templates
+
+Open the **Template Browser** from the toolbar. Available templates:
+- **Kinetic Text** — Animated text opener
+- **Quote Card** — Styled quote display
+- **Countdown** — Countdown timer animation
+- **Product Highlight** — Product showcase
+- **Announcement Teaser** — Event/announcement teaser
+
+### Applying a Template
+
+Click a template to load it as a new composition. The template's placeholders can be filled manually or via AI generation.
+
+## Asset Manager
+
+Open the **Asset Panel** from the toolbar to see all media assets used in your composition. Assets are grouped by file path and show which scenes and layers reference them.
+
+## Output Presets
+
+In the Property Inspector (Scene section), select an output preset:
+
+| Preset | Resolution | FPS |
+|--------|-----------|-----|
+| Instagram Story | 1080x1920 | 30 |
+| TikTok | 1080x1920 | 30 |
+| YouTube Shorts | 1080x1920 | 60 |
+| YouTube (1080p) | 1920x1080 | 30 |
+| Square | 1080x1080 | 30 |
+| Landscape | 1920x1080 | 30 |
+| Custom | User-defined | User-defined |
+
+## Render Queue
+
+The Render Panel supports queue-based rendering:
+
+1. Click **Render MP4** — choose save location, the job is added to the queue
+2. Jobs run sequentially — progress shows current frame and percentage
+3. **Retry** — Re-run a failed job
+4. **Cancel** — Stop a running or queued job
+5. **Clear Completed** — Remove finished jobs from the queue
+
 ## Keyboard Reference
 
 | Key | Action |
 |-----|--------|
+| Space | Toggle play/pause |
+| Delete / Backspace | Remove selected layer |
+| Left Arrow | Step one frame backward |
+| Right Arrow | Step one frame forward |
+| Home | Jump to first frame |
+| End | Jump to last frame |
+| Ctrl/Cmd+Z | Undo |
+| Ctrl/Cmd+Shift+Z | Redo |
+| Ctrl/Cmd+S | Save project |
+| Ctrl/Cmd+Shift+S | Save project as |
+| Ctrl/Cmd+O | Open project |
+| Ctrl/Cmd+D | Duplicate selected layer |
+| V | Select tool |
+| M | Move tool |
+| H | Hand (pan) tool |
+| G | Toggle grid |
 | Click canvas | Select layer under cursor |
 | Click empty canvas | Deselect layer |
+| Mouse wheel | Zoom in/out |
+| Middle mouse drag | Pan canvas |
 
 ## Tips
 

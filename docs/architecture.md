@@ -60,20 +60,23 @@ Each layer has `keyframes: Record<string, KeyframeTrack>` mapping property names
 
 ```
 Zustand Store (with zundo temporal middleware)
-  ├── CompositionSlice    — composition data + all mutations
+  ├── CompositionSlice    — composition data + all mutations + project path/dirty
   ├── SelectionSlice      — selected scene/layer/property
   ├── PlaybackSlice       — currentFrame, playing, loop, speed
-  └── UISlice             — toolMode, zoom, grid, snap
+  ├── UISlice             — toolMode, zoom, grid, snap, pan
+  ├── RenderSlice         — render queue jobs, active job, lifecycle
+  ├── BrandSlice          — brand kit CRUD, active kit selection
+  └── AISlice             — AI provider config, generation state
 ```
 
-The `zundo` temporal middleware provides undo/redo by tracking snapshots of the composition slice only (not UI/playback state). This keeps the history relevant and memory-efficient.
+The `zundo` temporal middleware provides undo/redo by tracking snapshots of the composition slice only (not UI/playback state). This keeps the history relevant and memory-efficient. History limit: 50 steps.
 
 ### Render Engine (`src/renderer/`)
 
 The render engine is a pure Canvas 2D pipeline:
 
 ```
-drawCompositionFrame(ctx, composition, globalFrame, mediaCache)
+drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoCache?)
   │
   ├── resolveFrame() → { sceneIndex, frameInScene }
   │
@@ -95,7 +98,7 @@ drawCompositionFrame(ctx, composition, globalFrame, mediaCache)
                     │     ├── drawTextLayer()
                     │     ├── drawShapeLayer()
                     │     ├── drawImageLayer()
-                    │     └── (video — future)
+                    │     └── drawVideoLayer()
                     └── ctx.restore()
 ```
 
@@ -104,16 +107,49 @@ drawCompositionFrame(ctx, composition, globalFrame, mediaCache)
 ```
 App.tsx
   ├── Header
-  │     └── Toolbar (tool mode, zoom, grid/snap)
+  │     ├── ProjectMenu (save/open/recent)
+  │     ├── App Title
+  │     └── Toolbar (tool mode, zoom, grid/snap, undo/redo)
   ├── Body
-  │     ├── LayerPanel (left sidebar)
-  │     ├── CanvasWorkspace + RenderPanel (center)
-  │     └── PropertyInspector (right sidebar)
+  │     ├── LayerPanel (left sidebar, 200px)
+  │     ├── CanvasWorkspace (center)
+  │     └── PropertyInspector + AIPanel (right sidebar, 280px)
   ├── Footer
   │     ├── SceneTimeline
   │     └── PlaybackControls
-  └── AddLayerDialog (modal, shown on demand)
+  └── Dialogs/Panels (shown on demand)
+        ├── AddLayerDialog
+        ├── AISettings
+        ├── AssetPanel
+        ├── BrandKitEditor
+        ├── TemplateBrowser
+        └── RenderPanel
 ```
+
+### AI Generation (`src/lib/ai/`)
+
+```
+generate.ts (orchestrator)
+  ├── prompts.ts → builds system prompt (brand-kit-aware)
+  ├── provider.ts → factory: createProvider(config)
+  │     ├── ollama.ts (localhost:11434)
+  │     ├── lmstudio.ts (localhost:1234/v1)
+  │     └── openai-compat.ts (any OpenAI-compatible endpoint)
+  ├── http.ts → aiFetch() wraps @tauri-apps/plugin-http for CORS bypass
+  └── parse.ts → extracts JSON from LLM response text
+```
+
+### Project I/O (`src/lib/project-io.ts`)
+
+Projects are saved as `.lcs.json` files (versioned JSON with full composition). Recent projects are tracked in localStorage.
+
+### Brand Kits, Templates, Assets
+
+- `src/lib/brand-utils.ts` — Brand kit application utilities
+- `src/lib/template-utils.ts` — Template instantiation and placeholder filling
+- `src/lib/templates/` — 5 built-in templates (kinetic-text, quote-card, countdown, product-highlight, announcement-teaser)
+- `src/lib/asset-utils.ts` — Asset scanning and grouping across scenes
+- `src/lib/output-presets.ts` — 8 output presets (Instagram Story, TikTok, YouTube Shorts, etc.)
 
 ## Backend Architecture
 
@@ -189,3 +225,4 @@ All operations work offline:
 - FFmpeg runs as a local process
 - Assets are read from the local filesystem
 - No authentication or network dependencies
+- AI provider HTTP calls use Tauri's HTTP plugin (goes through Rust, not the browser) to avoid CORS restrictions with localhost services

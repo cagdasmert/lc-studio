@@ -172,7 +172,11 @@ interface EasingParams {
 ```typescript
 interface CompositionSlice {
   composition: Composition;
+  projectPath: string | null;       // filesystem path to the open project, or null
+  isDirty: boolean;                 // true when composition has unsaved changes
   setComposition(composition: Composition): void;
+  setProjectPath(path: string | null): void;
+  markClean(): void;                // resets isDirty to false
   updateScene(sceneIndex: number, patch: Partial<Scene>): void;
   addScene(scene: Scene, insertIndex?: number): void;
   removeScene(sceneIndex: number): void;
@@ -232,10 +236,79 @@ interface UISlice {
   canvasZoom: number;       // 0.1 to 5.0
   showGrid: boolean;
   snapToGrid: boolean;
+  gridSize: number;         // default 20
+  panX: number;
+  panY: number;
   setToolMode(mode: ToolMode): void;
   setCanvasZoom(zoom: number): void;
   toggleGrid(): void;
   toggleSnap(): void;
+  setGridSize(size: number): void;
+  setPan(x: number, y: number): void;
+  resetView(): void;
+}
+```
+
+### Render Slice
+
+```typescript
+type RenderStatus = 'idle' | 'rendering' | 'completed' | 'failed' | 'cancelled';
+
+interface RenderJob {
+  id: string;
+  name: string;
+  composition: Composition;    // snapshot at enqueue time
+  outputPath: string;
+  status: RenderStatus;
+  progress: number;
+  currentFrame: number;
+  totalFrames: number;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+interface RenderSlice {
+  renderQueue: RenderJob[];
+  activeJobId: string | null;
+  addRenderJob(composition: Composition, outputPath: string): string;
+  updateJob(id: string, patch: Partial<RenderJob>): void;
+  removeJob(id: string): void;
+  retryJob(id: string): void;       // resets to idle
+  cancelJob(id: string): void;
+  setActiveJob(id: string | null): void;
+  clearCompleted(): void;
+}
+```
+
+### Brand Slice
+
+```typescript
+interface BrandSlice {
+  brandKits: BrandKit[];
+  activeBrandKitId: string | null;
+  addBrandKit(): string;
+  updateBrandKit(id: string, patch: Partial<BrandKit>): void;
+  removeBrandKit(id: string): void;
+  setActiveBrandKit(id: string | null): void;
+}
+```
+
+### AI Slice
+
+```typescript
+interface AISlice {
+  aiProvider: AIProviderConfig;
+  aiAvailable: boolean | null;      // null = not checked yet
+  generationMode: GenerationMode;
+  isGenerating: boolean;
+  lastError: string | null;
+  setAIProvider(config: AIProviderConfig): void;
+  setAIAvailable(available: boolean | null): void;
+  setGenerationMode(mode: GenerationMode): void;
+  setGenerating(generating: boolean): void;
+  setLastError(error: string | null): void;
 }
 ```
 
@@ -248,7 +321,8 @@ function getTotalFrames(composition: Composition): number;
 function resolveFrame(composition: Composition, globalFrame: number):
   { sceneIndex: number; frameInScene: number };
 function drawCompositionFrame(ctx: CanvasRenderingContext2D,
-  composition: Composition, globalFrame: number, mediaCache: MediaCache): void;
+  composition: Composition, globalFrame: number, mediaCache: MediaCache,
+  videoCache?: VideoCache): void;
 ```
 
 ### Interpolation
@@ -322,4 +396,103 @@ function pickImageFile(): Promise<string | null>;
 function pickAudioFile(): Promise<string | null>;
 function pickVideoFile(): Promise<string | null>;
 function fileToBlobUrl(filePath: string): Promise<string>;
+```
+
+## AI Types
+
+```typescript
+type AIProviderConfig = OllamaConfig | LMStudioConfig | OpenAICompatConfig;
+
+interface OllamaConfig {
+  type: 'ollama';
+  baseUrl: string;       // default: http://localhost:11434
+  model: string;
+}
+
+interface LMStudioConfig {
+  type: 'lmstudio';
+  baseUrl: string;       // default: http://localhost:1234/v1
+  model: string;
+}
+
+interface OpenAICompatConfig {
+  type: 'openai-compatible';
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+type GenerationMode = 'full-composition' | 'add-scenes' | 'template-fill' | 'rewrite-text';
+```
+
+## Brand Types
+
+```typescript
+interface BrandKit {
+  id: string;
+  name: string;
+  colors: BrandColors;
+  fonts: BrandFonts;
+  logo?: string;
+  watermark?: BrandWatermark;
+}
+
+interface BrandColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
+interface BrandFonts {
+  heading: string;
+  body: string;
+}
+
+interface BrandWatermark {
+  src: string;
+  opacity: number;       // 0-1
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+}
+```
+
+## Template Types
+
+```typescript
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  thumbnail?: string;
+  composition: Composition;
+  placeholders: TemplatePlaceholder[];
+}
+
+interface TemplatePlaceholder {
+  id: string;
+  label: string;
+  type: 'text' | 'image' | 'color';
+  sceneIndex: number;
+  layerId: string;
+  property: string;
+  defaultValue: string;
+}
+```
+
+## Project I/O API
+
+```typescript
+function saveProject(): Promise<void>;
+function saveProjectAs(): Promise<void>;
+function openProject(): Promise<void>;
+function loadProjectFromPath(path: string): Promise<void>;
+function getRecentProjects(): RecentProject[];
+
+interface RecentProject {
+  path: string;
+  name: string;
+  openedAt: string;
+}
 ```

@@ -1,5 +1,7 @@
 # Development Plan: Pre-AI Foundation
 
+> **Status: COMPLETED.** All 12 items below have been implemented.
+
 ## Overview
 
 Before adding the AI generation layer, the storyboard editor needs functional completeness, usability fundamentals, and workflow infrastructure. This plan covers 12 items grouped by priority.

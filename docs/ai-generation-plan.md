@@ -1,10 +1,13 @@
 # Phase E: AI Generation Layer
 
+> **Status: COMPLETED.** Fully implemented. LM Studio was added as a third provider. HTTP calls use Tauri HTTP plugin (`@tauri-apps/plugin-http`) for CORS bypass instead of direct browser fetch.
+
 ## Design Decisions
 
 - **Local-first**: Ollama (localhost:11434) is the primary LLM backend — works fully offline
 - **Optional cloud**: OpenAI-compatible API support for users who want cloud models
-- **Frontend HTTP**: LLM calls made from the browser via fetch (CSP is disabled, Ollama is localhost) — no Rust changes needed
+- **LM Studio**: Added as a third provider (localhost:1234/v1) for local model serving
+- **Tauri HTTP**: LLM calls routed through Tauri's Rust HTTP client to bypass browser CORS restrictions with localhost services
 - **Structured output**: Prompts request JSON matching our Composition schema; responses are parsed and validated
 - **Brand-aware**: Active brand kit colors/fonts are injected into the system prompt
 - **Template-aware**: Can fill template placeholders or generate full compositions

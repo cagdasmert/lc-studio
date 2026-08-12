@@ -44,10 +44,10 @@ src-tauri/
 
 The Tauri backend (`src-tauri/`) handles windowing, file system access, and process orchestration. The React frontend (`src/`) provides the UI. Communication between them uses Tauri's `invoke` API for calling Rust commands from TypeScript and Tauri's event system for async notifications.
 
-Future layers (not yet built):
-- **Render worker** — Custom Canvas renderer (HTML5 Canvas/OffscreenCanvas for frame generation) + FFmpeg (frame encoding → video output)
-- **Generation worker** — AI/language model orchestration for script and content generation
-- **Storage** — JSON project manifests + optional SQLite for indexes
+Implemented subsystems:
+- **Render pipeline** — Custom Canvas renderer (`src/renderer/`) for frame generation + FFmpeg encoding (`src-tauri/src/render/`) for video output
+- **AI generation** — LLM orchestration via Ollama, LM Studio, or OpenAI-compatible APIs (`src/lib/ai/`), using `@tauri-apps/plugin-http` for CORS-free local requests
+- **Storage** — JSON project manifests (`.lcs.json`) via `src/lib/project-io.ts`, recent projects tracked in localStorage
 
 ## Core Domain Concepts
 
