@@ -1,4 +1,5 @@
 import type { Scene, Layer } from '../types';
+import { resolveAssetPath } from '../lib/asset-manager';
 
 export type MediaCache = Map<string, ImageBitmap>;
 
@@ -9,12 +10,15 @@ export function createMediaCache(): MediaCache {
 export async function loadImage(
   cache: MediaCache,
   src: string,
+  resolvedSrc?: string,
 ): Promise<void> {
   if (cache.has(src)) return;
 
+  const loadUrl = resolvedSrc ?? src;
+
   try {
     // Works for blob URLs, data URLs, http URLs, and asset:// URLs
-    const response = await fetch(src);
+    const response = await fetch(loadUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
@@ -26,8 +30,8 @@ export async function loadImage(
       img.crossOrigin = 'anonymous';
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
-        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
-        img.src = src;
+        img.onerror = () => reject(new Error(`Failed to load image: ${loadUrl}`));
+        img.src = loadUrl;
       });
       const bitmap = await createImageBitmap(img);
       cache.set(src, bitmap);
@@ -35,7 +39,7 @@ export async function loadImage(
       // If it's a local file path, try reading via fs plugin
       try {
         const { readFile } = await import('@tauri-apps/plugin-fs');
-        const bytes = await readFile(src);
+        const bytes = await readFile(loadUrl);
         const blob = new Blob([bytes]);
         const bitmap = await createImageBitmap(blob);
         cache.set(src, bitmap);
@@ -59,17 +63,25 @@ function getImageSources(layers: Layer[]): string[] {
 export async function preloadScene(
   cache: MediaCache,
   scene: Scene,
+  projectDir?: string | null,
 ): Promise<void> {
   const sources = getImageSources(scene.layers);
-  await Promise.all(sources.map((src) => loadImage(cache, src)));
+  await Promise.all(
+    sources.map(async (src) => {
+      if (cache.has(src)) return;
+      const resolved = await resolveAssetPath(src, projectDir ?? null);
+      await loadImage(cache, src, resolved);
+    }),
+  );
 }
 
 export async function preloadComposition(
   cache: MediaCache,
   scenes: Scene[],
+  projectDir?: string | null,
 ): Promise<void> {
   for (const scene of scenes) {
-    await preloadScene(cache, scene);
+    await preloadScene(cache, scene, projectDir);
   }
 }
 

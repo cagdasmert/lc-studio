@@ -1,4 +1,5 @@
 import type { Scene, VideoLayerData } from '../types';
+import { resolveAssetPath } from '../lib/asset-manager';
 
 /**
  * Manages HTMLVideoElement instances for video layers.
@@ -8,27 +9,29 @@ export class VideoCache {
   private videos = new Map<string, HTMLVideoElement>();
   private loading = new Map<string, Promise<void>>();
 
-  async load(src: string): Promise<HTMLVideoElement> {
+  async load(src: string, projectDir?: string | null): Promise<HTMLVideoElement> {
     const existing = this.videos.get(src);
     if (existing) return existing;
 
     // Deduplicate concurrent loads
     let pending = this.loading.get(src);
     if (!pending) {
-      pending = this._doLoad(src);
+      pending = this._doLoad(src, projectDir);
       this.loading.set(src, pending);
     }
     await pending;
     return this.videos.get(src)!;
   }
 
-  private async _doLoad(src: string): Promise<void> {
+  private async _doLoad(src: string, projectDir?: string | null): Promise<void> {
+    const resolved = await resolveAssetPath(src, projectDir ?? null);
+
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.preload = 'auto';
     video.muted = true; // Required for programmatic play
     video.playsInline = true;
-    video.src = src;
+    video.src = resolved;
 
     await new Promise<void>((resolve, reject) => {
       video.onloadeddata = () => resolve();
@@ -61,11 +64,11 @@ export class VideoCache {
     return video;
   }
 
-  async preloadScene(scene: Scene): Promise<void> {
+  async preloadScene(scene: Scene, projectDir?: string | null): Promise<void> {
     const videoLayers = scene.layers.filter(
       (l): l is VideoLayerData => l.type === 'video' && l.visible,
     );
-    await Promise.all(videoLayers.map((l) => this.load(l.src)));
+    await Promise.all(videoLayers.map((l) => this.load(l.src, projectDir)));
   }
 
   clear(): void {

@@ -85,6 +85,7 @@ export function RenderPanel() {
         },
         nextJob.format,
         nextJob.quality,
+        nextJob.projectDir,
       );
       updateJob(nextJob.id, {
         status: 'completed',
@@ -126,7 +127,8 @@ export function RenderPanel() {
   async function handleRenderNow() {
     const outputPath = await pickOutputFile(exportFormat);
     if (!outputPath) return;
-    addRenderJob(composition, outputPath, exportFormat, qualityPreset);
+    const projectDir = useStore.getState().projectPath;
+    addRenderJob(composition, outputPath, exportFormat, qualityPreset, projectDir);
   }
 
   function handleCancel(job: RenderJob) {

@@ -26,12 +26,13 @@ async function renderPngSequence(
   composition: Composition,
   outputDir: string,
   onProgress?: (current: number, total: number) => void,
+  projectDir?: string | null,
 ): Promise<void> {
   const { width, height } = composition.output;
   const totalFrames = getTotalFrames(composition);
 
   const mediaCache = createMediaCache();
-  await preloadComposition(mediaCache, composition.scenes);
+  await preloadComposition(mediaCache, composition.scenes, projectDir);
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -72,10 +73,11 @@ export async function renderComposition(
   onProgress?: (current: number, total: number) => void,
   format: ExportFormat = 'mp4',
   quality: QualityPreset = 'medium',
+  projectDir?: string | null,
 ): Promise<void> {
   // PNG sequence uses a completely different path (no FFmpeg)
   if (format === 'png-sequence') {
-    return renderPngSequence(composition, outputPath, onProgress);
+    return renderPngSequence(composition, outputPath, onProgress, projectDir);
   }
 
   const { width, height, fps } = composition.output;
@@ -83,7 +85,7 @@ export async function renderComposition(
 
   // Preload all image assets
   const mediaCache = createMediaCache();
-  await preloadComposition(mediaCache, composition.scenes);
+  await preloadComposition(mediaCache, composition.scenes, projectDir);
 
   // Create an offscreen canvas at the output resolution
   const canvas = document.createElement('canvas');

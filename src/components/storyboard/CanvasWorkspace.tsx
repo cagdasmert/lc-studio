@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { drawCompositionFrame, getTotalFrames } from '../../renderer/compositor';
-import { createMediaCache, type MediaCache } from '../../renderer/media-cache';
+import { createMediaCache, preloadScene, type MediaCache } from '../../renderer/media-cache';
 import type { Layer } from '../../types';
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate' | null;
@@ -50,9 +50,18 @@ export function CanvasWorkspace() {
   const panX = useStore((s) => s.panX);
   const panY = useStore((s) => s.panY);
   const setPan = useStore((s) => s.setPan);
+  const projectPath = useStore((s) => s.projectPath);
 
   const { width, height, fps } = composition.output;
   const totalFrames = getTotalFrames(composition);
+
+  // Preload image assets for current scene (resolves relative paths)
+  useEffect(() => {
+    const scene = composition.scenes[selectedSceneIndex];
+    if (scene) {
+      preloadScene(mediaCacheRef.current, scene, projectPath);
+    }
+  }, [composition, selectedSceneIndex, projectPath]);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(

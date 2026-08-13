@@ -37,24 +37,27 @@ function App() {
 
   const handleSave = useCallback(async () => {
     if (projectPath) {
-      await saveProject(projectPath, composition);
+      const result = await saveProject(projectPath, composition);
+      setComposition(result.composition);
       markClean();
     } else {
-      const path = await saveProjectAs(composition);
-      if (path) {
-        setProjectPath(path);
+      const result = await saveProjectAs(composition);
+      if (result) {
+        setProjectPath(result.path);
+        setComposition(result.composition);
         markClean();
       }
     }
-  }, [projectPath, composition, markClean, setProjectPath]);
+  }, [projectPath, composition, markClean, setProjectPath, setComposition]);
 
   const handleSaveAs = useCallback(async () => {
-    const path = await saveProjectAs(composition);
-    if (path) {
-      setProjectPath(path);
+    const result = await saveProjectAs(composition);
+    if (result) {
+      setProjectPath(result.path);
+      setComposition(result.composition);
       markClean();
     }
-  }, [composition, markClean, setProjectPath]);
+  }, [composition, markClean, setProjectPath, setComposition]);
 
   const handleOpen = useCallback(async () => {
     const result = await openProject();
@@ -75,7 +78,11 @@ function App() {
       const { composition: comp, projectPath: path, isDirty: dirty } = autoSaveRef.current;
       if (path && dirty) {
         try {
-          await saveProject(path, comp);
+          const result = await saveProject(path, comp);
+          // Update composition if paths were rewritten during bundling
+          if (result.composition !== comp) {
+            setComposition(result.composition);
+          }
           markClean();
         } catch {
           // Silent auto-save failure
@@ -83,7 +90,7 @@ function App() {
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(timer);
-  }, [markClean]);
+  }, [markClean, setComposition]);
 
   return (
     <div className="app">

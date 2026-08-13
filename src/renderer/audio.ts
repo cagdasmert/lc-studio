@@ -1,4 +1,5 @@
 import type { AudioLayerData, Scene } from '../types';
+import { resolveAssetPath } from '../lib/asset-manager';
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -12,20 +13,21 @@ export class AudioEngine {
     return this.ctx;
   }
 
-  async loadAudio(src: string): Promise<void> {
+  async loadAudio(src: string, projectDir?: string | null): Promise<void> {
     if (this.buffers.has(src)) return;
 
-    const response = await fetch(src);
+    const resolved = await resolveAssetPath(src, projectDir ?? null);
+    const response = await fetch(resolved);
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await this.getContext().decodeAudioData(arrayBuffer);
     this.buffers.set(src, audioBuffer);
   }
 
-  async preloadSceneAudio(scene: Scene): Promise<void> {
+  async preloadSceneAudio(scene: Scene, projectDir?: string | null): Promise<void> {
     const audioLayers = scene.layers.filter(
       (l): l is AudioLayerData => l.type === 'audio' && l.visible,
     );
-    await Promise.all(audioLayers.map((l) => this.loadAudio(l.src)));
+    await Promise.all(audioLayers.map((l) => this.loadAudio(l.src, projectDir)));
   }
 
   /**

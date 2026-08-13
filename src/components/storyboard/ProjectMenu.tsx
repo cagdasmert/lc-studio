@@ -59,7 +59,8 @@ export function ProjectMenu({ onNewFromTemplate }: { onNewFromTemplate?: () => v
     setMenuOpen(false);
     try {
       if (projectPath) {
-        await saveProject(projectPath, composition);
+        const result = await saveProject(projectPath, composition);
+        setComposition(result.composition);
         markClean();
       } else {
         await handleSaveAs();
@@ -72,9 +73,10 @@ export function ProjectMenu({ onNewFromTemplate }: { onNewFromTemplate?: () => v
   async function handleSaveAs() {
     setMenuOpen(false);
     try {
-      const path = await saveProjectAs(composition);
-      if (path) {
-        setProjectPath(path);
+      const result = await saveProjectAs(composition);
+      if (result) {
+        setProjectPath(result.path);
+        setComposition(result.composition);
         markClean();
       }
     } catch (err) {
@@ -85,9 +87,9 @@ export function ProjectMenu({ onNewFromTemplate }: { onNewFromTemplate?: () => v
   async function handleOpenRecent(path: string) {
     setMenuOpen(false);
     try {
-      const comp = await loadProjectFromPath(path);
-      setComposition(comp);
-      setProjectPath(path);
+      const result = await loadProjectFromPath(path);
+      setComposition(result.composition);
+      setProjectPath(result.path);
     } catch (err) {
       console.error('Failed to open recent project:', err);
       removeFromRecent(path);

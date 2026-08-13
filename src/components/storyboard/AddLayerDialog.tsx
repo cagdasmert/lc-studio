@@ -4,7 +4,8 @@ import type {
   TextLayerData, ImageLayerData, ShapeLayerData,
   VideoLayerData, AudioLayerData, Scene,
 } from '../../types';
-import { pickImageFile, pickAudioFile, pickVideoFile, fileToBlobUrl } from '../../lib/file-utils';
+import { pickImageFile, pickAudioFile, pickVideoFile } from '../../lib/file-utils';
+import { copyAssetToProject } from '../../lib/asset-manager';
 
 function makeBase(scene: Scene, name: string, zIndex: number) {
   return {
@@ -124,14 +125,22 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
     onClose();
   }
 
+  async function importAsset(pickedPath: string): Promise<string> {
+    const projectPath = useStore.getState().projectPath;
+    if (projectPath) {
+      return copyAssetToProject(pickedPath, projectPath);
+    }
+    return pickedPath;
+  }
+
   async function handleImageAdd() {
     setLoading(true);
     try {
       const path = await pickImageFile();
       if (!path) return;
-      const blobUrl = await fileToBlobUrl(path);
+      const src = await importAsset(path);
       const fileName = path.split(/[/\\]/).pop() ?? 'Image';
-      addAndClose(createImageLayer(scene, blobUrl, fileName));
+      addAndClose(createImageLayer(scene, src, fileName));
     } finally {
       setLoading(false);
     }
@@ -142,8 +151,9 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
     try {
       const path = await pickAudioFile();
       if (!path) return;
+      const src = await importAsset(path);
       const fileName = path.split(/[/\\]/).pop() ?? 'Audio';
-      addAndClose(createAudioLayer(scene, path, fileName));
+      addAndClose(createAudioLayer(scene, src, fileName));
     } finally {
       setLoading(false);
     }
@@ -154,8 +164,9 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
     try {
       const path = await pickVideoFile();
       if (!path) return;
+      const src = await importAsset(path);
       const fileName = path.split(/[/\\]/).pop() ?? 'Video';
-      addAndClose(createVideoLayer(scene, path, fileName));
+      addAndClose(createVideoLayer(scene, src, fileName));
     } finally {
       setLoading(false);
     }

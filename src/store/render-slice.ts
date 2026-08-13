@@ -9,6 +9,7 @@ export interface RenderJob {
   outputPath: string;
   format: ExportFormat;
   quality: QualityPreset;
+  projectDir: string | null;
   status: RenderStatus;
   progress: number;
   currentFrame: number;
@@ -22,7 +23,7 @@ export interface RenderJob {
 export interface RenderSlice {
   renderQueue: RenderJob[];
   activeJobId: string | null;
-  addRenderJob: (composition: Composition, outputPath: string, format?: ExportFormat, quality?: QualityPreset) => string;
+  addRenderJob: (composition: Composition, outputPath: string, format?: ExportFormat, quality?: QualityPreset, projectDir?: string | null) => string;
   updateJob: (id: string, patch: Partial<RenderJob>) => void;
   removeJob: (id: string) => void;
   retryJob: (id: string) => void;
@@ -35,7 +36,7 @@ export const createRenderSlice: StateCreator<RenderSlice> = (set) => ({
   renderQueue: [],
   activeJobId: null,
 
-  addRenderJob: (composition, outputPath, format = 'mp4', quality = 'medium') => {
+  addRenderJob: (composition, outputPath, format = 'mp4', quality = 'medium', projectDir = null) => {
     const id = `render-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const job: RenderJob = {
       id,
@@ -44,6 +45,7 @@ export const createRenderSlice: StateCreator<RenderSlice> = (set) => ({
       outputPath,
       format,
       quality,
+      projectDir,
       status: 'idle',
       progress: 0,
       currentFrame: 0,
