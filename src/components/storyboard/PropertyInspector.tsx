@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
 import type {
-  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
+  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData,
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
+  ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
 } from '../../types';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
 import { FontPicker } from '../shared/FontPicker';
@@ -551,6 +552,235 @@ function BoxShadowSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: num
   );
 }
 
+// ── Clip Path ─────────────────────────────────────────
+
+const CLIP_PATH_TYPES: ClipPathType[] = ['none', 'rect', 'circle', 'ellipse', 'polygon'];
+
+function ClipPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const clip = layer.clipPath;
+  const clipType: ClipPathType = clip?.type ?? 'none';
+
+  function setClipType(t: ClipPathType) {
+    if (t === 'none') {
+      updateLayer(sceneIndex, layer.id, { clipPath: null } as Partial<Layer>);
+      return;
+    }
+    let def: ClipPathDef;
+    switch (t) {
+      case 'rect': def = { type: 'rect', inset: 10, borderRadius: 0 }; break;
+      case 'circle': def = { type: 'circle', radius: 0.4, cx: 0.5, cy: 0.5 }; break;
+      case 'ellipse': def = { type: 'ellipse', rx: 0.4, ry: 0.3, cx: 0.5, cy: 0.5 }; break;
+      case 'polygon': def = { type: 'polygon', points: [[0.5, 0], [1, 1], [0, 1]] }; break;
+      default: def = { type: 'rect', inset: 10 }; break;
+    }
+    updateLayer(sceneIndex, layer.id, { clipPath: def } as Partial<Layer>);
+  }
+
+  function updateClip(patch: Partial<ClipPathDef>) {
+    updateLayer(sceneIndex, layer.id, { clipPath: { ...clip!, ...patch } } as Partial<Layer>);
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>Clip Path</h4>
+      <label className="prop-field">
+        <span>Type</span>
+        <select value={clipType} onChange={(e) => setClipType(e.target.value as ClipPathType)}>
+          {CLIP_PATH_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+      {clip?.type === 'rect' && (
+        <>
+          <NumericField label="Inset" value={clip.inset} onChange={(v) => updateClip({ inset: v })} min={0} />
+          <NumericField label="Radius" value={clip.borderRadius ?? 0} onChange={(v) => updateClip({ borderRadius: v })} min={0} />
+        </>
+      )}
+      {clip?.type === 'circle' && (
+        <>
+          <NumericField label="Radius" value={clip.radius} onChange={(v) => updateClip({ radius: v })} min={0.01} max={1} step={0.05} />
+          <div className="prop-row">
+            <NumericField label="CX" value={clip.cx} onChange={(v) => updateClip({ cx: v })} min={0} max={1} step={0.05} />
+            <NumericField label="CY" value={clip.cy} onChange={(v) => updateClip({ cy: v })} min={0} max={1} step={0.05} />
+          </div>
+        </>
+      )}
+      {clip?.type === 'ellipse' && (
+        <>
+          <div className="prop-row">
+            <NumericField label="RX" value={clip.rx} onChange={(v) => updateClip({ rx: v })} min={0.01} max={1} step={0.05} />
+            <NumericField label="RY" value={clip.ry} onChange={(v) => updateClip({ ry: v })} min={0.01} max={1} step={0.05} />
+          </div>
+          <div className="prop-row">
+            <NumericField label="CX" value={clip.cx} onChange={(v) => updateClip({ cx: v })} min={0} max={1} step={0.05} />
+            <NumericField label="CY" value={clip.cy} onChange={(v) => updateClip({ cy: v })} min={0} max={1} step={0.05} />
+          </div>
+        </>
+      )}
+      {clip?.type === 'polygon' && (
+        <p className="prop-hint">Triangle clip (edit points in code)</p>
+      )}
+    </div>
+  );
+}
+
+// ── Motion Path ───────────────────────────────────────
+
+function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const mp = layer.motionPath;
+  const enabled = !!(mp && mp.points.length >= 2);
+
+  function toggle() {
+    if (enabled) {
+      updateLayer(sceneIndex, layer.id, { motionPath: null } as Partial<Layer>);
+    } else {
+      // Default: simple line from current pos to offset pos
+      const def: MotionPathDef = {
+        points: [
+          { x: layer.x, y: layer.y },
+          { x: layer.x + 200, y: layer.y },
+        ],
+        alignToPath: false,
+        loop: false,
+      };
+      updateLayer(sceneIndex, layer.id, { motionPath: def } as Partial<Layer>);
+    }
+  }
+
+  function updateMP(patch: Partial<MotionPathDef>) {
+    updateLayer(sceneIndex, layer.id, { motionPath: { ...mp!, ...patch } } as Partial<Layer>);
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>
+        Motion Path
+        <label className="prop-checkbox section-toggle">
+          <input type="checkbox" checked={enabled} onChange={toggle} />
+          <span>{enabled ? 'On' : 'Off'}</span>
+        </label>
+      </h4>
+      {enabled && mp && (
+        <>
+          <label className="prop-checkbox">
+            <input type="checkbox" checked={mp.alignToPath ?? false} onChange={(e) => updateMP({ alignToPath: e.target.checked })} />
+            <span>Align to path</span>
+          </label>
+          <label className="prop-checkbox">
+            <input type="checkbox" checked={mp.loop ?? false} onChange={(e) => updateMP({ loop: e.target.checked })} />
+            <span>Loop</span>
+          </label>
+          <p className="prop-hint">{mp.points.length} points defined</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Character Animation (text only) ───────────────────
+
+const CHAR_ANIM_TYPES: CharAnimationType[] = ['none', 'fade-in', 'slide-up', 'slide-down', 'scale-in', 'rotate-in', 'typewriter'];
+const CHAR_ANIM_EASINGS: EasingType[] = ['linear', 'ease-out', 'ease-in', 'ease-in-out', 'ease-out-cubic', 'ease-out-bounce', 'ease-out-elastic'];
+
+function CharAnimationSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const anim = layer.charAnimation;
+  const animType = anim?.type ?? 'none';
+
+  function setAnimType(t: CharAnimationType) {
+    if (t === 'none') {
+      updateLayer(sceneIndex, layer.id, { charAnimation: null } as Partial<Layer>);
+      return;
+    }
+    const def: CharAnimationDef = {
+      type: t,
+      staggerFrames: anim?.staggerFrames ?? 2,
+      durationFrames: anim?.durationFrames ?? 10,
+      easing: anim?.easing ?? 'ease-out',
+    };
+    updateLayer(sceneIndex, layer.id, { charAnimation: def } as Partial<Layer>);
+  }
+
+  function updateAnim(patch: Partial<CharAnimationDef>) {
+    updateLayer(sceneIndex, layer.id, { charAnimation: { ...anim!, ...patch } } as Partial<Layer>);
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>Character Animation</h4>
+      <label className="prop-field">
+        <span>Type</span>
+        <select value={animType} onChange={(e) => setAnimType(e.target.value as CharAnimationType)}>
+          {CHAR_ANIM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+      {animType !== 'none' && anim && (
+        <>
+          <NumericField label="Stagger" value={anim.staggerFrames} onChange={(v) => updateAnim({ staggerFrames: v })} min={1} max={30} />
+          <NumericField label="Duration" value={anim.durationFrames} onChange={(v) => updateAnim({ durationFrames: v })} min={1} max={60} />
+          <label className="prop-field">
+            <span>Easing</span>
+            <select value={anim.easing ?? 'ease-out'} onChange={(e) => updateAnim({ easing: e.target.value as EasingType })}>
+              {CHAR_ANIM_EASINGS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── SVG Layer ─────────────────────────────────────────
+
+function SvgSection({ layer, sceneIndex }: { layer: SvgLayerData; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const update = (patch: Partial<SvgLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+
+  return (
+    <div className="prop-section">
+      <h4>SVG</h4>
+      <label className="prop-field">
+        <span>Content</span>
+        <textarea
+          value={layer.content}
+          onChange={(e) => update({ content: e.target.value })}
+          rows={5}
+          className="svg-content-input"
+          placeholder="<svg>...</svg> or SVG path markup"
+        />
+      </label>
+      <label className="prop-field">
+        <span>ViewBox</span>
+        <input
+          type="text"
+          value={layer.viewBox ?? ''}
+          onChange={(e) => update({ viewBox: e.target.value || undefined })}
+          placeholder="0 0 100 100"
+        />
+      </label>
+      <ColorField label="Fill Override" value={layer.fillColor ?? '#000000'} onChange={(v) => update({ fillColor: v })} />
+      <label className="prop-checkbox">
+        <input
+          type="checkbox"
+          checked={!!layer.fillColor}
+          onChange={(e) => update({ fillColor: e.target.checked ? '#ffffff' : undefined })}
+        />
+        <span>Override fill</span>
+      </label>
+      <ColorField label="Stroke Override" value={layer.strokeColor ?? '#000000'} onChange={(v) => update({ strokeColor: v })} />
+      <label className="prop-checkbox">
+        <input
+          type="checkbox"
+          checked={!!layer.strokeColor}
+          onChange={(e) => update({ strokeColor: e.target.checked ? '#ffffff' : undefined })}
+        />
+        <span>Override stroke</span>
+      </label>
+    </div>
+  );
+}
+
 const BG_TYPES: BackgroundType[] = ['solid', 'linear-gradient', 'radial-gradient', 'image'];
 
 function SceneSection({ scene, sceneIndex, fps }: { scene: Scene; sceneIndex: number; fps: number }) {
@@ -757,12 +987,16 @@ export function PropertyInspector() {
           <TransformSection layer={layer} sceneIndex={selectedSceneIndex} frameInScene={frameInScene} />
 
           {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'text' && <CharAnimationSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'shape' && <ShapeSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'image' && <ImageSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'svg' && <SvgSection layer={layer} sceneIndex={selectedSceneIndex} />}
 
           <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
           <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
+          <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />
+          <MotionPathSection layer={layer} sceneIndex={selectedSceneIndex} />
         </>
       )}
 

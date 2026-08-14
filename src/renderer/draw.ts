@@ -1,13 +1,15 @@
-import type { Scene, Layer } from '../types';
+import type { Scene, Layer, ClipPathDef } from '../types';
 import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
 import { createCanvasGradient } from './gradient';
+import { evaluateMotionPath } from './motion-path';
 import { drawTextLayer } from './draw-text';
 import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
 import { drawVideoLayer } from './draw-video';
+import { drawSvgLayer } from './draw-svg';
 
 /**
  * Draw all layers of a scene at the given frame.
@@ -37,6 +39,18 @@ export function drawSceneLayers(
     const frameInLayer = frameInScene - layer.startFrame;
     const resolved = resolveLayerTransform(layer, frameInLayer);
 
+    // Motion path override — replaces x/y (and optionally rotation)
+    if (layer.motionPath && layer.motionPath.points.length >= 2) {
+      const layerDuration = layer.endFrame - layer.startFrame;
+      const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
+      const pos = evaluateMotionPath(layer.motionPath, t);
+      resolved.x = pos.x;
+      resolved.y = pos.y;
+      if (layer.motionPath.alignToPath) {
+        resolved.rotation = (pos.angle * 180) / Math.PI;
+      }
+    }
+
     ctx.save();
 
     // Opacity (clamp to valid range)
@@ -61,6 +75,11 @@ export function drawSceneLayers(
     }
     ctx.scale(resolved.scaleX, resolved.scaleY);
     ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
+
+    // Clip path
+    if (layer.clipPath) {
+      applyClipPath(ctx, layer.clipPath, resolved.width, resolved.height);
+    }
 
     // Box shadow — render to offscreen canvas to avoid destination-out erasing other layers
     if (layer.boxShadow && layer.boxShadow.blur > 0) {
@@ -140,12 +159,68 @@ function drawLayer(
         drawVideoLayer(ctx, layer, resolved, frameInLayer, fps, videoCache);
       }
       break;
+    case 'svg':
+      drawSvgLayer(ctx, layer, resolved);
+      break;
   }
 }
 
 /**
  * Draw a complete scene (background + all layers).
  */
+function applyClipPath(
+  ctx: CanvasRenderingContext2D,
+  clip: ClipPathDef,
+  width: number,
+  height: number,
+): void {
+  ctx.beginPath();
+  switch (clip.type) {
+    case 'rect': {
+      const i = clip.inset;
+      if (clip.borderRadius) {
+        ctx.roundRect(i, i, width - i * 2, height - i * 2, clip.borderRadius);
+      } else {
+        ctx.rect(i, i, width - i * 2, height - i * 2);
+      }
+      break;
+    }
+    case 'circle': {
+      const cx = clip.cx * width;
+      const cy = clip.cy * height;
+      const r = clip.radius * Math.min(width, height);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      break;
+    }
+    case 'ellipse': {
+      const cx = clip.cx * width;
+      const cy = clip.cy * height;
+      ctx.ellipse(cx, cy, clip.rx * width, clip.ry * height, 0, 0, Math.PI * 2);
+      break;
+    }
+    case 'polygon': {
+      for (let i = 0; i < clip.points.length; i++) {
+        const [px, py] = clip.points[i];
+        if (i === 0) ctx.moveTo(px * width, py * height);
+        else ctx.lineTo(px * width, py * height);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'path': {
+      const p2d = new Path2D(clip.d);
+      // Scale SVG path to fit layer dimensions
+      ctx.save();
+      // Path2D doesn't auto-scale, but we clip at layer coordinate space
+      // The user provides path data in the layer's coordinate system
+      ctx.clip(p2d);
+      ctx.restore();
+      return; // clip already applied via Path2D
+    }
+  }
+  ctx.clip();
+}
+
 /**
  * Draw a scene's background (solid color, gradient, or image).
  * Exported so transitions and compositor can reuse it.

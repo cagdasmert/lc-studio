@@ -58,6 +58,47 @@ export interface RadialGradientDef {
 
 export type GradientDef = LinearGradientDef | RadialGradientDef;
 
+// ── Clip Paths ────────────────────────────────────────
+
+export type ClipPathType = 'none' | 'rect' | 'circle' | 'ellipse' | 'polygon' | 'path';
+
+export interface ClipPathRect { type: 'rect'; inset: number; borderRadius?: number; }
+export interface ClipPathCircle { type: 'circle'; radius: number; cx: number; cy: number; } // 0–1 relative
+export interface ClipPathEllipse { type: 'ellipse'; rx: number; ry: number; cx: number; cy: number; }
+export interface ClipPathPolygon { type: 'polygon'; points: [number, number][]; } // 0–1 relative
+export interface ClipPathSvg { type: 'path'; d: string; } // SVG path data
+
+export type ClipPathDef =
+  | ClipPathRect | ClipPathCircle | ClipPathEllipse
+  | ClipPathPolygon | ClipPathSvg;
+
+// ── Motion Paths ─────────────────────────────────────
+
+export interface MotionPathPoint {
+  x: number;
+  y: number;
+  cpX?: number; // control point for curve (outgoing)
+  cpY?: number;
+}
+
+export interface MotionPathDef {
+  points: MotionPathPoint[];
+  alignToPath?: boolean;  // rotate layer to follow path tangent
+  loop?: boolean;
+}
+
+// ── Per-character text animation ─────────────────────
+
+export type CharAnimationType = 'none' | 'fade-in' | 'slide-up' | 'slide-down'
+  | 'scale-in' | 'rotate-in' | 'typewriter';
+
+export interface CharAnimationDef {
+  type: CharAnimationType;
+  staggerFrames: number;   // delay between each character
+  durationFrames: number;  // animation duration per character
+  easing?: EasingType;
+}
+
 // ── Layer base ─────────────────────────────────────────
 
 export type BlendMode =
@@ -103,6 +144,8 @@ export interface LayerBase {
   blendMode: BlendMode;
   effects: LayerEffect[];
   boxShadow?: BoxShadow | null;
+  clipPath?: ClipPathDef | null;
+  motionPath?: MotionPathDef | null;
   visible: boolean;
   locked: boolean;
   keyframes: Record<string, KeyframeTrack>;
@@ -110,7 +153,7 @@ export interface LayerBase {
 
 // ── Layer types ────────────────────────────────────────
 
-export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio';
+export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio' | 'svg';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type VerticalAlign = 'top' | 'middle' | 'bottom';
@@ -146,6 +189,7 @@ export interface TextLayerData extends LayerBase {
   maxWidth: number;      // px, 0 = no wrap
   textStroke: TextStroke | null;
   textShadow: TextShadow | null;
+  charAnimation?: CharAnimationDef | null;
 }
 
 export type ImageFitMode = 'cover' | 'contain' | 'fill' | 'none';
@@ -201,12 +245,21 @@ export interface AudioLayerData extends LayerBase {
   fadeOutFrames: number;
 }
 
+export interface SvgLayerData extends LayerBase {
+  type: 'svg';
+  content: string;     // SVG markup string
+  viewBox?: string;    // e.g. "0 0 100 100"
+  fillColor?: string;  // override fill color
+  strokeColor?: string;
+}
+
 export type Layer =
   | TextLayerData
   | ImageLayerData
   | ShapeLayerData
   | VideoLayerData
-  | AudioLayerData;
+  | AudioLayerData
+  | SvgLayerData;
 
 // ── Scene & Composition ────────────────────────────────
 

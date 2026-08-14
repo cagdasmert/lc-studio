@@ -1,6 +1,7 @@
-import type { TextLayerData, ResolvedTransform } from '../types';
+import type { TextLayerData, ResolvedTransform, CharAnimationDef } from '../types';
 import { resolveNumericProperty, resolveColorProperty } from './interpolation';
 import { createCanvasGradient } from './gradient';
+import { getEasing } from './easing';
 
 export function drawTextLayer(
   ctx: CanvasRenderingContext2D,
@@ -54,26 +55,32 @@ export function drawTextLayer(
   if (layer.align === 'center') xOffset = resolved.width / 2;
   else if (layer.align === 'right') xOffset = resolved.width;
 
-  for (let i = 0; i < lines.length; i++) {
-    const ly = yOffset + i * lineHeightPx;
+  const hasCharAnim = layer.charAnimation && layer.charAnimation.type !== 'none';
 
-    // Stroke
-    if (layer.textStroke) {
-      ctx.strokeStyle = layer.textStroke.color;
-      ctx.lineWidth = layer.textStroke.width;
-      ctx.lineJoin = 'round';
-      if (letterSpacing !== 0) {
-        drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, true);
-      } else {
-        ctx.strokeText(lines[i], xOffset, ly);
+  if (hasCharAnim) {
+    drawWithCharAnimation(ctx, lines, xOffset, yOffset, lineHeightPx, letterSpacing, layer, frameInLayer);
+  } else {
+    for (let i = 0; i < lines.length; i++) {
+      const ly = yOffset + i * lineHeightPx;
+
+      // Stroke
+      if (layer.textStroke) {
+        ctx.strokeStyle = layer.textStroke.color;
+        ctx.lineWidth = layer.textStroke.width;
+        ctx.lineJoin = 'round';
+        if (letterSpacing !== 0) {
+          drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, true);
+        } else {
+          ctx.strokeText(lines[i], xOffset, ly);
+        }
       }
-    }
 
-    // Fill
-    if (letterSpacing !== 0) {
-      drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, false);
-    } else {
-      ctx.fillText(lines[i], xOffset, ly);
+      // Fill
+      if (letterSpacing !== 0) {
+        drawWithLetterSpacing(ctx, lines[i], xOffset, ly, letterSpacing, false);
+      } else {
+        ctx.fillText(lines[i], xOffset, ly);
+      }
     }
   }
 
@@ -146,4 +153,138 @@ function drawWithLetterSpacing(
   }
 
   ctx.textAlign = savedAlign;
+}
+
+function drawWithCharAnimation(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  xOffset: number,
+  yOffset: number,
+  lineHeightPx: number,
+  letterSpacing: number,
+  layer: TextLayerData,
+  frameInLayer: number,
+): void {
+  const anim = layer.charAnimation!;
+  const easeFn = getEasing(anim.easing ?? 'ease-out');
+
+  // Flatten all chars with their positions
+  let globalCharIdx = 0;
+  const savedAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const ly = yOffset + lineIdx * lineHeightPx;
+    const line = lines[lineIdx];
+
+    // Compute line width for alignment
+    let lineWidth = 0;
+    for (const ch of line) {
+      lineWidth += ctx.measureText(ch).width + letterSpacing;
+    }
+    lineWidth -= letterSpacing;
+
+    let startX = xOffset;
+    if (savedAlign === 'center') startX = xOffset - lineWidth / 2;
+    else if (savedAlign === 'right') startX = xOffset - lineWidth;
+
+    let cx = startX;
+    for (const ch of line) {
+      const charW = ctx.measureText(ch).width;
+
+      // Calculate per-char progress
+      const charStartFrame = globalCharIdx * anim.staggerFrames;
+      const charEndFrame = charStartFrame + anim.durationFrames;
+      let progress: number;
+      if (frameInLayer >= charEndFrame) {
+        progress = 1;
+      } else if (frameInLayer <= charStartFrame) {
+        progress = 0;
+      } else {
+        progress = (frameInLayer - charStartFrame) / anim.durationFrames;
+        progress = easeFn(Math.max(0, Math.min(1, progress)));
+      }
+
+      if (progress > 0) {
+        applyCharEffect(ctx, anim, ch, cx, ly, charW, lineHeightPx, progress, layer);
+      }
+
+      cx += charW + letterSpacing;
+      globalCharIdx++;
+    }
+    // Count the implicit newline (for stagger continuity)
+    globalCharIdx++;
+  }
+
+  ctx.textAlign = savedAlign;
+}
+
+function applyCharEffect(
+  ctx: CanvasRenderingContext2D,
+  anim: CharAnimationDef,
+  ch: string,
+  x: number,
+  y: number,
+  charW: number,
+  lineH: number,
+  progress: number,
+  layer: TextLayerData,
+): void {
+  ctx.save();
+
+  switch (anim.type) {
+    case 'fade-in':
+      ctx.globalAlpha *= progress;
+      break;
+
+    case 'slide-up':
+      ctx.globalAlpha *= progress;
+      ctx.translate(0, lineH * (1 - progress));
+      break;
+
+    case 'slide-down':
+      ctx.globalAlpha *= progress;
+      ctx.translate(0, -lineH * (1 - progress));
+      break;
+
+    case 'scale-in': {
+      const scale = progress;
+      const cx = x + charW / 2;
+      const cy = y + lineH / 2;
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha *= progress;
+      break;
+    }
+
+    case 'rotate-in': {
+      const cx = x + charW / 2;
+      const cy = y + lineH / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI * (1 - progress));
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha *= progress;
+      break;
+    }
+
+    case 'typewriter':
+      // Binary: visible or not
+      if (progress < 0.01) {
+        ctx.restore();
+        return;
+      }
+      break;
+  }
+
+  // Stroke
+  if (layer.textStroke) {
+    ctx.strokeStyle = layer.textStroke.color;
+    ctx.lineWidth = layer.textStroke.width;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(ch, x, y);
+  }
+
+  ctx.fillText(ch, x, y);
+  ctx.restore();
 }

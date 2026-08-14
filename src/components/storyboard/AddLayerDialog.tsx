@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store';
 import type {
   TextLayerData, ImageLayerData, ShapeLayerData,
-  VideoLayerData, AudioLayerData, Scene,
+  VideoLayerData, AudioLayerData, SvgLayerData, Scene,
 } from '../../types';
 import { pickImageFile, pickAudioFile, pickVideoFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
@@ -94,6 +94,16 @@ function createVideoLayer(scene: Scene, src: string, name: string): VideoLayerDa
     endTime: scene.durationFrames / 30,
     playbackRate: 1,
     muted: false,
+  };
+}
+
+function createSvgLayer(scene: Scene): SvgLayerData {
+  return {
+    ...makeBase(scene, 'SVG Layer', scene.layers.length),
+    type: 'svg',
+    width: 200,
+    height: 200,
+    content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#e94560"/></svg>',
   };
 }
 
@@ -195,6 +205,10 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
           <button className="dialog-option" onClick={handleVideoAdd} disabled={loading}>
             <span className="dialog-icon">V</span>
             <span>Video</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createSvgLayer(scene))}>
+            <span className="dialog-icon shape-icon-svg"></span>
+            <span>SVG</span>
           </button>
         </div>
         <h4 className="dialog-section-label">Shapes</h4>

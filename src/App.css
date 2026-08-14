@@ -552,6 +552,21 @@ body {
 }
 .shape-icon-arrow::after { content: '\27A1'; }
 
+.shape-icon-svg {
+  width: 20px; height: 20px; position: relative;
+  color: #e94560; font-size: 16px; line-height: 20px; text-align: center;
+}
+.shape-icon-svg::after { content: '</>' ; font-size: 11px; font-weight: bold; }
+
+/* ── SVG content textarea ─────────────────────────────── */
+
+.svg-content-input {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
 .dialog-close {
   width: 100%; padding: 6px; background: #222; border: 1px solid #333;
   border-radius: 4px; color: #999; cursor: pointer; font-size: 12px;
