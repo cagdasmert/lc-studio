@@ -1,7 +1,7 @@
 import type { Composition } from '../types';
 import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
-import { drawScene } from './draw';
+import { drawScene, drawSceneBackground } from './draw';
 import { drawTransition } from './transitions';
 
 export function getTotalFrames(composition: Composition): number {
@@ -61,8 +61,7 @@ export function drawCompositionFrame(
   if (isInTransition) {
     const progress = (frameInScene - transitionStart) / transitionDuration;
 
-    ctx.fillStyle = nextScene.backgroundColor;
-    ctx.fillRect(0, 0, width, height);
+    drawSceneBackground(ctx, nextScene, width, height, mediaCache);
 
     drawTransition(
       ctx, scene, nextScene, frameInScene, progress,

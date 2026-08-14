@@ -66,6 +66,12 @@ export async function preloadScene(
   projectDir?: string | null,
 ): Promise<void> {
   const sources = getImageSources(scene.layers);
+
+  // Include scene background image if present
+  if (scene.backgroundType === 'image' && scene.backgroundImage) {
+    sources.push(scene.backgroundImage);
+  }
+
   await Promise.all(
     sources.map(async (src) => {
       if (cache.has(src)) return;

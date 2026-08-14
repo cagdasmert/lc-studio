@@ -1,7 +1,7 @@
 import type { Scene, TransitionType } from '../types';
 import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
-import { drawSceneLayers } from './draw';
+import { drawSceneLayers, drawSceneBackground } from './draw';
 
 export function drawTransition(
   ctx: CanvasRenderingContext2D,
@@ -42,17 +42,17 @@ export function drawTransition(
       break;
 
     case 'wipe-horizontal':
-      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true);
+      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true, mediaCache);
       break;
     case 'wipe-vertical':
-      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false);
+      drawWipe(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false, mediaCache);
       break;
 
     case 'zoom-in':
-      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true);
+      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, true, mediaCache);
       break;
     case 'zoom-out':
-      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false);
+      drawZoom(ctx, outgoing, incoming, outgoingFrame, progress, width, height, draw, false, mediaCache);
       break;
 
     case 'dissolve':
@@ -95,6 +95,7 @@ function drawWipe(
   outgoingFrame: number, progress: number,
   width: number, height: number, draw: DrawFn,
   horizontal: boolean,
+  mediaCache: MediaCache,
 ) {
   draw(outgoing, outgoingFrame);
 
@@ -107,8 +108,7 @@ function drawWipe(
   }
   ctx.clip();
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = incoming.backgroundColor;
-  ctx.fillRect(0, 0, width, height);
+  drawSceneBackground(ctx, incoming, width, height, mediaCache);
   draw(incoming, 0);
   ctx.restore();
 }
@@ -119,6 +119,7 @@ function drawZoom(
   outgoingFrame: number, progress: number,
   width: number, height: number, draw: DrawFn,
   zoomIn: boolean,
+  mediaCache: MediaCache,
 ) {
   draw(incoming, 0);
 
@@ -128,8 +129,7 @@ function drawZoom(
   ctx.translate(width / 2, height / 2);
   ctx.scale(scale, scale);
   ctx.translate(-width / 2, -height / 2);
-  ctx.fillStyle = outgoing.backgroundColor;
-  ctx.fillRect(0, 0, width, height);
+  drawSceneBackground(ctx, outgoing, width, height, mediaCache);
   draw(outgoing, outgoingFrame);
   ctx.restore();
 }

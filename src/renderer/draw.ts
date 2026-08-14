@@ -3,6 +3,7 @@ import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
+import { createCanvasGradient } from './gradient';
 import { drawTextLayer } from './draw-text';
 import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
@@ -111,6 +112,62 @@ function drawLayer(
 /**
  * Draw a complete scene (background + all layers).
  */
+/**
+ * Draw a scene's background (solid color, gradient, or image).
+ * Exported so transitions and compositor can reuse it.
+ */
+export function drawSceneBackground(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  width: number,
+  height: number,
+  mediaCache: MediaCache,
+): void {
+  const bgType = scene.backgroundType ?? 'solid';
+
+  if (bgType === 'solid' || bgType === 'image') {
+    ctx.fillStyle = scene.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  if ((bgType === 'linear-gradient' || bgType === 'radial-gradient') && scene.backgroundGradient) {
+    ctx.fillStyle = createCanvasGradient(ctx, scene.backgroundGradient, width, height);
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  if (bgType === 'image' && scene.backgroundImage) {
+    const bitmap = mediaCache.get(scene.backgroundImage);
+    if (bitmap) {
+      const fit = scene.backgroundImageFit ?? 'cover';
+      const sw = bitmap.width;
+      const sh = bitmap.height;
+      switch (fit) {
+        case 'fill':
+          ctx.drawImage(bitmap, 0, 0, width, height);
+          break;
+        case 'contain': {
+          const scale = Math.min(width / sw, height / sh);
+          const w = sw * scale;
+          const h = sh * scale;
+          ctx.drawImage(bitmap, (width - w) / 2, (height - h) / 2, w, h);
+          break;
+        }
+        case 'cover':
+        default: {
+          const scale = Math.max(width / sw, height / sh);
+          const w = sw * scale;
+          const h = sh * scale;
+          ctx.drawImage(bitmap, (width - w) / 2, (height - h) / 2, w, h);
+          break;
+        }
+        case 'none':
+          ctx.drawImage(bitmap, (width - sw) / 2, (height - sh) / 2);
+          break;
+      }
+    }
+  }
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
@@ -121,9 +178,7 @@ export function drawScene(
   fps: number = 30,
   videoCache?: VideoCache,
 ): void {
-  // Background
-  ctx.fillStyle = scene.backgroundColor;
-  ctx.fillRect(0, 0, width, height);
+  drawSceneBackground(ctx, scene, width, height, mediaCache);
 
   drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
 }

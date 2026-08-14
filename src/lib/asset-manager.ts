@@ -95,6 +95,9 @@ export function rewriteAssetPaths(
 ): Composition {
   const clone: Composition = JSON.parse(JSON.stringify(composition));
   for (const scene of clone.scenes) {
+    if (scene.backgroundImage) {
+      scene.backgroundImage = fn(scene.backgroundImage);
+    }
     for (const layer of scene.layers) {
       if (hasAssetSrc(layer)) {
         (layer as { src: string }).src = fn((layer as { src: string }).src);
@@ -113,6 +116,26 @@ function hasAssetSrc(layer: Layer): boolean {
  * and return a composition with all paths rewritten to relative.
  * Skips already-relative paths. Warns about unrecoverable blob URLs.
  */
+async function bundleAssetSrc(
+  src: string,
+  label: string,
+  projectDir: string,
+): Promise<string> {
+  if (!src || isRelativeAssetPath(src)) return src;
+  if (isBlobUrl(src)) {
+    console.warn(`Cannot bundle blob URL for "${label}". Re-import this asset.`);
+    return src;
+  }
+  if (isAbsolutePath(src)) {
+    try {
+      return await copyAssetToProject(src, projectDir);
+    } catch (err) {
+      console.warn(`Failed to bundle asset "${src}" for "${label}": ${err}`);
+    }
+  }
+  return src;
+}
+
 export async function bundleAssets(
   composition: Composition,
   projectDir: string,
@@ -120,32 +143,18 @@ export async function bundleAssets(
   const clone: Composition = JSON.parse(JSON.stringify(composition));
 
   for (const scene of clone.scenes) {
+    // Bundle scene background image
+    if (scene.backgroundType === 'image' && scene.backgroundImage) {
+      scene.backgroundImage = await bundleAssetSrc(
+        scene.backgroundImage, `scene "${scene.label}" background`, projectDir,
+      );
+    }
+
     for (const layer of scene.layers) {
       if (!hasAssetSrc(layer)) continue;
-      const src = (layer as { src: string }).src;
-
-      // Already bundled
-      if (isRelativeAssetPath(src)) continue;
-
-      // Blob URLs can't be resolved to files — skip with warning
-      if (isBlobUrl(src)) {
-        console.warn(
-          `Cannot bundle blob URL for layer "${layer.name}". Re-import this asset.`,
-        );
-        continue;
-      }
-
-      // Absolute path — copy into project
-      if (isAbsolutePath(src)) {
-        try {
-          const relativePath = await copyAssetToProject(src, projectDir);
-          (layer as { src: string }).src = relativePath;
-        } catch (err) {
-          console.warn(
-            `Failed to bundle asset "${src}" for layer "${layer.name}": ${err}`,
-          );
-        }
-      }
+      (layer as { src: string }).src = await bundleAssetSrc(
+        (layer as { src: string }).src, `layer "${layer.name}"`, projectDir,
+      );
     }
   }
 

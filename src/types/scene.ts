@@ -35,6 +35,29 @@ export interface KeyframeTrack<T = number> {
   keyframes: Keyframe<T>[];
 }
 
+// ── Gradients ─────────────────────────────────────────
+
+export interface GradientStop {
+  offset: number; // 0–1
+  color: string;
+}
+
+export interface LinearGradientDef {
+  type: 'linear';
+  angle: number; // degrees: 0 = left→right, 90 = top→bottom
+  stops: GradientStop[];
+}
+
+export interface RadialGradientDef {
+  type: 'radial';
+  centerX: number; // 0–1 relative to width
+  centerY: number; // 0–1 relative to height
+  radius: number;  // 0–1 relative to max(width, height)
+  stops: GradientStop[];
+}
+
+export type GradientDef = LinearGradientDef | RadialGradientDef;
+
 // ── Layer base ─────────────────────────────────────────
 
 export type BlendMode =
@@ -118,15 +141,23 @@ export interface ImageLayerData extends LayerBase {
   borderRadius: number;
 }
 
-export type ShapeType = 'rect' | 'circle' | 'ellipse' | 'rounded-rect' | 'line';
+export type ShapeType = 'rect' | 'circle' | 'ellipse' | 'rounded-rect' | 'line'
+  | 'triangle' | 'star' | 'polygon' | 'arrow';
+
+export type FillType = 'solid' | 'linear-gradient' | 'radial-gradient';
 
 export interface ShapeLayerData extends LayerBase {
   type: 'shape';
   shapeType: ShapeType;
   fill: string;
+  fillType?: FillType;
+  fillGradient?: GradientDef;
   stroke: string;
   strokeWidth: number;
   cornerRadius: number;
+  polygonSides?: number;    // for 'polygon', default 6
+  starPoints?: number;      // for 'star', default 5
+  starInnerRadius?: number; // 0–1, inner/outer radius ratio, default 0.4
 }
 
 export interface VideoLayerData extends LayerBase {
@@ -164,11 +195,17 @@ export type TransitionType =
   | 'zoom-in' | 'zoom-out'
   | 'dissolve';
 
+export type BackgroundType = 'solid' | 'linear-gradient' | 'radial-gradient' | 'image';
+
 export interface Scene {
   id: string;
   label: string;
   durationFrames: number;
   backgroundColor: string;
+  backgroundType?: BackgroundType;
+  backgroundGradient?: GradientDef;
+  backgroundImage?: string;
+  backgroundImageFit?: ImageFitMode;
   layers: Layer[];
   transition: TransitionType;
   transitionDurationFrames: number;

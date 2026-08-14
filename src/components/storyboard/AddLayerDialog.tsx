@@ -54,17 +54,20 @@ function createTextLayer(scene: Scene): TextLayerData {
   };
 }
 
-function createShapeLayer(scene: Scene): ShapeLayerData {
+function createShapeLayer(scene: Scene, shapeType: ShapeLayerData['shapeType'] = 'rect'): ShapeLayerData {
   return {
-    ...makeBase(scene, 'Shape Layer', scene.layers.length),
+    ...makeBase(scene, `${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)} Shape`, scene.layers.length),
     type: 'shape',
     width: 200,
     height: 200,
-    shapeType: 'rect',
+    shapeType,
     fill: '#e94560',
+    fillType: 'solid',
     stroke: '',
     strokeWidth: 0,
     cornerRadius: 0,
+    ...(shapeType === 'polygon' ? { polygonSides: 6 } : {}),
+    ...(shapeType === 'star' ? { starPoints: 5, starInnerRadius: 0.4 } : {}),
   };
 }
 
@@ -174,16 +177,12 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="dialog-panel add-layer-dialog" onClick={(e) => e.stopPropagation()}>
         <h3>Add Layer</h3>
         <div className="dialog-grid">
           <button className="dialog-option" onClick={() => addAndClose(createTextLayer(scene))}>
             <span className="dialog-icon">T</span>
             <span>Text</span>
-          </button>
-          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene))}>
-            <span className="dialog-icon">S</span>
-            <span>Shape</span>
           </button>
           <button className="dialog-option" onClick={handleImageAdd} disabled={loading}>
             <span className="dialog-icon">IMG</span>
@@ -196,6 +195,41 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
           <button className="dialog-option" onClick={handleVideoAdd} disabled={loading}>
             <span className="dialog-icon">V</span>
             <span>Video</span>
+          </button>
+        </div>
+        <h4 className="dialog-section-label">Shapes</h4>
+        <div className="dialog-grid">
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'rect'))}>
+            <span className="dialog-icon shape-icon-rect"></span>
+            <span>Rectangle</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'rounded-rect'))}>
+            <span className="dialog-icon shape-icon-rounded"></span>
+            <span>Rounded</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'circle'))}>
+            <span className="dialog-icon shape-icon-circle"></span>
+            <span>Circle</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'ellipse'))}>
+            <span className="dialog-icon shape-icon-ellipse"></span>
+            <span>Ellipse</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'triangle'))}>
+            <span className="dialog-icon shape-icon-triangle"></span>
+            <span>Triangle</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'star'))}>
+            <span className="dialog-icon shape-icon-star"></span>
+            <span>Star</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'polygon'))}>
+            <span className="dialog-icon shape-icon-polygon"></span>
+            <span>Polygon</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createShapeLayer(scene, 'arrow'))}>
+            <span className="dialog-icon shape-icon-arrow"></span>
+            <span>Arrow</span>
           </button>
         </div>
         <button className="dialog-close" onClick={onClose}>Cancel</button>

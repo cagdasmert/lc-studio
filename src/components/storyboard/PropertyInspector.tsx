@@ -3,9 +3,12 @@ import { useStore } from '../../store';
 import type {
   Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
   TransitionType, BlendMode, FontWeight, LayerEffect,
+  GradientDef, FillType, BackgroundType, Scene,
 } from '../../types';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
 import { FontPicker } from '../shared/FontPicker';
+import { pickImageFile } from '../../lib/file-utils';
+import { copyAssetToProject } from '../../lib/asset-manager';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn'];
 const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
@@ -173,9 +176,63 @@ function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: 
   );
 }
 
+const DEFAULT_LINEAR_GRADIENT: GradientDef = {
+  type: 'linear', angle: 90,
+  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
+};
+const DEFAULT_RADIAL_GRADIENT: GradientDef = {
+  type: 'radial', centerX: 0.5, centerY: 0.5, radius: 0.7,
+  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
+};
+
+function GradientControls({ gradient, onChange }: {
+  gradient: GradientDef; onChange: (g: GradientDef) => void;
+}) {
+  const stops = gradient.stops;
+  const setStop = (i: number, color: string) => {
+    const next = [...stops];
+    next[i] = { ...next[i], color };
+    onChange({ ...gradient, stops: next } as GradientDef);
+  };
+
+  return (
+    <div className="gradient-controls">
+      {gradient.type === 'linear' && (
+        <NumericField label="Angle" value={gradient.angle} onChange={(v) => onChange({ ...gradient, angle: v })} min={0} max={360} step={5} />
+      )}
+      {gradient.type === 'radial' && (
+        <>
+          <NumericField label="Center X" value={gradient.centerX} onChange={(v) => onChange({ ...gradient, centerX: v })} min={0} max={1} step={0.05} />
+          <NumericField label="Center Y" value={gradient.centerY} onChange={(v) => onChange({ ...gradient, centerY: v })} min={0} max={1} step={0.05} />
+          <NumericField label="Radius" value={gradient.radius} onChange={(v) => onChange({ ...gradient, radius: v })} min={0.05} max={2} step={0.05} />
+        </>
+      )}
+      <div className="gradient-stops">
+        <ColorField label="Start" value={stops[0]?.color ?? '#000000'} onChange={(c) => setStop(0, c)} />
+        <ColorField label="End" value={stops[1]?.color ?? '#ffffff'} onChange={(c) => setStop(1, c)} />
+      </div>
+    </div>
+  );
+}
+
 function ShapeSection({ layer, sceneIndex }: { layer: ShapeLayerData; sceneIndex: number }) {
   const updateLayer = useStore((s) => s.updateLayer);
   const update = (patch: Partial<ShapeLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+
+  const fillType = layer.fillType ?? 'solid';
+
+  function setFillType(ft: FillType) {
+    const patch: Partial<ShapeLayerData> = { fillType: ft };
+    if (ft !== 'solid' && !layer.fillGradient) {
+      patch.fillGradient = ft === 'linear-gradient' ? { ...DEFAULT_LINEAR_GRADIENT } : { ...DEFAULT_RADIAL_GRADIENT };
+    }
+    if (ft !== 'solid' && layer.fillGradient && layer.fillGradient.type !== (ft === 'linear-gradient' ? 'linear' : 'radial')) {
+      patch.fillGradient = ft === 'linear-gradient'
+        ? { ...DEFAULT_LINEAR_GRADIENT, stops: layer.fillGradient.stops }
+        : { ...DEFAULT_RADIAL_GRADIENT, stops: layer.fillGradient.stops };
+    }
+    update(patch);
+  }
 
   return (
     <div className="prop-section">
@@ -187,20 +244,59 @@ function ShapeSection({ layer, sceneIndex }: { layer: ShapeLayerData; sceneIndex
           <option value="rounded-rect">Rounded Rect</option>
           <option value="circle">Circle</option>
           <option value="ellipse">Ellipse</option>
+          <option value="triangle">Triangle</option>
+          <option value="star">Star</option>
+          <option value="polygon">Polygon</option>
+          <option value="arrow">Arrow</option>
           <option value="line">Line</option>
         </select>
       </label>
-      <ColorField label="Fill" value={layer.fill} onChange={(v) => update({ fill: v })} />
+      {layer.shapeType === 'polygon' && (
+        <NumericField label="Sides" value={layer.polygonSides ?? 6} onChange={(v) => update({ polygonSides: v })} min={3} max={20} />
+      )}
+      {layer.shapeType === 'star' && (
+        <>
+          <NumericField label="Points" value={layer.starPoints ?? 5} onChange={(v) => update({ starPoints: v })} min={3} max={20} />
+          <NumericField label="Inner R" value={layer.starInnerRadius ?? 0.4} onChange={(v) => update({ starInnerRadius: v })} min={0.1} max={0.9} step={0.05} />
+        </>
+      )}
+      <label className="prop-field">
+        <span>Fill</span>
+        <select value={fillType} onChange={(e) => setFillType(e.target.value as FillType)}>
+          <option value="solid">Solid</option>
+          <option value="linear-gradient">Linear Gradient</option>
+          <option value="radial-gradient">Radial Gradient</option>
+        </select>
+      </label>
+      {fillType === 'solid' && (
+        <ColorField label="Color" value={layer.fill} onChange={(v) => update({ fill: v })} />
+      )}
+      {fillType !== 'solid' && layer.fillGradient && (
+        <GradientControls gradient={layer.fillGradient} onChange={(g) => update({ fillGradient: g })} />
+      )}
       <ColorField label="Stroke" value={layer.stroke || '#000000'} onChange={(v) => update({ stroke: v })} />
       <NumericField label="Stroke W" value={layer.strokeWidth} onChange={(v) => update({ strokeWidth: v })} min={0} />
-      <NumericField label="Corner R" value={layer.cornerRadius} onChange={(v) => update({ cornerRadius: v })} min={0} />
+      {(layer.shapeType === 'rounded-rect') && (
+        <NumericField label="Corner R" value={layer.cornerRadius} onChange={(v) => update({ cornerRadius: v })} min={0} />
+      )}
     </div>
   );
 }
 
 function ImageSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex: number }) {
   const updateLayer = useStore((s) => s.updateLayer);
+  const projectPath = useStore((s) => s.projectPath);
   const update = (patch: Partial<ImageLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+
+  async function handleBrowse() {
+    const path = await pickImageFile();
+    if (!path) return;
+    let src = path;
+    if (projectPath) {
+      src = await copyAssetToProject(path, projectPath);
+    }
+    update({ src });
+  }
 
   return (
     <div className="prop-section">
@@ -209,6 +305,7 @@ function ImageSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex
         <span>Source</span>
         <input type="text" value={layer.src} onChange={(e) => update({ src: e.target.value })} placeholder="Image URL or path" />
       </label>
+      <button className="prop-browse-btn" onClick={handleBrowse}>Browse...</button>
       <label className="prop-field">
         <span>Fit</span>
         <select value={layer.fitMode} onChange={(e) => update({ fitMode: e.target.value as ImageLayerData['fitMode'] })}>
@@ -331,12 +428,138 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
   );
 }
 
+const BG_TYPES: BackgroundType[] = ['solid', 'linear-gradient', 'radial-gradient', 'image'];
+
+function SceneSection({ scene, sceneIndex, fps }: { scene: Scene; sceneIndex: number; fps: number }) {
+  const updateScene = useStore((s) => s.updateScene);
+  const projectPath = useStore((s) => s.projectPath);
+
+  const bgType = scene.backgroundType ?? 'solid';
+
+  function setBgType(t: BackgroundType) {
+    const patch: Partial<Scene> = { backgroundType: t };
+    if ((t === 'linear-gradient' || t === 'radial-gradient') && !scene.backgroundGradient) {
+      patch.backgroundGradient = t === 'linear-gradient' ? { ...DEFAULT_LINEAR_GRADIENT } : { ...DEFAULT_RADIAL_GRADIENT };
+    }
+    if (t === 'linear-gradient' && scene.backgroundGradient?.type === 'radial') {
+      patch.backgroundGradient = { ...DEFAULT_LINEAR_GRADIENT, stops: scene.backgroundGradient.stops };
+    }
+    if (t === 'radial-gradient' && scene.backgroundGradient?.type === 'linear') {
+      patch.backgroundGradient = { ...DEFAULT_RADIAL_GRADIENT, stops: scene.backgroundGradient.stops };
+    }
+    updateScene(sceneIndex, patch);
+  }
+
+  async function handleBgImageBrowse() {
+    const path = await pickImageFile();
+    if (!path) return;
+    let src = path;
+    if (projectPath) {
+      src = await copyAssetToProject(path, projectPath);
+    }
+    updateScene(sceneIndex, { backgroundImage: src, backgroundType: 'image' });
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>Scene: {scene.label}</h4>
+      <label className="prop-field">
+        <span>Label</span>
+        <input
+          type="text"
+          value={scene.label}
+          onChange={(e) => updateScene(sceneIndex, { label: e.target.value })}
+        />
+      </label>
+
+      <label className="prop-field">
+        <span>Background</span>
+        <select value={bgType} onChange={(e) => setBgType(e.target.value as BackgroundType)}>
+          {BG_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+
+      {bgType === 'solid' && (
+        <ColorField
+          label="Color"
+          value={scene.backgroundColor}
+          onChange={(v) => updateScene(sceneIndex, { backgroundColor: v })}
+        />
+      )}
+
+      {(bgType === 'linear-gradient' || bgType === 'radial-gradient') && scene.backgroundGradient && (
+        <GradientControls
+          gradient={scene.backgroundGradient}
+          onChange={(g) => updateScene(sceneIndex, { backgroundGradient: g })}
+        />
+      )}
+
+      {bgType === 'image' && (
+        <>
+          <ColorField
+            label="Fallback"
+            value={scene.backgroundColor}
+            onChange={(v) => updateScene(sceneIndex, { backgroundColor: v })}
+          />
+          <label className="prop-field">
+            <span>Image</span>
+            <input
+              type="text"
+              value={scene.backgroundImage ?? ''}
+              onChange={(e) => updateScene(sceneIndex, { backgroundImage: e.target.value })}
+              placeholder="Image path or URL"
+            />
+          </label>
+          <button className="prop-browse-btn" onClick={handleBgImageBrowse}>Browse...</button>
+          <label className="prop-field">
+            <span>Fit</span>
+            <select
+              value={scene.backgroundImageFit ?? 'cover'}
+              onChange={(e) => updateScene(sceneIndex, { backgroundImageFit: e.target.value as Scene['backgroundImageFit'] })}
+            >
+              <option value="cover">Cover</option>
+              <option value="contain">Contain</option>
+              <option value="fill">Fill</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+        </>
+      )}
+
+      <NumericField
+        label="Duration (s)"
+        value={scene.durationFrames / fps}
+        onChange={(v) => updateScene(sceneIndex, { durationFrames: Math.round(v * fps) })}
+        min={0.5}
+        step={0.5}
+      />
+      <label className="prop-field">
+        <span>Transition</span>
+        <select
+          value={scene.transition}
+          onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType })}
+        >
+          {TRANSITIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
+      {scene.transition !== 'none' && scene.transition !== 'cut' && (
+        <NumericField
+          label="Trans. Frames"
+          value={scene.transitionDurationFrames}
+          onChange={(v) => updateScene(sceneIndex, { transitionDurationFrames: v })}
+          min={1}
+          max={scene.durationFrames}
+        />
+      )}
+    </div>
+  );
+}
+
 export function PropertyInspector() {
   const composition = useStore((s) => s.composition);
   const selectedSceneIndex = useStore((s) => s.selectedSceneIndex);
   const selectedLayerId = useStore((s) => s.selectedLayerId);
   const currentFrame = useStore((s) => s.currentFrame);
-  const updateScene = useStore((s) => s.updateScene);
   const updateLayer = useStore((s) => s.updateLayer);
   const setComposition = useStore((s) => s.setComposition);
 
@@ -357,47 +580,11 @@ export function PropertyInspector() {
   return (
     <div className="property-inspector">
       {/* Scene properties */}
-      <div className="prop-section">
-        <h4>Scene: {scene.label}</h4>
-        <label className="prop-field">
-          <span>Label</span>
-          <input
-            type="text"
-            value={scene.label}
-            onChange={(e) => updateScene(selectedSceneIndex, { label: e.target.value })}
-          />
-        </label>
-        <ColorField
-          label="Background"
-          value={scene.backgroundColor}
-          onChange={(v) => updateScene(selectedSceneIndex, { backgroundColor: v })}
-        />
-        <NumericField
-          label="Duration (s)"
-          value={scene.durationFrames / composition.output.fps}
-          onChange={(v) => updateScene(selectedSceneIndex, { durationFrames: Math.round(v * composition.output.fps) })}
-          min={0.5}
-          step={0.5}
-        />
-        <label className="prop-field">
-          <span>Transition</span>
-          <select
-            value={scene.transition}
-            onChange={(e) => updateScene(selectedSceneIndex, { transition: e.target.value as TransitionType })}
-          >
-            {TRANSITIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </label>
-        {scene.transition !== 'none' && scene.transition !== 'cut' && (
-          <NumericField
-            label="Trans. Frames"
-            value={scene.transitionDurationFrames}
-            onChange={(v) => updateScene(selectedSceneIndex, { transitionDurationFrames: v })}
-            min={1}
-            max={scene.durationFrames}
-          />
-        )}
-      </div>
+      <SceneSection
+        scene={scene}
+        sceneIndex={selectedSceneIndex}
+        fps={composition.output.fps}
+      />
 
       {/* Output preset */}
       <div className="prop-section">
