@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { loadSystemFonts, getCustomFonts, importFontFile, type CustomFont } from '../../lib/font-manager';
+import { OnlineFontBrowser } from './OnlineFontBrowser';
 
 interface FontPickerProps {
   value: string;
@@ -15,6 +16,7 @@ export function FontPicker({ value, projectDir, onSelect, onClose }: FontPickerP
   const [customFonts, setCustomFonts] = useState<CustomFont[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewText, setPreviewText] = useState('Aa Bb 123');
+  const [onlineBrowserOpen, setOnlineBrowserOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,6 +51,12 @@ export function FontPicker({ value, projectDir, onSelect, onClose }: FontPickerP
     } catch (err) {
       console.error('Font import failed:', err);
     }
+  }
+
+  function handleOnlineFontSelected(family: string) {
+    setCustomFonts(getCustomFonts());
+    onSelect(family);
+    onClose();
   }
 
   function handleSelect(family: string) {
@@ -126,11 +134,22 @@ export function FontPicker({ value, projectDir, onSelect, onClose }: FontPickerP
 
         <div className="font-picker-footer">
           <button className="font-picker-import-btn" onClick={handleImport}>
-            + Import Font File (.ttf / .otf / .woff2)
+            + Import from file…
+          </button>
+          <button className="font-picker-online-btn" onClick={() => setOnlineBrowserOpen(true)}>
+            Browse online
           </button>
           <button className="dialog-close" onClick={onClose}>Cancel</button>
         </div>
       </div>
+
+      {onlineBrowserOpen && (
+        <OnlineFontBrowser
+          projectDir={projectDir}
+          onSelect={handleOnlineFontSelected}
+          onClose={() => setOnlineBrowserOpen(false)}
+        />
+      )}
     </div>,
     document.body,
   );

@@ -45,6 +45,10 @@ export function getCustomFonts(): CustomFont[] {
   return Array.from(_customFonts.entries()).map(([family, filePath]) => ({ family, filePath }));
 }
 
+export function registerCustomFont(family: string, filePath: string): void {
+  _customFonts.set(family, filePath);
+}
+
 /** Open a file dialog to pick a font, copy it into the project, and register it. */
 export async function importFontFile(projectDir: string | null): Promise<CustomFont | null> {
   const selected = await open({

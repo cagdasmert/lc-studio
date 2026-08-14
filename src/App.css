@@ -1125,6 +1125,160 @@ body {
 }
 .font-picker-import-btn:hover { background: #2a2a2a; border-color: #4a7abf; color: #ccc; }
 
+.font-picker-online-btn {
+  padding: 6px 10px;
+  background: #1a2a3a;
+  border: 1px solid #2a4a6a;
+  border-radius: 4px;
+  color: #8abfff;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.font-picker-online-btn:hover { background: #1e3a5a; border-color: #4a7abf; }
+
+/* ── Online Font Browser ─────────────────────────────── */
+
+.online-font-panel {
+  width: 680px;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.online-font-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.online-font-categories {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.online-font-cat-btn {
+  padding: 3px 10px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #888;
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.online-font-cat-btn:hover { background: #222; color: #ccc; }
+.online-font-cat-btn.active { background: #1a2a3a; border-color: #4a7abf; color: #8abfff; }
+
+.online-font-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  margin-bottom: 10px;
+}
+
+.online-font-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 6px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.online-font-item:hover { background: #1a1a1a; }
+
+.online-font-info {
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.online-font-name {
+  display: block;
+  font-size: 12px;
+  color: #ccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-font-meta {
+  display: block;
+  font-size: 10px;
+  color: #555;
+  margin-top: 1px;
+  text-transform: capitalize;
+}
+
+.online-font-preview {
+  flex: 1;
+  font-size: 18px;
+  color: #e0e0e0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  transition: font-family 0.2s;
+}
+
+.online-font-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.online-font-download-btn {
+  padding: 3px 10px;
+  background: #1e3a1e;
+  border: 1px solid #2a5a2a;
+  border-radius: 3px;
+  color: #4caf50;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.online-font-download-btn:hover { background: #2a4a2a; border-color: #4caf50; }
+
+.online-font-use-btn {
+  padding: 3px 10px;
+  background: #1a2a3a;
+  border: 1px solid #2a4a6a;
+  border-radius: 3px;
+  color: #8abfff;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.online-font-use-btn:hover { background: #1e3a5a; }
+
+.online-font-installed-badge {
+  font-size: 11px;
+  color: #4caf50;
+  font-weight: 700;
+}
+
+.online-font-status {
+  font-size: 11px;
+  color: #888;
+}
+.online-font-status.downloading { color: #ff9800; }
+
+.online-font-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid #222;
+}
+
+.online-font-count {
+  font-size: 11px;
+  color: #555;
+}
+
 /* Font family trigger button in property inspector */
 .font-family-trigger {
   flex: 1;
