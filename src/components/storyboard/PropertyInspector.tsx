@@ -3,14 +3,19 @@ import { useStore } from '../../store';
 import type {
   Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
   TransitionType, BlendMode, FontWeight, LayerEffect,
-  GradientDef, FillType, BackgroundType, Scene,
+  GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
 } from '../../types';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
 import { FontPicker } from '../shared/FontPicker';
 import { pickImageFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
 
-const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn'];
+const BLEND_MODES: BlendMode[] = [
+  'normal', 'multiply', 'screen', 'overlay',
+  'darken', 'lighten', 'color-dodge', 'color-burn',
+  'hard-light', 'soft-light', 'difference', 'exclusion',
+  'hue', 'saturation', 'color', 'luminosity',
+];
 const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
 const FONT_WEIGHTS: FontWeight[] = ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
 
@@ -104,6 +109,10 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
         <NumericField label="Scale Y" value={layer.scaleY} onChange={(v) => update({ scaleY: v } as Partial<Layer>)} step={0.1} />
       </div>
       <div className="prop-row">
+        <NumericField label="Skew X" value={layer.skewX ?? 0} onChange={(v) => update({ skewX: v } as Partial<Layer>)} step={1} />
+        <NumericField label="Skew Y" value={layer.skewY ?? 0} onChange={(v) => update({ skewY: v } as Partial<Layer>)} step={1} />
+      </div>
+      <div className="prop-row">
         <NumericField label="Opacity" value={layer.opacity} onChange={(v) => update({ opacity: v } as Partial<Layer>)} min={0} max={1} step={0.05} />
         <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="opacity" frame={frameInScene} value={layer.opacity} />
       </div>
@@ -113,6 +122,45 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
           {BLEND_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </label>
+    </div>
+  );
+}
+
+const DEFAULT_LINEAR_GRADIENT: GradientDef = {
+  type: 'linear', angle: 90,
+  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
+};
+const DEFAULT_RADIAL_GRADIENT: GradientDef = {
+  type: 'radial', centerX: 0.5, centerY: 0.5, radius: 0.7,
+  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
+};
+
+function GradientControls({ gradient, onChange }: {
+  gradient: GradientDef; onChange: (g: GradientDef) => void;
+}) {
+  const stops = gradient.stops;
+  const setStop = (i: number, color: string) => {
+    const next = [...stops];
+    next[i] = { ...next[i], color };
+    onChange({ ...gradient, stops: next } as GradientDef);
+  };
+
+  return (
+    <div className="gradient-controls">
+      {gradient.type === 'linear' && (
+        <NumericField label="Angle" value={gradient.angle} onChange={(v) => onChange({ ...gradient, angle: v })} min={0} max={360} step={5} />
+      )}
+      {gradient.type === 'radial' && (
+        <>
+          <NumericField label="Center X" value={gradient.centerX} onChange={(v) => onChange({ ...gradient, centerX: v })} min={0} max={1} step={0.05} />
+          <NumericField label="Center Y" value={gradient.centerY} onChange={(v) => onChange({ ...gradient, centerY: v })} min={0} max={1} step={0.05} />
+          <NumericField label="Radius" value={gradient.radius} onChange={(v) => onChange({ ...gradient, radius: v })} min={0.05} max={2} step={0.05} />
+        </>
+      )}
+      <div className="gradient-stops">
+        <ColorField label="Start" value={stops[0]?.color ?? '#000000'} onChange={(c) => setStop(0, c)} />
+        <ColorField label="End" value={stops[1]?.color ?? '#ffffff'} onChange={(c) => setStop(1, c)} />
+      </div>
     </div>
   );
 }
@@ -160,7 +208,32 @@ function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: 
           {FONT_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
         </select>
       </label>
-      <ColorField label="Color" value={layer.color} onChange={(v) => update({ color: v })} />
+      <label className="prop-field">
+        <span>Fill</span>
+        <select value={layer.fillType ?? 'solid'} onChange={(e) => {
+          const ft = e.target.value as FillType;
+          const patch: Partial<TextLayerData> = { fillType: ft };
+          if (ft !== 'solid' && !layer.fillGradient) {
+            patch.fillGradient = ft === 'linear-gradient' ? { ...DEFAULT_LINEAR_GRADIENT } : { ...DEFAULT_RADIAL_GRADIENT };
+          }
+          if (ft !== 'solid' && layer.fillGradient && layer.fillGradient.type !== (ft === 'linear-gradient' ? 'linear' : 'radial')) {
+            patch.fillGradient = ft === 'linear-gradient'
+              ? { ...DEFAULT_LINEAR_GRADIENT, stops: layer.fillGradient.stops }
+              : { ...DEFAULT_RADIAL_GRADIENT, stops: layer.fillGradient.stops };
+          }
+          update(patch);
+        }}>
+          <option value="solid">Solid</option>
+          <option value="linear-gradient">Linear Gradient</option>
+          <option value="radial-gradient">Radial Gradient</option>
+        </select>
+      </label>
+      {(layer.fillType ?? 'solid') === 'solid' && (
+        <ColorField label="Color" value={layer.color} onChange={(v) => update({ color: v })} />
+      )}
+      {(layer.fillType ?? 'solid') !== 'solid' && layer.fillGradient && (
+        <GradientControls gradient={layer.fillGradient} onChange={(g) => update({ fillGradient: g })} />
+      )}
       <label className="prop-field">
         <span>Align</span>
         <select value={layer.align} onChange={(e) => update({ align: e.target.value as TextLayerData['align'] })}>
@@ -172,45 +245,6 @@ function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: 
       <NumericField label="Line Height" value={layer.lineHeight} onChange={(v) => update({ lineHeight: v })} min={0.5} max={3} step={0.1} />
       <NumericField label="Letter Spacing" value={layer.letterSpacing} onChange={(v) => update({ letterSpacing: v })} step={0.5} />
       <NumericField label="Max Width" value={layer.maxWidth} onChange={(v) => update({ maxWidth: v })} min={0} />
-    </div>
-  );
-}
-
-const DEFAULT_LINEAR_GRADIENT: GradientDef = {
-  type: 'linear', angle: 90,
-  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
-};
-const DEFAULT_RADIAL_GRADIENT: GradientDef = {
-  type: 'radial', centerX: 0.5, centerY: 0.5, radius: 0.7,
-  stops: [{ offset: 0, color: '#e94560' }, { offset: 1, color: '#0f3460' }],
-};
-
-function GradientControls({ gradient, onChange }: {
-  gradient: GradientDef; onChange: (g: GradientDef) => void;
-}) {
-  const stops = gradient.stops;
-  const setStop = (i: number, color: string) => {
-    const next = [...stops];
-    next[i] = { ...next[i], color };
-    onChange({ ...gradient, stops: next } as GradientDef);
-  };
-
-  return (
-    <div className="gradient-controls">
-      {gradient.type === 'linear' && (
-        <NumericField label="Angle" value={gradient.angle} onChange={(v) => onChange({ ...gradient, angle: v })} min={0} max={360} step={5} />
-      )}
-      {gradient.type === 'radial' && (
-        <>
-          <NumericField label="Center X" value={gradient.centerX} onChange={(v) => onChange({ ...gradient, centerX: v })} min={0} max={1} step={0.05} />
-          <NumericField label="Center Y" value={gradient.centerY} onChange={(v) => onChange({ ...gradient, centerY: v })} min={0} max={1} step={0.05} />
-          <NumericField label="Radius" value={gradient.radius} onChange={(v) => onChange({ ...gradient, radius: v })} min={0.05} max={2} step={0.05} />
-        </>
-      )}
-      <div className="gradient-stops">
-        <ColorField label="Start" value={stops[0]?.color ?? '#000000'} onChange={(c) => setStop(0, c)} />
-        <ColorField label="End" value={stops[1]?.color ?? '#ffffff'} onChange={(c) => setStop(1, c)} />
-      </div>
     </div>
   );
 }
@@ -276,6 +310,24 @@ function ShapeSection({ layer, sceneIndex }: { layer: ShapeLayerData; sceneIndex
       )}
       <ColorField label="Stroke" value={layer.stroke || '#000000'} onChange={(v) => update({ stroke: v })} />
       <NumericField label="Stroke W" value={layer.strokeWidth} onChange={(v) => update({ strokeWidth: v })} min={0} />
+      {layer.strokeWidth > 0 && (
+        <label className="prop-field">
+          <span>Dash</span>
+          <select
+            value={layer.strokeDash?.join(',') ?? ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              update({ strokeDash: v ? v.split(',').map(Number) : undefined, strokeDashOffset: 0 });
+            }}
+          >
+            <option value="">Solid</option>
+            <option value="10,5">Dashed</option>
+            <option value="3,3">Dotted</option>
+            <option value="15,5,3,5">Dash-dot</option>
+            <option value="20,10">Long dash</option>
+          </select>
+        </label>
+      )}
       {(layer.shapeType === 'rounded-rect') && (
         <NumericField label="Corner R" value={layer.cornerRadius} onChange={(v) => update({ cornerRadius: v })} min={0} />
       )}
@@ -316,6 +368,33 @@ function ImageSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex
         </select>
       </label>
       <NumericField label="Border R" value={layer.borderRadius} onChange={(v) => update({ borderRadius: v })} min={0} />
+      <label className="prop-field">
+        <span>Tint</span>
+        <input
+          type="color"
+          value={layer.tintColor ?? '#000000'}
+          onChange={(e) => update({ tintColor: e.target.value })}
+        />
+        <label className="prop-checkbox">
+          <input
+            type="checkbox"
+            checked={!!layer.tintColor}
+            onChange={(e) => update({ tintColor: e.target.checked ? '#e94560' : null })}
+          />
+          <span>On</span>
+        </label>
+      </label>
+      {layer.tintColor && (
+        <label className="prop-field">
+          <span>Tint Mode</span>
+          <select value={layer.tintBlend ?? 'multiply'} onChange={(e) => update({ tintBlend: e.target.value as TintBlendMode })}>
+            <option value="multiply">Multiply</option>
+            <option value="screen">Screen</option>
+            <option value="overlay">Overlay</option>
+            <option value="color">Color</option>
+          </select>
+        </label>
+      )}
     </div>
   );
 }
@@ -343,11 +422,11 @@ function VideoSection({ layer, sceneIndex }: { layer: VideoLayerData; sceneIndex
 }
 
 const EFFECT_TYPES: LayerEffect['type'][] = [
-  'blur', 'brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'hue-rotate',
+  'blur', 'brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'hue-rotate', 'invert',
 ];
 
 const EFFECT_DEFAULTS: Record<string, number> = {
-  blur: 5, brightness: 1.5, contrast: 1.5, saturate: 2, grayscale: 1, sepia: 1, 'hue-rotate': 90,
+  blur: 5, brightness: 1.5, contrast: 1.5, saturate: 2, grayscale: 1, sepia: 1, 'hue-rotate': 90, invert: 1,
 };
 
 const EFFECT_RANGES: Record<string, { min: number; max: number; step: number }> = {
@@ -358,6 +437,7 @@ const EFFECT_RANGES: Record<string, { min: number; max: number; step: number }> 
   grayscale: { min: 0, max: 1, step: 0.05 },
   sepia: { min: 0, max: 1, step: 0.05 },
   'hue-rotate': { min: 0, max: 360, step: 5 },
+  invert: { min: 0, max: 1, step: 0.05 },
 };
 
 function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
@@ -424,6 +504,49 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
         <option value="">+ Add effect...</option>
         {EFFECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
       </select>
+    </div>
+  );
+}
+
+const DEFAULT_BOX_SHADOW: BoxShadow = { color: 'rgba(0,0,0,0.5)', blur: 10, offsetX: 4, offsetY: 4, spread: 0 };
+
+function BoxShadowSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const shadow = layer.boxShadow;
+  const enabled = !!shadow;
+
+  function toggle() {
+    updateLayer(sceneIndex, layer.id, {
+      boxShadow: enabled ? null : { ...DEFAULT_BOX_SHADOW },
+    } as Partial<Layer>);
+  }
+
+  function updateShadow(patch: Partial<BoxShadow>) {
+    updateLayer(sceneIndex, layer.id, {
+      boxShadow: { ...(shadow ?? DEFAULT_BOX_SHADOW), ...patch },
+    } as Partial<Layer>);
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>
+        Box Shadow
+        <label className="prop-checkbox section-toggle">
+          <input type="checkbox" checked={enabled} onChange={toggle} />
+          <span>{enabled ? 'On' : 'Off'}</span>
+        </label>
+      </h4>
+      {enabled && shadow && (
+        <>
+          <ColorField label="Color" value={shadow.color.startsWith('rgba') ? '#000000' : shadow.color} onChange={(v) => updateShadow({ color: v })} />
+          <NumericField label="Blur" value={shadow.blur} onChange={(v) => updateShadow({ blur: v })} min={0} max={100} />
+          <NumericField label="Spread" value={shadow.spread} onChange={(v) => updateShadow({ spread: v })} min={0} max={50} />
+          <div className="prop-row">
+            <NumericField label="Off X" value={shadow.offsetX} onChange={(v) => updateShadow({ offsetX: v })} />
+            <NumericField label="Off Y" value={shadow.offsetY} onChange={(v) => updateShadow({ offsetY: v })} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -639,6 +762,7 @@ export function PropertyInspector() {
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
 
           <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
+          <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
         </>
       )}
 

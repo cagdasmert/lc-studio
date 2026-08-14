@@ -1,5 +1,6 @@
 import type { TextLayerData, ResolvedTransform } from '../types';
 import { resolveNumericProperty, resolveColorProperty } from './interpolation';
+import { createCanvasGradient } from './gradient';
 
 export function drawTextLayer(
   ctx: CanvasRenderingContext2D,
@@ -18,7 +19,12 @@ export function drawTextLayer(
   const weight = layer.fontWeight === 'normal' ? '' : layer.fontWeight;
   const style = layer.fontStyle === 'normal' ? '' : layer.fontStyle;
   ctx.font = `${style} ${weight} ${fontSize}px ${layer.fontFamily}`.trim();
-  ctx.fillStyle = color;
+  const fillType = layer.fillType ?? 'solid';
+  if (fillType !== 'solid' && layer.fillGradient) {
+    ctx.fillStyle = createCanvasGradient(ctx, layer.fillGradient, resolved.width, resolved.height);
+  } else {
+    ctx.fillStyle = color;
+  }
   ctx.textAlign = layer.align;
   ctx.textBaseline = 'top';
 

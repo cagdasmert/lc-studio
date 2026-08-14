@@ -143,5 +143,7 @@ export function resolveLayerTransform(
     opacity: resolveNumericProperty(kf, 'opacity', frameInLayer, layer.opacity),
     anchorX: resolveNumericProperty(kf, 'anchorX', frameInLayer, layer.anchorX),
     anchorY: resolveNumericProperty(kf, 'anchorY', frameInLayer, layer.anchorY),
+    skewX: resolveNumericProperty(kf, 'skewX', frameInLayer, layer.skewX ?? 0),
+    skewY: resolveNumericProperty(kf, 'skewY', frameInLayer, layer.skewY ?? 0),
   };
 }

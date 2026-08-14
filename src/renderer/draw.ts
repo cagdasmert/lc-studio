@@ -51,11 +51,45 @@ export function drawSceneLayers(
       ctx.globalCompositeOperation = layer.blendMode;
     }
 
-    // Apply 2D transform: place anchor at (x,y), rotate/scale around it, then shift to top-left
+    // Apply 2D transform: place anchor at (x,y), rotate/scale/skew around it, then shift to top-left
     ctx.translate(resolved.x, resolved.y);
     ctx.rotate((resolved.rotation * Math.PI) / 180);
+    if (resolved.skewX !== 0 || resolved.skewY !== 0) {
+      const sx = Math.tan((resolved.skewX * Math.PI) / 180);
+      const sy = Math.tan((resolved.skewY * Math.PI) / 180);
+      ctx.transform(1, sy, sx, 1, 0, 0);
+    }
     ctx.scale(resolved.scaleX, resolved.scaleY);
     ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
+
+    // Box shadow — render to offscreen canvas to avoid destination-out erasing other layers
+    if (layer.boxShadow && layer.boxShadow.blur > 0) {
+      const bs = layer.boxShadow;
+      const pad = bs.blur + bs.spread + Math.max(Math.abs(bs.offsetX), Math.abs(bs.offsetY)) + 10;
+      const ow = Math.round(resolved.width + pad * 2);
+      const oh = Math.round(resolved.height + pad * 2);
+      const offscreen = document.createElement('canvas');
+      offscreen.width = ow;
+      offscreen.height = oh;
+      const oc = offscreen.getContext('2d');
+      if (oc) {
+        oc.shadowColor = bs.color;
+        oc.shadowBlur = bs.blur + bs.spread;
+        oc.shadowOffsetX = bs.offsetX;
+        oc.shadowOffsetY = bs.offsetY;
+        oc.fillStyle = bs.color;
+        oc.fillRect(pad, pad, resolved.width, resolved.height);
+        // Erase the rect, leaving only the shadow
+        oc.globalCompositeOperation = 'destination-out';
+        oc.shadowColor = 'transparent';
+        oc.shadowBlur = 0;
+        oc.shadowOffsetX = 0;
+        oc.shadowOffsetY = 0;
+        oc.fillStyle = '#000';
+        oc.fillRect(pad, pad, resolved.width, resolved.height);
+        ctx.drawImage(offscreen, -pad, -pad);
+      }
+    }
 
     if (layer.effects.length > 0) {
       // WebKit (WKWebView) doesn't reliably apply ctx.filter to text/shape drawing ops.

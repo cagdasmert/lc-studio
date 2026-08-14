@@ -204,6 +204,19 @@ body {
   display: flex; flex-direction: column;
 }
 
+/* ── Checkbox + toggle ────────────────────────────────── */
+
+.prop-checkbox {
+  display: flex; align-items: center; gap: 4px; font-size: 11px; color: #999;
+  cursor: pointer;
+}
+.prop-checkbox input[type='checkbox'] {
+  width: 14px; height: 14px; cursor: pointer;
+}
+.section-toggle {
+  float: right; font-weight: normal; text-transform: none; letter-spacing: 0;
+}
+
 /* ── Effects ──────────────────────────────────────────── */
 
 .effect-row {

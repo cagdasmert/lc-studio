@@ -107,6 +107,12 @@ export function drawShapeLayer(
   if (layer.stroke && layer.strokeWidth > 0) {
     ctx.strokeStyle = layer.stroke;
     ctx.lineWidth = layer.strokeWidth;
+    if (layer.strokeDash && layer.strokeDash.length > 0) {
+      ctx.setLineDash(layer.strokeDash);
+      if (layer.strokeDashOffset) {
+        ctx.lineDashOffset = layer.strokeDashOffset;
+      }
+    }
     ctx.stroke();
   }
 }

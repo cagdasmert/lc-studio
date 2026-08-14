@@ -20,6 +20,8 @@ export function buildFilterString(effects: LayerEffect[]): string {
           return `sepia(${e.value})`;
         case 'hue-rotate':
           return `hue-rotate(${e.value}deg)`;
+        case 'invert':
+          return `invert(${e.value})`;
         case 'drop-shadow':
           return `drop-shadow(${e.value})`;
         default:

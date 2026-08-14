@@ -62,12 +62,23 @@ export type GradientDef = LinearGradientDef | RadialGradientDef;
 
 export type BlendMode =
   | 'normal' | 'multiply' | 'screen' | 'overlay'
-  | 'darken' | 'lighten' | 'color-dodge' | 'color-burn';
+  | 'darken' | 'lighten' | 'color-dodge' | 'color-burn'
+  | 'hard-light' | 'soft-light' | 'difference' | 'exclusion'
+  | 'hue' | 'saturation' | 'color' | 'luminosity';
 
 export interface LayerEffect {
   type: 'blur' | 'brightness' | 'contrast' | 'saturate'
-      | 'grayscale' | 'sepia' | 'hue-rotate' | 'drop-shadow';
+      | 'grayscale' | 'sepia' | 'hue-rotate' | 'invert'
+      | 'drop-shadow';
   value: number | string;
+}
+
+export interface BoxShadow {
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+  spread: number;
 }
 
 export interface LayerBase {
@@ -86,9 +97,12 @@ export interface LayerBase {
   opacity: number;  // 0–1
   anchorX: number;  // 0–1 (transform origin)
   anchorY: number;  // 0–1
+  skewX?: number;   // degrees
+  skewY?: number;   // degrees
   zIndex: number;
   blendMode: BlendMode;
   effects: LayerEffect[];
+  boxShadow?: BoxShadow | null;
   visible: boolean;
   locked: boolean;
   keyframes: Record<string, KeyframeTrack>;
@@ -123,6 +137,8 @@ export interface TextLayerData extends LayerBase {
   fontWeight: FontWeight;
   fontStyle: FontStyle;
   color: string;
+  fillType?: FillType;
+  fillGradient?: GradientDef;
   align: TextAlign;
   verticalAlign: VerticalAlign;
   lineHeight: number;    // multiplier (e.g. 1.4)
@@ -134,11 +150,15 @@ export interface TextLayerData extends LayerBase {
 
 export type ImageFitMode = 'cover' | 'contain' | 'fill' | 'none';
 
+export type TintBlendMode = 'multiply' | 'screen' | 'overlay' | 'color';
+
 export interface ImageLayerData extends LayerBase {
   type: 'image';
   src: string;
   fitMode: ImageFitMode;
   borderRadius: number;
+  tintColor?: string | null;
+  tintBlend?: TintBlendMode;
 }
 
 export type ShapeType = 'rect' | 'circle' | 'ellipse' | 'rounded-rect' | 'line'
@@ -154,6 +174,8 @@ export interface ShapeLayerData extends LayerBase {
   fillGradient?: GradientDef;
   stroke: string;
   strokeWidth: number;
+  strokeDash?: number[];     // e.g. [10, 5] for dashed
+  strokeDashOffset?: number;
   cornerRadius: number;
   polygonSides?: number;    // for 'polygon', default 6
   starPoints?: number;      // for 'star', default 5
@@ -266,4 +288,6 @@ export interface ResolvedTransform {
   opacity: number;
   anchorX: number;
   anchorY: number;
+  skewX: number;
+  skewY: number;
 }

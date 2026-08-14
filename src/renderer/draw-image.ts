@@ -46,4 +46,13 @@ export function drawImageLayer(
       ctx.drawImage(bitmap, (dw - sw) / 2, (dh - sh) / 2);
       break;
   }
+
+  // Color tint overlay
+  if (layer.tintColor) {
+    ctx.save();
+    ctx.globalCompositeOperation = layer.tintBlend ?? 'multiply';
+    ctx.fillStyle = layer.tintColor;
+    ctx.fillRect(0, 0, dw, dh);
+    ctx.restore();
+  }
 }
