@@ -50,19 +50,32 @@ export function drawSceneLayers(
       ctx.globalCompositeOperation = layer.blendMode;
     }
 
-    // Effects (CSS filters)
-    if (layer.effects.length > 0) {
-      ctx.filter = buildFilterString(layer.effects);
-    }
-
     // Apply 2D transform: place anchor at (x,y), rotate/scale around it, then shift to top-left
     ctx.translate(resolved.x, resolved.y);
     ctx.rotate((resolved.rotation * Math.PI) / 180);
     ctx.scale(resolved.scaleX, resolved.scaleY);
     ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
 
-    // Dispatch to type-specific drawer
-    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+    if (layer.effects.length > 0) {
+      // WebKit (WKWebView) doesn't reliably apply ctx.filter to text/shape drawing ops.
+      // Workaround: draw layer onto an offscreen canvas, then composite with filter
+      // via drawImage() which IS reliably filtered in all WebKit versions.
+      const w = Math.max(1, Math.round(resolved.width));
+      const h = Math.max(1, Math.round(resolved.height));
+      const offscreen = document.createElement('canvas');
+      offscreen.width = w;
+      offscreen.height = h;
+      const offCtx = offscreen.getContext('2d');
+      if (offCtx) {
+        drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+        ctx.filter = buildFilterString(layer.effects);
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.filter = 'none';
+      }
+    } else {
+      // Dispatch to type-specific drawer
+      drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+    }
 
     ctx.restore();
   }

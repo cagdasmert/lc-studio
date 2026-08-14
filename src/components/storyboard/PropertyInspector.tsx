@@ -250,7 +250,7 @@ const EFFECT_TYPES: LayerEffect['type'][] = [
 ];
 
 const EFFECT_DEFAULTS: Record<string, number> = {
-  blur: 5, brightness: 1, contrast: 1, saturate: 1, grayscale: 0, sepia: 0, 'hue-rotate': 0,
+  blur: 5, brightness: 1.5, contrast: 1.5, saturate: 2, grayscale: 1, sepia: 1, 'hue-rotate': 90,
 };
 
 const EFFECT_RANGES: Record<string, { min: number; max: number; step: number }> = {
