@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store';
 import { getTotalFrames } from '../../renderer/compositor';
 import type { Scene, TextLayerData } from '../../types';
+import { ContextMenu, type ContextMenuItem } from '../shared/ContextMenu';
 
 function createDefaultScene(index: number): Scene {
   const id = `scene-${Date.now()}-${index}`;
@@ -62,12 +63,24 @@ export function SceneTimeline() {
   const removeScene = useStore((s) => s.removeScene);
   const reorderScenes = useStore((s) => s.reorderScenes);
   const duplicateScene = useStore((s) => s.duplicateScene);
+  const updateScene = useStore((s) => s.updateScene);
   const setCurrentFrame = useStore((s) => s.setCurrentFrame);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sceneIndex: number } | null>(null);
+  const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const totalFrames = getTotalFrames(composition);
   const fps = composition.output.fps;
+
+  // Focus rename input when entering edit mode
+  useEffect(() => {
+    if (editingSceneIndex !== null && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingSceneIndex]);
 
   function handleSceneClick(sceneIndex: number) {
     selectScene(sceneIndex);
@@ -101,6 +114,36 @@ export function SceneTimeline() {
     setDragIndex(null);
   }
 
+  function handleContextMenu(e: React.MouseEvent, sceneIndex: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, sceneIndex });
+  }
+
+  function handleRenameCommit(sceneIndex: number, newLabel: string) {
+    const trimmed = newLabel.trim();
+    if (trimmed) {
+      updateScene(sceneIndex, { label: trimmed });
+    }
+    setEditingSceneIndex(null);
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent, sceneIndex: number) {
+    if (e.key === 'Enter') {
+      handleRenameCommit(sceneIndex, (e.target as HTMLInputElement).value);
+    } else if (e.key === 'Escape') {
+      setEditingSceneIndex(null);
+    }
+  }
+
+  function getContextMenuItems(sceneIndex: number): ContextMenuItem[] {
+    return [
+      { label: 'Rename', action: () => setEditingSceneIndex(sceneIndex) },
+      { label: 'Duplicate', action: () => duplicateScene(sceneIndex) },
+      { label: 'Delete', action: () => removeScene(sceneIndex), danger: true, divider: true, disabled: composition.scenes.length <= 1 },
+    ];
+  }
+
   return (
     <div className="scene-timeline">
       <div className="timeline-header">
@@ -126,13 +169,33 @@ export function SceneTimeline() {
               className={`timeline-scene ${i === selectedSceneIndex ? 'selected' : ''} ${dragIndex === i ? 'dragging' : ''}`}
               style={{ width: `${widthPercent}%` }}
               onClick={() => handleSceneClick(i)}
+              onContextMenu={(e) => handleContextMenu(e, i)}
               draggable
               onDragStart={(e) => handleDragStart(e, i)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, i)}
               onDragEnd={handleDragEnd}
             >
-              <span className="scene-label">{scene.label}</span>
+              {editingSceneIndex === i ? (
+                <input
+                  ref={renameInputRef}
+                  className="scene-rename-input"
+                  defaultValue={scene.label}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => handleRenameCommit(i, e.target.value)}
+                  onKeyDown={(e) => handleRenameKeyDown(e, i)}
+                />
+              ) : (
+                <span
+                  className="scene-label"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingSceneIndex(i);
+                  }}
+                >
+                  {scene.label}
+                </span>
+              )}
               <span className="scene-duration">{(scene.durationFrames / fps).toFixed(1)}s</span>
               {composition.scenes.length > 1 && (
                 <button
@@ -167,6 +230,15 @@ export function SceneTimeline() {
           />
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.sceneIndex)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

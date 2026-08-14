@@ -1,5 +1,34 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Global transitions ──────────────────────────────── */
+
+button, .layer-item, .timeline-scene, .toolbar-btn, select {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+/* ── Focus outlines (accessibility) ──────────────────── */
+
+:focus-visible {
+  outline: 2px solid #4a7abf;
+  outline-offset: 1px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Active press feedback ───────────────────────────── */
+
+button:active:not(:disabled), .toolbar-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── Polished scrollbars ─────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
 body {
   font-family: Inter, system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -18,6 +47,8 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  z-index: 2;
 }
 .app-header h1 { font-size: 16px; font-weight: 600; color: #e94560; white-space: nowrap; }
 
@@ -27,6 +58,8 @@ body {
   display: flex;
   background: #111;
   border-top: 1px solid #2a2a2a;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.3);
+  z-index: 2;
 }
 
 /* ── Panels ───────────────────────────────────────────── */
@@ -36,6 +69,7 @@ body {
   background: #131313;
   border-right: 1px solid #2a2a2a;
   overflow-y: auto;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.3);
 }
 
 .panel-center {
@@ -52,6 +86,7 @@ body {
   background: #131313;
   border-left: 1px solid #2a2a2a;
   overflow-y: auto;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.3);
 }
 
 /* ── Layer panel ──────────────────────────────────────── */
@@ -247,7 +282,18 @@ body {
 
 .play-btn { font-weight: bold; }
 
-.scrubber { flex: 1; min-width: 80px; }
+.scrubber {
+  flex: 1; min-width: 80px;
+  -webkit-appearance: none; appearance: none;
+  height: 4px; background: #2a2a2a; border-radius: 2px; outline: none;
+}
+.scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #e94560; cursor: pointer; border: none;
+  transition: transform 0.1s;
+}
+.scrubber::-webkit-slider-thumb:hover { transform: scale(1.3); }
 
 .frame-display, .time-display {
   font-size: 10px; color: #888; white-space: nowrap;
@@ -414,6 +460,7 @@ body {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
+  backdrop-filter: blur(4px);
 }
 
 .dialog-panel {
@@ -921,4 +968,42 @@ body {
   pointer-events: none;
   z-index: 3;
   transform: translateX(-1px);
+}
+
+/* ── Context menu ────────────────────────────────────── */
+
+.context-menu {
+  position: fixed; z-index: 1000;
+  background: #1a1a1a; border: 1px solid #333; border-radius: 6px;
+  min-width: 160px; padding: 4px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.context-menu-item {
+  padding: 6px 12px; cursor: pointer; font-size: 12px; color: #ccc;
+  transition: background 0.1s;
+}
+.context-menu-item:hover { background: #2a2a2a; }
+.context-menu-item.danger { color: #f44336; }
+.context-menu-item.danger:hover { background: #2a1515; }
+.context-menu-item.disabled { color: #555; pointer-events: none; }
+.context-menu-divider { height: 1px; background: #2a2a2a; margin: 4px 0; }
+
+/* ── Inline rename inputs ────────────────────────────── */
+
+.layer-rename-input {
+  flex: 1; padding: 1px 4px; background: #111; border: 1px solid #4a7abf;
+  border-radius: 3px; color: #e0e0e0; font-size: 12px; font-family: inherit;
+  outline: none; min-width: 0;
+}
+
+.scene-rename-input {
+  padding: 1px 4px; background: #111; border: 1px solid #4a7abf;
+  border-radius: 3px; color: #e0e0e0; font-size: 10px; font-family: inherit;
+  outline: none; width: 60px;
+}
+
+/* ── Delete button transitions ───────────────────────── */
+
+.layer-delete-btn, .scene-delete-btn {
+  transition: opacity 0.15s, color 0.15s;
 }

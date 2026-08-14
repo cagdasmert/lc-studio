@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store';
 import type { Layer, TextLayerData, ShapeLayerData } from '../../types';
+import { ContextMenu, type ContextMenuItem } from '../shared/ContextMenu';
 
 const LAYER_TYPE_ICONS: Record<string, string> = {
   text: 'T',
@@ -91,11 +92,22 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
   const reorderLayers = useStore((s) => s.reorderLayers);
 
   const [dragLayerId, setDragLayerId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; layerId: string } | null>(null);
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const scene = composition.scenes[selectedSceneIndex];
   if (!scene) return <div className="layer-panel"><p>No scene selected</p></div>;
 
   const sortedLayers = [...scene.layers].sort((a, b) => b.zIndex - a.zIndex);
+
+  // Focus rename input when entering edit mode
+  useEffect(() => {
+    if (editingLayerId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingLayerId]);
 
   function handleDragStart(e: React.DragEvent, layerId: string) {
     setDragLayerId(layerId);
@@ -123,6 +135,56 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
     setDragLayerId(null);
   }
 
+  function handleContextMenu(e: React.MouseEvent, layerId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, layerId });
+  }
+
+  function handleRenameCommit(layerId: string, newName: string) {
+    const trimmed = newName.trim();
+    if (trimmed) {
+      updateLayer(selectedSceneIndex, layerId, { name: trimmed } as Partial<Layer>);
+    }
+    setEditingLayerId(null);
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent, layerId: string) {
+    if (e.key === 'Enter') {
+      handleRenameCommit(layerId, (e.target as HTMLInputElement).value);
+    } else if (e.key === 'Escape') {
+      setEditingLayerId(null);
+    }
+  }
+
+  function duplicateLayer(layerId: string) {
+    const layer = scene.layers.find((l) => l.id === layerId);
+    if (!layer) return;
+    const dup: Layer = {
+      ...layer,
+      id: `${layer.id}-copy-${Date.now()}`,
+      name: `${layer.name} (copy)`,
+      zIndex: scene.layers.length,
+    } as Layer;
+    addLayer(selectedSceneIndex, dup);
+  }
+
+  function getContextMenuItems(layerId: string): ContextMenuItem[] {
+    const layer = scene.layers.find((l) => l.id === layerId);
+    if (!layer) return [];
+    const layerIndex = scene.layers.findIndex((l) => l.id === layerId);
+
+    return [
+      { label: 'Rename', action: () => setEditingLayerId(layerId) },
+      { label: 'Duplicate', action: () => duplicateLayer(layerId) },
+      { label: layer.visible ? 'Hide' : 'Show', action: () => updateLayer(selectedSceneIndex, layerId, { visible: !layer.visible } as Partial<Layer>), divider: true },
+      { label: layer.locked ? 'Unlock' : 'Lock', action: () => updateLayer(selectedSceneIndex, layerId, { locked: !layer.locked } as Partial<Layer>) },
+      { label: 'Move Up', action: () => { if (layerIndex > 0) reorderLayers(selectedSceneIndex, layerIndex, layerIndex - 1); }, disabled: layerIndex <= 0, divider: true },
+      { label: 'Move Down', action: () => { if (layerIndex < scene.layers.length - 1) reorderLayers(selectedSceneIndex, layerIndex, layerIndex + 1); }, disabled: layerIndex >= scene.layers.length - 1 },
+      { label: 'Delete', action: () => removeLayer(selectedSceneIndex, layerId), danger: true, divider: true },
+    ];
+  }
+
   return (
     <div className="layer-panel">
       <div className="layer-panel-header">
@@ -140,6 +202,7 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
             key={layer.id}
             className={`layer-item ${layer.id === selectedLayerId ? 'selected' : ''} ${layer.locked ? 'locked' : ''} ${dragLayerId === layer.id ? 'dragging' : ''}`}
             onClick={() => !layer.locked && selectLayer(layer.id)}
+            onContextMenu={(e) => handleContextMenu(e, layer.id)}
             draggable={!layer.locked}
             onDragStart={(e) => handleDragStart(e, layer.id)}
             onDragOver={handleDragOver}
@@ -171,7 +234,27 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
             </button>
 
             <span className="layer-type-icon">{LAYER_TYPE_ICONS[layer.type]}</span>
-            <span className="layer-name">{layer.name}</span>
+
+            {editingLayerId === layer.id ? (
+              <input
+                ref={renameInputRef}
+                className="layer-rename-input"
+                defaultValue={layer.name}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => handleRenameCommit(layer.id, e.target.value)}
+                onKeyDown={(e) => handleRenameKeyDown(e, layer.id)}
+              />
+            ) : (
+              <span
+                className="layer-name"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditingLayerId(layer.id);
+                }}
+              >
+                {layer.name}
+              </span>
+            )}
 
             <button
               className="layer-delete-btn"
@@ -190,6 +273,15 @@ export function LayerPanel({ onAddLayer }: { onAddLayer?: () => void }) {
           <p className="layer-empty">No layers. Add one above.</p>
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.layerId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

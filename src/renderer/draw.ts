@@ -55,9 +55,8 @@ export function drawSceneLayers(
       ctx.filter = buildFilterString(layer.effects);
     }
 
-    // Apply 2D transform: translate → anchor → rotate → scale → draw at origin
+    // Apply 2D transform: place anchor at (x,y), rotate/scale around it, then shift to top-left
     ctx.translate(resolved.x, resolved.y);
-    ctx.translate(resolved.width * resolved.anchorX, resolved.height * resolved.anchorY);
     ctx.rotate((resolved.rotation * Math.PI) / 180);
     ctx.scale(resolved.scaleX, resolved.scaleY);
     ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);

@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useStore } from '../../store';
 import { drawCompositionFrame, getTotalFrames } from '../../renderer/compositor';
 import { createMediaCache, preloadScene, type MediaCache } from '../../renderer/media-cache';
-import type { Layer } from '../../types';
+import type { Layer, TextLayerData, ShapeLayerData } from '../../types';
+import { ContextMenu, type ContextMenuItem } from '../shared/ContextMenu';
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate' | null;
 
@@ -29,6 +30,7 @@ export function CanvasWorkspace() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mediaCacheRef = useRef<MediaCache>(createMediaCache());
   const dragRef = useRef<DragState | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const composition = useStore((s) => s.composition);
   const currentFrame = useStore((s) => s.currentFrame);
@@ -51,6 +53,9 @@ export function CanvasWorkspace() {
   const panY = useStore((s) => s.panY);
   const setPan = useStore((s) => s.setPan);
   const projectPath = useStore((s) => s.projectPath);
+  const addLayer = useStore((s) => s.addLayer);
+  const removeLayer = useStore((s) => s.removeLayer);
+  const reorderLayers = useStore((s) => s.reorderLayers);
 
   const { width, height, fps } = composition.output;
   const totalFrames = getTotalFrames(composition);
@@ -503,6 +508,87 @@ export function CanvasWorkspace() {
     setCanvasZoom(canvasZoom + delta);
   }
 
+  function handleCanvasContextMenu(e: React.MouseEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  function duplicateSelectedLayer() {
+    if (!selectedLayerId) return;
+    const scene = composition.scenes[selectedSceneIndex];
+    if (!scene) return;
+    const layer = scene.layers.find((l) => l.id === selectedLayerId);
+    if (!layer) return;
+    const dup: Layer = {
+      ...layer,
+      id: `${layer.id}-copy-${Date.now()}`,
+      name: `${layer.name} (copy)`,
+      x: layer.x + 20,
+      y: layer.y + 20,
+      zIndex: scene.layers.length,
+    } as Layer;
+    addLayer(selectedSceneIndex, dup);
+  }
+
+  function getContextMenuItems(): ContextMenuItem[] {
+    const scene = composition.scenes[selectedSceneIndex];
+    if (!scene) return [];
+
+    if (selectedLayerId) {
+      const layer = scene.layers.find((l) => l.id === selectedLayerId);
+      if (!layer) return [];
+      const layerIndex = scene.layers.findIndex((l) => l.id === selectedLayerId);
+      return [
+        { label: 'Duplicate Layer', action: () => duplicateSelectedLayer() },
+        { label: 'Delete Layer', action: () => removeLayer(selectedSceneIndex, selectedLayerId), danger: true },
+        { label: 'Bring to Front', action: () => { if (layerIndex < scene.layers.length - 1) reorderLayers(selectedSceneIndex, layerIndex, scene.layers.length - 1); }, divider: true, disabled: layerIndex >= scene.layers.length - 1 },
+        { label: 'Send to Back', action: () => { if (layerIndex > 0) reorderLayers(selectedSceneIndex, layerIndex, 0); }, disabled: layerIndex <= 0 },
+        {
+          label: 'Reset Transform', divider: true, action: () => {
+            updateLayer(selectedSceneIndex, selectedLayerId, {
+              x: width / 2, y: height / 2, rotation: 0, scaleX: 1, scaleY: 1,
+            } as Partial<Layer>);
+          },
+        },
+      ];
+    }
+
+    // No layer selected — offer to add layers
+    return [
+      {
+        label: 'Add Text Layer', action: () => {
+          const textLayer: TextLayerData = {
+            id: `text-${Date.now()}`, name: 'Text Layer', type: 'text',
+            startFrame: 0, endFrame: scene.durationFrames,
+            x: 540, y: 960, width: 800, height: 100, scaleX: 1, scaleY: 1,
+            rotation: 0, opacity: 1, anchorX: 0.5, anchorY: 0.5,
+            zIndex: scene.layers.length, blendMode: 'normal', effects: [],
+            visible: true, locked: false, keyframes: {},
+            content: 'New Text', fontSize: 48, fontFamily: 'sans-serif',
+            fontWeight: 'normal', fontStyle: 'normal', color: '#ffffff',
+            align: 'center', verticalAlign: 'middle', lineHeight: 1.4,
+            letterSpacing: 0, maxWidth: 0, textStroke: null, textShadow: null,
+          };
+          addLayer(selectedSceneIndex, textLayer);
+        },
+      },
+      {
+        label: 'Add Shape Layer', action: () => {
+          const shapeLayer: ShapeLayerData = {
+            id: `shape-${Date.now()}`, name: 'Shape Layer', type: 'shape',
+            startFrame: 0, endFrame: scene.durationFrames,
+            x: 440, y: 860, width: 200, height: 200, scaleX: 1, scaleY: 1,
+            rotation: 0, opacity: 1, anchorX: 0.5, anchorY: 0.5,
+            zIndex: scene.layers.length, blendMode: 'normal', effects: [],
+            visible: true, locked: false, keyframes: {},
+            shapeType: 'rect', fill: '#e94560', stroke: '', strokeWidth: 0, cornerRadius: 0,
+          };
+          addLayer(selectedSceneIndex, shapeLayer);
+        },
+      },
+    ];
+  }
+
   // Cursor style
   const cursorStyle =
     toolMode === 'hand' ? 'grab' :
@@ -517,9 +603,17 @@ export function CanvasWorkspace() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={handleCanvasContextMenu}
         style={{ cursor: cursorStyle }}
       />
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
