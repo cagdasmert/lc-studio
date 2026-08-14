@@ -1007,3 +1007,138 @@ body {
 .layer-delete-btn, .scene-delete-btn {
   transition: opacity 0.15s, color 0.15s;
 }
+
+/* ── Font picker ─────────────────────────────────────── */
+
+.font-picker-panel {
+  width: 440px;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.font-picker-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.font-picker-search {
+  flex: 1;
+  padding: 6px 10px;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 13px;
+  outline: none;
+}
+.font-picker-search:focus { border-color: #4a7abf; }
+
+.font-picker-preview-input {
+  width: 90px;
+  padding: 6px 8px;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 12px;
+  outline: none;
+  text-align: center;
+}
+.font-picker-preview-input:focus { border-color: #4a7abf; }
+
+.font-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  margin-bottom: 10px;
+}
+
+.font-picker-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #555;
+  letter-spacing: 0.06em;
+  padding: 8px 2px 3px;
+}
+
+.font-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 6px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+  gap: 12px;
+  transition: background 0.1s;
+}
+.font-picker-item:hover { background: #1e1e1e; }
+.font-picker-item.selected { background: #1a2a3a; }
+
+.font-picker-name {
+  font-size: 11px;
+  color: #888;
+  flex-shrink: 0;
+  width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-picker-preview {
+  font-size: 17px;
+  color: #e0e0e0;
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-picker-msg {
+  color: #555;
+  font-size: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.font-picker-footer {
+  display: flex;
+  gap: 8px;
+}
+
+.font-picker-import-btn {
+  flex: 1;
+  padding: 6px 10px;
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.font-picker-import-btn:hover { background: #2a2a2a; border-color: #4a7abf; color: #ccc; }
+
+/* Font family trigger button in property inspector */
+.font-family-trigger {
+  flex: 1;
+  padding: 3px 8px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.font-family-trigger:hover { border-color: #4a7abf; }

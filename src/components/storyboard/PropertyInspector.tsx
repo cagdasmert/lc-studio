@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useStore } from '../../store';
 import type {
   Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData,
   TransitionType, BlendMode, FontWeight, LayerEffect,
 } from '../../types';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
+import { FontPicker } from '../shared/FontPicker';
 
 const BLEND_MODES: BlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn'];
 const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
@@ -114,7 +116,9 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
 
 function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: number }) {
   const updateLayer = useStore((s) => s.updateLayer);
+  const projectPath = useStore((s) => s.projectPath);
   const update = (patch: Partial<TextLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+  const [fontPickerOpen, setFontPickerOpen] = useState(false);
 
   return (
     <div className="prop-section">
@@ -129,9 +133,24 @@ function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: 
       </label>
       <NumericField label="Font Size" value={layer.fontSize} onChange={(v) => update({ fontSize: v })} min={8} max={200} />
       <label className="prop-field">
-        <span>Font Family</span>
-        <input type="text" value={layer.fontFamily} onChange={(e) => update({ fontFamily: e.target.value })} />
+        <span>Font</span>
+        <button
+          className="font-family-trigger"
+          style={{ fontFamily: layer.fontFamily }}
+          onClick={() => setFontPickerOpen(true)}
+          title="Click to pick a font"
+        >
+          {layer.fontFamily}
+        </button>
       </label>
+      {fontPickerOpen && (
+        <FontPicker
+          value={layer.fontFamily}
+          projectDir={projectPath}
+          onSelect={(family) => update({ fontFamily: family })}
+          onClose={() => setFontPickerOpen(false)}
+        />
+      )}
       <label className="prop-field">
         <span>Weight</span>
         <select value={layer.fontWeight} onChange={(e) => update({ fontWeight: e.target.value as FontWeight })}>

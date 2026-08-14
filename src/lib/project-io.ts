@@ -3,6 +3,7 @@ import { readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import type { Composition } from '../types';
 import { ensureProjectDir, bundleAssets } from './asset-manager';
+import { loadProjectFonts } from './font-manager';
 
 const PROJECT_JSON_FILENAME = 'project.json';
 const PROJECT_VERSION = 3;
@@ -136,6 +137,10 @@ export async function loadProjectFromPath(
 
   const composition = await readProjectFile(jsonPath);
   addToRecent(projectDir, composition.name);
+  // Non-blocking: register any fonts stored in assets/fonts/
+  if (isV3ProjectDir(projectDir)) {
+    loadProjectFonts(projectDir).catch(() => {});
+  }
   return { path: projectDir, composition };
 }
 
