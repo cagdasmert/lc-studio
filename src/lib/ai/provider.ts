@@ -8,10 +8,20 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * Token budget for a generation. Reasoning models spend this on chain-of-thought
+ * before writing any content, so it needs headroom well beyond the JSON itself.
+ */
+export const MAX_RESPONSE_TOKENS = 8192;
+
 export interface LLMResponse {
   content: string;
   model: string;
   finishReason?: string;
+  /** Chain-of-thought returned in a separate field by reasoning models. */
+  reasoning?: string;
+  /** Tokens the model actually generated, when the server reports them. */
+  completionTokens?: number;
 }
 
 export interface LLMProvider {

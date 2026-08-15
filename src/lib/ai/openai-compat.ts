@@ -1,5 +1,6 @@
 import type { OpenAICompatConfig } from '../../types/ai';
 import type { LLMProvider, ChatMessage, LLMResponse } from './provider';
+import { MAX_RESPONSE_TOKENS } from './provider';
 import { aiFetch } from './http';
 
 export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvider {
@@ -17,7 +18,7 @@ export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvi
           model: config.model,
           messages,
           temperature: 0.7,
-          max_tokens: 4096,
+          max_tokens: MAX_RESPONSE_TOKENS,
         }),
       });
 
@@ -32,6 +33,8 @@ export function createOpenAICompatProvider(config: OpenAICompatConfig): LLMProvi
         content: choice?.message?.content ?? '',
         model: data.model ?? config.model,
         finishReason: choice?.finish_reason,
+        reasoning: choice?.message?.reasoning_content ?? choice?.message?.reasoning ?? undefined,
+        completionTokens: data.usage?.completion_tokens,
       };
     },
 

@@ -1,48 +1,235 @@
 import type { GeneratedScene, GeneratedLayer, GeneratedContent, GenerationMode } from '../../types/ai';
 
-/**
- * Extract JSON from an LLM response. Handles raw JSON, markdown code fences,
- * and responses with surrounding text.
- */
-export function extractJSON(raw: string): unknown {
-  const trimmed = raw.trim();
+/** Why JSON extraction failed — used to build an actionable error message. */
+export type ExtractionFailure = 'empty' | 'reasoning-only' | 'no-json' | 'truncated' | 'invalid';
 
-  // Try parsing directly
-  try {
-    return JSON.parse(trimmed);
-  } catch { /* continue */ }
-
-  // Try extracting from markdown code fence
-  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fenceMatch) {
-    try {
-      return JSON.parse(fenceMatch[1].trim());
-    } catch { /* continue */ }
+export class JSONExtractionError extends Error {
+  constructor(
+    message: string,
+    readonly reason: ExtractionFailure,
+    readonly snippet: string = '',
+  ) {
+    super(message);
+    this.name = 'JSONExtractionError';
   }
+}
 
-  // Try finding the first [ or { and matching to the last ] or }
-  const firstBracket = trimmed.indexOf('[');
-  const firstBrace = trimmed.indexOf('{');
+/**
+ * Remove chain-of-thought blocks that reasoning models emit inline in their
+ * content (`<think>...</think>`, `<thinking>`, `<reasoning>`, `<scratchpad>`).
+ * An unclosed opening tag means the response was cut off mid-thought, so
+ * everything from the tag onward is reasoning.
+ */
+export function stripReasoning(raw: string): string {
+  const tags = ['think', 'thinking', 'reasoning', 'scratchpad', 'reflection'];
+  let out = raw;
+  for (const tag of tags) {
+    out = out.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, 'gi'), '');
+    out = out.replace(new RegExp(`<${tag}>[\\s\\S]*$`, 'i'), '');
+    // Some models emit only the closing tag after an implicit reasoning prefix.
+    const closing = out.toLowerCase().lastIndexOf(`</${tag}>`);
+    if (closing >= 0) out = out.slice(closing + tag.length + 3);
+  }
+  return out;
+}
+
+interface JSONCandidate {
+  text: string;
+  complete: boolean;
+}
+
+/**
+ * Find the first JSON value in `text` by bracket matching, ignoring brackets
+ * that appear inside strings. Returns the partial text when the value never
+ * closes (a truncated response).
+ */
+function findCandidate(text: string): JSONCandidate | null {
+  const firstBracket = text.indexOf('[');
+  const firstBrace = text.indexOf('{');
 
   let start: number;
-  let end: number;
-
   if (firstBracket >= 0 && (firstBrace < 0 || firstBracket < firstBrace)) {
     start = firstBracket;
-    end = trimmed.lastIndexOf(']');
   } else if (firstBrace >= 0) {
     start = firstBrace;
-    end = trimmed.lastIndexOf('}');
   } else {
-    throw new Error('No JSON found in response');
+    return null;
   }
 
-  if (end <= start) {
-    throw new Error('No valid JSON structure found in response');
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+
+    if (ch === '"') inString = true;
+    else if (ch === '[' || ch === '{') stack.push(ch);
+    else if (ch === ']' || ch === '}') {
+      stack.pop();
+      if (stack.length === 0) return { text: text.slice(start, i + 1), complete: true };
+    }
   }
 
-  const candidate = trimmed.slice(start, end + 1);
-  return JSON.parse(candidate);
+  return { text: text.slice(start), complete: false };
+}
+
+/**
+ * Salvage a truncated JSON value by cutting back to the last complete nested
+ * element and closing the brackets that are still open. Local models routinely
+ * hit their token cap mid-array; the scenes generated before the cut are still
+ * usable.
+ */
+function repairTruncated(partial: string): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let safeIndex = -1;
+  let safeStack: string[] = [];
+
+  for (let i = 0; i < partial.length; i++) {
+    const ch = partial[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') {
+        inString = false;
+        // A closed string directly inside an array is a complete element.
+        if (stack[stack.length - 1] === '[') {
+          safeIndex = i + 1;
+          safeStack = [...stack];
+        }
+      }
+      continue;
+    }
+
+    if (ch === '"') inString = true;
+    else if (ch === '[' || ch === '{') stack.push(ch);
+    else if (ch === ']' || ch === '}') {
+      stack.pop();
+      if (stack.length > 0) {
+        safeIndex = i + 1;
+        safeStack = [...stack];
+      }
+    }
+  }
+
+  if (safeIndex < 0 || safeStack.length === 0) return null;
+
+  const closers = safeStack
+    .slice()
+    .reverse()
+    .map((open) => (open === '[' ? ']' : '}'))
+    .join('');
+
+  return partial.slice(0, safeIndex) + closers;
+}
+
+/** Drop trailing commas, which several local models emit. */
+function relaxJSON(text: string): string {
+  return text.replace(/,(\s*[}\]])/g, '$1');
+}
+
+function tryParse(text: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch { /* continue */ }
+  try {
+    return { ok: true, value: JSON.parse(relaxJSON(text)) };
+  } catch { /* continue */ }
+  return { ok: false };
+}
+
+/** Parse the first complete JSON value in `text`, or undefined. */
+function findParsable(text: string): { value: unknown } | undefined {
+  // Whole response is JSON
+  const direct = tryParse(text);
+  if (direct.ok) return { value: direct.value };
+
+  // JSON inside a markdown code fence
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) {
+    const fenced = tryParse(fenceMatch[1].trim());
+    if (fenced.ok) return { value: fenced.value };
+  }
+
+  // JSON surrounded by prose — bracket-match, ignoring brackets inside strings
+  const candidate = findCandidate(text);
+  if (candidate?.complete) {
+    const parsed = tryParse(candidate.text);
+    if (parsed.ok) return { value: parsed.value };
+  }
+
+  return undefined;
+}
+
+/**
+ * Extract JSON from an LLM response. Handles raw JSON, markdown code fences,
+ * surrounding prose, inline reasoning blocks, trailing commas, and responses
+ * truncated by the token limit.
+ */
+export function extractJSON(raw: string): unknown {
+  if (!raw.trim()) {
+    throw new JSONExtractionError('The model returned an empty response.', 'empty');
+  }
+
+  const trimmed = stripReasoning(raw).trim();
+
+  const found = findParsable(trimmed);
+  if (found) return found.value;
+
+  // Reasoning stripping is heuristic: if it left nothing usable but the
+  // untouched response parses, trust the untouched response.
+  if (trimmed !== raw.trim()) {
+    const inRaw = findParsable(raw.trim());
+    if (inRaw) return inRaw.value;
+  }
+
+  if (!trimmed) {
+    throw new JSONExtractionError(
+      'The model returned only reasoning, no answer.',
+      'reasoning-only',
+      raw.slice(0, 400),
+    );
+  }
+
+  const candidate = findCandidate(trimmed);
+  if (!candidate) {
+    throw new JSONExtractionError(
+      'No JSON found in the response — the model replied with plain text.',
+      'no-json',
+      trimmed.slice(0, 400),
+    );
+  }
+
+  // A complete candidate would have parsed in findParsable above, so anything
+  // left here is either truncated or malformed.
+  if (!candidate.complete) {
+    const repaired = repairTruncated(candidate.text);
+    if (repaired) {
+      const salvaged = tryParse(repaired);
+      if (salvaged.ok) return salvaged.value;
+    }
+    throw new JSONExtractionError(
+      'The response was cut off before the JSON was complete.',
+      'truncated',
+      candidate.text.slice(-400),
+    );
+  }
+
+  throw new JSONExtractionError(
+    'The response contained JSON-like text that could not be parsed.',
+    'invalid',
+    candidate.text.slice(0, 400),
+  );
 }
 
 function validateLayer(raw: unknown): GeneratedLayer | null {
@@ -102,6 +289,19 @@ function validateScene(raw: unknown): GeneratedScene | null {
   };
 }
 
+/**
+ * Models frequently wrap the scene array in an object (`{"scenes": [...]}`)
+ * despite being asked for a bare array. Unwrap the common key names.
+ */
+function unwrapScenes(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== 'object') return parsed;
+  const obj = parsed as Record<string, unknown>;
+  for (const key of ['scenes', 'composition', 'data', 'result']) {
+    if (Array.isArray(obj[key])) return obj[key];
+  }
+  return parsed;
+}
+
 export function parseGenerationResponse(
   raw: string,
   mode: GenerationMode,
@@ -111,7 +311,7 @@ export function parseGenerationResponse(
   switch (mode) {
     case 'full-composition':
     case 'add-scenes': {
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      const arr = Array.isArray(parsed) ? parsed : [unwrapScenes(parsed)].flat();
       const scenes = arr.map(validateScene).filter((s): s is GeneratedScene => s !== null);
       if (scenes.length === 0) {
         throw new Error('No valid scenes found in AI response');

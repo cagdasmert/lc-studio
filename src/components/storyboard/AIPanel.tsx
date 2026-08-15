@@ -65,6 +65,7 @@ export function AIPanel({ onSettings }: { onSettings: () => void }) {
     setLastError(null);
     setPreview(null);
     setRawResponse(null);
+    setShowRaw(false);
 
     // Gather text layers for rewrite mode
     let texts: { id: string; name: string; content: string }[] | undefined;
@@ -180,7 +181,15 @@ export function AIPanel({ onSettings }: { onSettings: () => void }) {
 
       {lastError && (
         <div className="ai-error">
-          {lastError}
+          <div className="ai-error-message">{lastError}</div>
+          {rawResponse && (
+            <>
+              <button className="toolbar-btn" onClick={() => setShowRaw(!showRaw)}>
+                {showRaw ? 'Hide model output' : 'Show model output'}
+              </button>
+              {showRaw && <pre className="ai-raw-response">{rawResponse}</pre>}
+            </>
+          )}
         </div>
       )}
 

@@ -9,10 +9,46 @@ import type { Composition, Scene, Layer, TextLayerData, ShapeLayerData, OutputPr
 import type { BrandKit } from '../../types/brand';
 import type { Template } from '../../types/template';
 import type { EasingType, TransitionType } from '../../types';
-import { createProvider } from './provider';
+import { createProvider, MAX_RESPONSE_TOKENS } from './provider';
+import type { LLMResponse } from './provider';
 import { buildMessages } from './prompts';
-import { parseGenerationResponse } from './parse';
+import { parseGenerationResponse, JSONExtractionError } from './parse';
 import { instantiateTemplate } from '../template-utils';
+
+/**
+ * Turn a parse failure into a message that says what the model actually did
+ * and what to change. Local models fail in a few recognisable ways: they spend
+ * the whole token budget on reasoning, get cut off mid-JSON, or ignore the
+ * schema and answer in prose.
+ */
+function describeFailure(err: unknown, response: LLMResponse): string {
+  if (!(err instanceof JSONExtractionError)) return String(err);
+
+  const hitLimit = response.finishReason === 'length';
+  const thought = (response.reasoning ?? '').length > 0;
+  const budget = response.completionTokens ?? MAX_RESPONSE_TOKENS;
+
+  switch (err.reason) {
+    case 'empty':
+    case 'reasoning-only':
+      if (thought && hitLimit) {
+        return `The model spent all ${budget} of its response tokens on reasoning and never wrote an answer. Use a non-reasoning model (for example an instruct/coder model), or load this one with a larger context length.`;
+      }
+      if (thought) {
+        return 'The model produced only reasoning, no answer. Try a non-reasoning model, or rerun the prompt.';
+      }
+      return 'The model returned an empty response. Check that the model is still loaded in your local server.';
+
+    case 'truncated':
+      return `The response was cut off after ${budget} tokens, before the JSON was complete. Try generating fewer scenes, or use a model with a larger context length.`;
+
+    case 'no-json':
+      return 'The model replied with plain text instead of JSON. Smaller models often cannot follow the schema — try a larger instruct-tuned model.';
+
+    case 'invalid':
+      return 'The model produced malformed JSON that could not be repaired. Rerun the prompt, or try a different model.';
+  }
+}
 
 export async function generate(
   config: AIProviderConfig,
@@ -26,6 +62,7 @@ export async function generate(
 ): Promise<GenerationResult> {
   const provider = createProvider(config);
 
+  let response: LLMResponse;
   try {
     const messages = buildMessages(request.mode, request.prompt, output, {
       brandKit: options.brandKit,
@@ -34,12 +71,34 @@ export async function generate(
       sceneCount: request.sceneCount,
     });
 
-    const response = await provider.chat(messages);
-    const content = parseGenerationResponse(response.content, request.mode);
-
-    return { success: true, data: content, rawResponse: response.content };
+    response = await provider.chat(messages);
   } catch (err) {
-    return { success: false, error: String(err), rawResponse: undefined };
+    return { success: false, error: String(err) };
+  }
+
+  // Keep the raw text available for inspection whether or not parsing succeeds.
+  const raw = response.content || (response.reasoning ? `[reasoning only]\n${response.reasoning}` : '');
+
+  try {
+    return {
+      success: true,
+      data: parseGenerationResponse(response.content, request.mode),
+      rawResponse: raw,
+    };
+  } catch (err) {
+    // Some models put the JSON inside their reasoning field instead of content.
+    const contentWasBlank = err instanceof JSONExtractionError
+      && (err.reason === 'empty' || err.reason === 'reasoning-only');
+    if (contentWasBlank && response.reasoning) {
+      try {
+        return {
+          success: true,
+          data: parseGenerationResponse(response.reasoning, request.mode),
+          rawResponse: raw,
+        };
+      } catch { /* fall through to the original failure */ }
+    }
+    return { success: false, error: describeFailure(err, response), rawResponse: raw };
   }
 }
 

@@ -1,5 +1,6 @@
 import type { LMStudioConfig } from '../../types/ai';
 import type { LLMProvider, ChatMessage, LLMResponse } from './provider';
+import { MAX_RESPONSE_TOKENS } from './provider';
 import { aiFetch } from './http';
 
 export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
@@ -14,7 +15,7 @@ export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
           model: config.model,
           messages,
           temperature: 0.7,
-          max_tokens: 4096,
+          max_tokens: MAX_RESPONSE_TOKENS,
         }),
       });
 
@@ -29,6 +30,8 @@ export function createLMStudioProvider(config: LMStudioConfig): LLMProvider {
         content: choice?.message?.content ?? '',
         model: data.model ?? config.model,
         finishReason: choice?.finish_reason,
+        reasoning: choice?.message?.reasoning_content ?? choice?.message?.reasoning ?? undefined,
+        completionTokens: data.usage?.completion_tokens,
       };
     },
 
