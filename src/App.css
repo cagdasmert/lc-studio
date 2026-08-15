@@ -56,6 +56,8 @@ body {
 
 .app-footer {
   display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
   background: #111;
   border-top: 1px solid #2a2a2a;
   box-shadow: 0 -2px 8px rgba(0,0,0,0.3);
@@ -253,45 +255,75 @@ body {
 
 /* ── Scene timeline ───────────────────────────────────── */
 
-.scene-timeline { flex: 1; padding: 6px 8px; }
+/* min-width:0 is required: the scene labels are nowrap, so without it this
+   flex item refuses to shrink and pushes its siblings out of the window. */
+.scene-timeline { flex: 1; min-width: 0; padding: 6px 8px; }
 
 .timeline-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 4px;
 }
 .timeline-label { font-size: 10px; text-transform: uppercase; color: #666; }
+.timeline-count {
+  display: inline-block; margin-left: 4px; padding: 0 4px;
+  background: #222; border-radius: 6px; color: #999;
+}
 .timeline-add-btn {
   padding: 1px 6px; background: #222; border: 1px solid #333; border-radius: 3px;
   color: #ccc; cursor: pointer; font-size: 12px;
 }
 .timeline-add-btn:hover { background: #333; }
 
+/* Scenes keep duration-proportional widths until they would get too narrow to
+   read; past that they hold a floor and the track scrolls. */
 .timeline-track {
-  display: flex; position: relative; height: 32px;
-  background: #0a0a0a; border-radius: 4px; overflow: hidden;
+  display: flex; position: relative; height: 34px;
+  background: #0a0a0a; border-radius: 4px;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin; scrollbar-color: #333 transparent;
 }
+.timeline-track::-webkit-scrollbar { height: 6px; }
+.timeline-track::-webkit-scrollbar-track { background: transparent; }
+.timeline-track::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+.timeline-track::-webkit-scrollbar-thumb:hover { background: #444; }
 
 .timeline-scene {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 8px; border-right: 1px solid #333; cursor: pointer;
-  background: #1a1a2e; transition: background 0.1s; min-width: 40px;
-  position: relative;
+  display: flex; align-items: center; gap: 4px;
+  flex: 0 0 auto;
+  padding: 0 6px; border-right: 1px solid #333; cursor: pointer;
+  background: #1a1a2e; transition: background 0.1s;
+  position: relative; overflow: hidden;
 }
 .timeline-scene:hover { background: #222240; }
-.timeline-scene.selected { background: #2a3a5a; border-bottom: 2px solid #e94560; }
+.timeline-scene.selected { background: #2a3a5a; box-shadow: inset 0 -2px 0 #e94560; }
+.timeline-scene.dragging { opacity: 0.4; }
 
-.scene-label { font-size: 10px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scene-duration { font-size: 9px; color: #666; }
+.scene-index {
+  flex-shrink: 0; font-size: 9px; color: #666; font-variant-numeric: tabular-nums;
+}
+.timeline-scene.selected .scene-index { color: #e94560; }
+.scene-label {
+  flex: 1; min-width: 0;
+  font-size: 10px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.scene-duration { flex-shrink: 0; font-size: 9px; color: #666; }
+
+.scene-actions {
+  display: flex; align-items: center; gap: 2px;
+  flex-shrink: 0; width: 0; overflow: hidden; opacity: 0;
+  transition: width 0.1s, opacity 0.1s;
+}
+.timeline-scene:hover .scene-actions { width: 32px; opacity: 1; }
 
 .scene-delete-btn, .scene-dup-btn {
-  width: 14px; height: 14px; padding: 0; border: none; background: transparent;
-  color: #555; cursor: pointer; font-size: 9px; opacity: 0;
+  width: 15px; height: 15px; padding: 0; border: none; background: transparent;
+  color: #666; cursor: pointer; font-size: 9px; flex-shrink: 0;
 }
-.timeline-scene:hover .scene-delete-btn,
-.timeline-scene:hover .scene-dup-btn { opacity: 1; }
 .scene-delete-btn:hover { color: #f44336; }
 .scene-dup-btn:hover { color: #4caf50; }
 
+/* Rendered inside the scene it falls in, so it stays correct when the track
+   scrolls or a scene is clamped to the minimum width. */
 .timeline-cursor {
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: #e94560; pointer-events: none; z-index: 1;
@@ -301,7 +333,7 @@ body {
 
 .playback-controls {
   display: flex; align-items: center; gap: 4px; padding: 6px 8px;
-  min-width: 380px;
+  border-bottom: 1px solid #1e1e1e;
 }
 .playback-controls button {
   padding: 3px 8px; background: #1a1a1a; border: 1px solid #333;
@@ -775,6 +807,9 @@ body {
   word-break: break-word;
 }
 
+.ai-error-message { line-height: 1.5; margin-bottom: 6px; }
+.ai-error .ai-raw-response { margin-top: 6px; }
+
 .ai-preview {
   background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px;
   padding: 8px; margin-bottom: 8px;
@@ -866,6 +901,9 @@ body {
   flex-direction: column;
   border-radius: 0 0 4px 4px;
 }
+
+/* No layer selected — collapse to the header instead of an empty panel */
+.keyframe-editor.is-empty { height: auto; }
 
 .ke-collapsed {
   flex-shrink: 0;

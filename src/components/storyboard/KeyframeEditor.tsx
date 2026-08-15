@@ -218,8 +218,9 @@ export function KeyframeEditor() {
   }
 
   if (!layer || layer.type === 'audio') {
+    // Header only — an empty 170px panel would just steal room from the canvas.
     return (
-      <div className="keyframe-editor">
+      <div className="keyframe-editor is-empty">
         <div className="ke-header">
           <button className="ke-toggle-btn" onClick={toggleKeyframeEditor} title="Hide keyframe editor">
             Keyframes {'\u25BC'}

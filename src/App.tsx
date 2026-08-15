@@ -123,8 +123,8 @@ function App() {
       </div>
 
       <footer className="app-footer">
-        <SceneTimeline />
         <PlaybackControls />
+        <SceneTimeline />
       </footer>
 
       <AddLayerDialog open={addLayerOpen} onClose={() => setAddLayerOpen(false)} />
