@@ -122,6 +122,19 @@ export interface BoxShadow {
   spread: number;
 }
 
+// ── FX timing envelope ────────────────────────────────
+// Any layer FX may carry a window. The renderer collapses it to a single
+// scalar `env`: 0 → 1 across the entrance, 1 while held, 1 → 0 across the
+// exit. Absent window means env is always 1, i.e. the effect is always on.
+
+export interface FxWindow {
+  inDelay: number;    // frames after layer start before the entrance begins
+  inFrames: number;   // entrance length; 0 = no entrance
+  outFrames: number;  // exit length, measured back from the last frame; 0 = none
+  easing: EasingType;
+  easingParams?: EasingParams;
+}
+
 // ── Layer FX ──────────────────────────────────────────
 // Perceptual effects built by compositing the layer more than once, rather
 // than by a CSS filter. All are frame-deterministic: the same frame always
@@ -133,6 +146,7 @@ export interface EchoFx {
   count: number;       // number of trailing copies
   frameGap: number;    // frames between copies
   decay: number;       // 0–1 alpha multiplier per step
+  window?: FxWindow;
 }
 
 /** Colour channels pulled apart — chromatic aberration / glitch. */
@@ -141,6 +155,7 @@ export interface RgbSplitFx {
   offset: number;      // px between the red and blue copies
   angle: number;       // degrees, direction of the split
   jitter: number;      // 0–1, per-frame randomisation of the offset
+  window?: FxWindow;
 }
 
 /** A specular band sweeping across the layer — the classic chrome glint. */
@@ -151,6 +166,7 @@ export interface ShineFx {
   angle: number;       // degrees
   periodFrames: number; // frames per sweep
   intensity: number;   // 0–1
+  window?: FxWindow;
 }
 
 /** Soft coloured bloom around the layer, optionally pulsing. */
@@ -160,6 +176,7 @@ export interface GlowFx {
   radius: number;
   intensity: number;    // 0–3, how many passes worth of bloom
   pulseFrames: number;  // 0 = steady
+  window?: FxWindow;
 }
 
 /** Repeated silhouettes receding at an angle — fake 3D extrusion. */
@@ -169,9 +186,73 @@ export interface LongShadowFx {
   distance: number;  // px
   angle: number;     // degrees
   fade: number;      // 0–1, alpha falloff along the extrusion
+  window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx;
+/** Scale-based reveal — punches in from `from` (or recedes, when from > 1). */
+export interface ZoomFx {
+  type: 'zoom';
+  from: number;    // starting scale multiplier; <1 punches in, >1 recedes
+  fade: number;    // 0–1, how much layer alpha is coupled to the envelope
+  window?: FxWindow;
+}
+
+/** Mosaic reveal — content resolves out of coarse blocks. */
+export interface PixelateFx {
+  type: 'pixelate';
+  maxBlock: number;  // block size in px at env 0
+  flicker: number;   // 0–1, per-block alpha noise so blocks pop rather than sharpen
+  fade: number;      // 0–1, how much layer alpha is coupled to the envelope
+  window?: FxWindow;
+}
+
+/** Banded reveal — the layer arrives in strips. */
+export interface SliceFx {
+  type: 'slice';
+  bands: number;
+  direction: 'horizontal' | 'vertical';
+  order: 'sequential' | 'center-out' | 'random';
+  travel: number;   // px each band slides in from; 0 = fade only
+  stagger: number;  // 0 = all bands together, approaching 1 = strictly sequential
+  window?: FxWindow;
+}
+
+/** Masked reveal — a soft edge sweeps across and the layer appears behind it. */
+export interface WipeFx {
+  type: 'wipe';
+  shape: 'linear' | 'iris' | 'barn';
+  angle: number;     // degrees; applies to linear and barn
+  softness: number;  // px of gradient ramp; 0 = hard edge
+  window?: FxWindow;
+}
+
+/** Horizontal strips jumping sideways on random frames — digital tearing. */
+export interface GlitchFx {
+  type: 'glitch';
+  bands: number;
+  maxOffset: number;    // px of horizontal displacement
+  channelShift: number; // px of rgb fringing on displaced bands
+  probability: number;  // 0–1, chance a given band tears on a given frame
+  window?: FxWindow;
+}
+
+/** Sticker-style border hugging the layer's silhouette. */
+export interface OutlineFx {
+  type: 'outline';
+  color: string;
+  width: number;  // px
+  window?: FxWindow;
+}
+
+/** Blur-plus-contrast melt — neighbouring shapes fuse like liquid. */
+export interface GooeyFx {
+  type: 'gooey';
+  blur: number;      // px
+  contrast: number;  // multiplier; higher tightens the edge
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────
