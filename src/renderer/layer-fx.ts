@@ -300,8 +300,9 @@ function applySlice(
     if (local <= 0) continue;
 
     // Alternating direction is what makes this read as slicing rather than
-    // as the whole layer sliding in.
-    const sign = i % 2 === 0 ? 1 : -1;
+    // as the whole layer sliding in. With a single band there's no partner
+    // to alternate against, so it must degrade to a plain fade in place.
+    const sign = bands > 1 ? (i % 2 === 0 ? 1 : -1) : 0;
     const shift = (1 - local) * fx.travel * sign;
 
     // Bands are drawn a hair oversized so rounding cannot leave seams.
