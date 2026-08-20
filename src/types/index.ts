@@ -20,6 +20,7 @@ export type {
   CharAnimationDef,
   BlendMode,
   LayerEffect,
+  FxWindow,
   EchoFx,
   RgbSplitFx,
   ShineFx,

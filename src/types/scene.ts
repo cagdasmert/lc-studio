@@ -122,6 +122,19 @@ export interface BoxShadow {
   spread: number;
 }
 
+// ── FX timing envelope ────────────────────────────────
+// Any layer FX may carry a window. The renderer collapses it to a single
+// scalar `env`: 0 → 1 across the entrance, 1 while held, 1 → 0 across the
+// exit. Absent window means env is always 1, i.e. the effect is always on.
+
+export interface FxWindow {
+  inDelay: number;    // frames after layer start before the entrance begins
+  inFrames: number;   // entrance length; 0 = no entrance
+  outFrames: number;  // exit length, measured back from the last frame; 0 = none
+  easing: EasingType;
+  easingParams?: EasingParams;
+}
+
 // ── Layer FX ──────────────────────────────────────────
 // Perceptual effects built by compositing the layer more than once, rather
 // than by a CSS filter. All are frame-deterministic: the same frame always
