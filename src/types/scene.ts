@@ -197,7 +197,16 @@ export interface ZoomFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx;
+/** Mosaic reveal — content resolves out of coarse blocks. */
+export interface PixelateFx {
+  type: 'pixelate';
+  maxBlock: number;  // block size in px at env 0
+  flicker: number;   // 0–1, per-block alpha noise so blocks pop rather than sharpen
+  fade: number;      // 0–1, how much layer alpha is coupled to the envelope
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

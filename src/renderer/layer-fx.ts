@@ -1,7 +1,7 @@
 import type {
-  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx,
+  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx,
 } from '../types';
-import { signedHash } from './noise';
+import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
 
 /**
@@ -13,13 +13,13 @@ import { envelope } from './fx-envelope';
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
  *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow'];
+const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
  *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
  *  that module, so the knowledge is duplicated and a test keeps them in sync. */
-export const REVEAL_FX: LayerFxType[] = ['zoom'];
+export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate'];
 
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,
@@ -220,6 +220,95 @@ function drawShine(
   ctx.restore();
 }
 
+/** A reveal's output: the rewritten bitmap plus an alpha multiplier for
+ *  effects that also fade. Reveals chain, each consuming the previous
+ *  result's bitmap and multiplying into its alpha. */
+export interface RevealResult {
+  bitmap: HTMLCanvasElement;
+  alpha: number;
+}
+
+function applyPixelate(
+  src: HTMLCanvasElement,
+  fx: PixelateFx,
+  env: number,
+  frameInLayer: number,
+): HTMLCanvasElement {
+  const t = Math.max(0, Math.min(1, env));
+  const block = Math.max(1, Math.round(fx.maxBlock * (1 - t)));
+  if (block <= 1) return src;
+
+  const w = src.width;
+  const h = src.height;
+  const sw = Math.max(1, Math.ceil(w / block));
+  const sh = Math.max(1, Math.ceil(h / block));
+
+  // Downscale, then blow back up with smoothing off — the cheapest mosaic.
+  const small = createCanvas(sw, sh);
+  const sctx = small.getContext('2d');
+  if (!sctx) return src;
+  sctx.drawImage(src, 0, 0, sw, sh);
+
+  const out = createCanvas(w, h);
+  const octx = out.getContext('2d');
+  if (!octx) return src;
+  octx.imageSmoothingEnabled = false;
+
+  // Per-block stamping costs one drawImage per block, so it is only affordable
+  // while blocks are big — which is exactly when flicker is visible anyway.
+  if (fx.flicker > 0 && block >= 8) {
+    for (let by = 0; by < sh; by++) {
+      for (let bx = 0; bx < sw; bx++) {
+        // Two hashes doing two jobs. The frame-independent one gives each
+        // block its own threshold, so blocks settle in a scattered order as
+        // the envelope rises instead of all at once. The frame-dependent one
+        // makes the not-yet-settled blocks flash rather than sit at a
+        // constant dim value.
+        const settled = hash(bx, by, 5501) < t;
+        octx.globalAlpha = settled
+          ? 1
+          : 1 - fx.flicker * hash(frameInLayer, bx, by);
+        octx.drawImage(small, bx, by, 1, 1, bx * block, by * block, block, block);
+      }
+    }
+    octx.globalAlpha = 1;
+  } else {
+    octx.drawImage(small, 0, 0, w, h);
+  }
+  return out;
+}
+
+/**
+ * Run every bitmap-stage reveal in list order. Reveals go before decorations
+ * so that glow, shadow and shine bloom off what is actually visible rather
+ * than off the full silhouette.
+ */
+export function applyReveals(
+  bitmap: HTMLCanvasElement,
+  fx: LayerFxDef[] | undefined,
+  frameInLayer: number,
+  layerDuration: number,
+): RevealResult {
+  let current = bitmap;
+  let alpha = 1;
+  if (!fx) return { bitmap: current, alpha };
+
+  for (const f of fx) {
+    const env = fxEnv(f, frameInLayer, layerDuration);
+    switch (f.type) {
+      case 'pixelate':
+        current = applyPixelate(current, f, env, frameInLayer);
+        if (f.fade > 0) {
+          alpha *= 1 - f.fade + f.fade * Math.max(0, Math.min(1, env));
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return { bitmap: current, alpha };
+}
+
 /**
  * Composite a pre-rendered layer bitmap with its FX stack.
  * `filter` carries the layer's CSS filter effects, applied to every stamp so
@@ -239,36 +328,40 @@ export function compositeLayerFx(
   const rgbSplit = getFx(fx, 'rgb-split');
   const shine = getFx(fx, 'shine');
 
+  const reveal = applyReveals(bitmap, fx, frameInLayer, layerDuration);
+  const src = reveal.bitmap;
+
   ctx.save();
   ctx.translate(-pad, -pad);
   if (filter !== 'none') ctx.filter = filter;
+  ctx.globalAlpha *= reveal.alpha;
 
   if (longShadow) {
     const e = fxEnv(longShadow, frameInLayer, layerDuration);
     if (e > 0) {
-      drawLongShadow(ctx, bitmap, { ...longShadow, distance: longShadow.distance * e });
+      drawLongShadow(ctx, src, { ...longShadow, distance: longShadow.distance * e });
     }
   }
   if (glow) {
     const e = fxEnv(glow, frameInLayer, layerDuration);
     if (e > 0) {
-      drawGlow(ctx, bitmap, { ...glow, radius: glow.radius * e }, frameInLayer);
+      drawGlow(ctx, src, { ...glow, radius: glow.radius * e }, frameInLayer);
     }
   }
 
   const splitEnv = rgbSplit ? fxEnv(rgbSplit, frameInLayer, layerDuration) : 0;
   if (rgbSplit && splitEnv > 0) {
     drawRgbSplit(
-      ctx, bitmap, { ...rgbSplit, offset: rgbSplit.offset * splitEnv }, frameInLayer,
+      ctx, src, { ...rgbSplit, offset: rgbSplit.offset * splitEnv }, frameInLayer,
     );
   } else {
-    ctx.drawImage(bitmap, 0, 0);
+    ctx.drawImage(src, 0, 0);
   }
 
   if (shine) {
     const e = fxEnv(shine, frameInLayer, layerDuration);
     if (e > 0) {
-      drawShine(ctx, bitmap, { ...shine, intensity: shine.intensity * e }, frameInLayer);
+      drawShine(ctx, src, { ...shine, intensity: shine.intensity * e }, frameInLayer);
     }
   }
 

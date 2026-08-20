@@ -115,6 +115,17 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('fade', 'Fade', 0, 1, 0.05),
     ],
   },
+  pixelate: {
+    label: 'Pixelate reveal',
+    hint: 'Content resolves out of coarse blocks, with optional per-block flicker.',
+    kind: 'reveal',
+    defaults: { type: 'pixelate', maxBlock: 40, flicker: 0.6, fade: 0.4, window: { ...DEFAULT_FX_WINDOW } },
+    fields: [
+      num('maxBlock', 'Max block', 2, 160),
+      num('flicker', 'Flicker', 0, 1, 0.05),
+      num('fade', 'Fade', 0, 1, 0.05),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
