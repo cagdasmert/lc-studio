@@ -75,14 +75,23 @@ Semantics, in order:
    - otherwise → `1`
 
    If `inFrames === 0` the entrance contributes `1` and `inDelay` is ignored.
-3. Exit. If `outFrames > 0`, with `outStart = layerDuration - outFrames`:
-   - `f >= layerDuration` → `0`
+3. Exit. If `outFrames > 0`, with `lastFrame = layerDuration - 1` and
+   `outStart = lastFrame - outFrames`:
+   - `f >= lastFrame` → `0`
    - `f > outStart` → `ease(1 - (f - outStart) / outFrames)`
    - otherwise → `1`
 
    If `outFrames === 0` the exit contributes `1`.
-4. `env = min(entrance, exit)`. When the two windows overlap on a short layer
-   the effect simply never reaches full strength — no special case needed.
+
+   The exit is anchored to `lastFrame`, not to `layerDuration`, because frames
+   run `0 … layerDuration - 1`. Anchoring to `layerDuration` would leave
+   `1 / outFrames` of the effect still showing on the final rendered frame —
+   the exit would never visibly complete.
+4. `env = entrance * exit`, **not** `min`. `min` looks equivalent but silently
+   destroys overshoot: a `ease-out-back` entrance peaking at `1.1` would be
+   capped by the exit's resting value of `1`, defeating the whole point of
+   leaving reveals unclamped. Multiplication preserves it. When the two windows
+   overlap on a short layer the effect simply never reaches full strength.
 
 ### Clamping is kind-dependent
 
@@ -189,7 +198,12 @@ than merely coarsen.
 Each band `i` of `bands` gets a normalised order position `o_i ∈ [0, 1]`:
 
 - sequential: `i / (bands - 1)`
-- center-out: `|i - (bands-1)/2| / ((bands-1)/2)`
+- center-out: normalised distance from the centre, rebased so the
+  centre-most band is `0`. With `mid = (bands-1)/2`,
+  `minDist = bands % 2 === 0 ? 0.5 : 0`, `range = mid - minDist`:
+  `range <= 0 ? 0 : (|i - mid| - minDist) / range`. The rebasing matters —
+  the naive `|i - mid| / mid` gives *both* bands `1` when `bands === 2`,
+  delaying the only two bands there are instead of starting with them.
 - random: `hash(i, 9173)` — deterministic and stable across frames
 
 Local progress, with `stagger` clamped to `[0, 0.95]`:
