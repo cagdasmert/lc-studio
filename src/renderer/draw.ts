@@ -3,7 +3,9 @@ import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
-import { getFx, fxEnv, hasBitmapFx, fxPadding, compositeLayerFx } from './layer-fx';
+import {
+  getFx, fxEnv, hasBitmapFx, fxPadding, applyReveals, compositeLayerFx,
+} from './layer-fx';
 import { createCanvasGradient } from './gradient';
 import { evaluateMotionPath } from './motion-path';
 import { drawTextLayer } from './draw-text';
@@ -88,8 +90,18 @@ function drawLayerAtFrame(
     }
   }
 
-  // Zoom reveal runs here, not in compositeLayerFx: it changes the resolved
-  // scale, and `resolved` is what sizes the offscreen canvas further down.
+  // Zoom reveal runs here, not in compositeLayerFx, because it writes two
+  // values that are read further down this function and nowhere else:
+  // `resolved.scaleX/scaleY`, consumed by the ctx.scale() below, and
+  // `revealAlpha`, folded into ctx.globalAlpha below. Both reads happen before
+  // any drawing, so the block has to sit above them.
+  //
+  // Note it does *not* resize the offscreen FX canvas — that is sized from
+  // resolved.width/height, which zoom never touches. So a layer with
+  // `from > 1` combined with any bitmap FX or CSS effect renders at layer size
+  // and is then magnified by ctx.scale(), i.e. resampled soft for the duration
+  // of the reveal. Without other FX the layer takes the direct-draw path and
+  // stays crisp; the softness only shows up in combination.
   const zoom = getFx(layer.layerFx, 'zoom');
   let revealAlpha = 1;
   if (zoom) {
@@ -159,15 +171,28 @@ function drawLayerAtFrame(
     }
   }
 
-  // Drawn before the layer itself so the shadow sits behind it.
-  if (shadow && layerCanvas) {
-    drawSilhouetteShadow(ctx, layerCanvas, shadow, fxPad, resolved.width, resolved.height);
+  // Reveals rewrite the bitmap, so they run here rather than inside
+  // compositeLayerFx: the box shadow masks against the same bitmap, and a
+  // shadow cast by the finished layer while the layer itself is still wiping
+  // in gives the reveal away. Both consumers get the revealed bitmap, and the
+  // reveal's own alpha (pixelate `fade`) dims the shadow with the layer.
+  let revealed = layerCanvas;
+  if (layerCanvas) {
+    const reveal = applyReveals(layerCanvas, layer.layerFx, frameInLayer, layerDuration);
+    revealed = reveal.bitmap;
+    // Multiplied here rather than at the globalAlpha line above only because
+    // the bitmap does not exist yet up there; nothing has drawn in between.
+    ctx.globalAlpha *= reveal.alpha;
   }
 
-  if (needsFxCanvas && layerCanvas) {
+  // Drawn before the layer itself so the shadow sits behind it.
+  if (shadow && revealed) {
+    drawSilhouetteShadow(ctx, revealed, shadow, fxPad, resolved.width, resolved.height);
+  }
+
+  if (needsFxCanvas && revealed) {
     compositeLayerFx(
-      ctx, layerCanvas, layer.layerFx, fxPad, frameInLayer,
-      layer.endFrame - layer.startFrame,
+      ctx, revealed, layer.layerFx, fxPad, frameInLayer, layerDuration,
       buildFilterString(layer.effects),
     );
   } else {

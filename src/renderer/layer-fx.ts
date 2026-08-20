@@ -225,27 +225,45 @@ function drawShine(
   ctx.restore();
 }
 
-function drawGlitch(
-  ctx: CanvasRenderingContext2D,
-  bitmap: HTMLCanvasElement,
+/**
+ * Tear the bitmap into displaced horizontal bands.
+ *
+ * The erase-and-restamp happens on a scratch canvas, never on the destination
+ * context. `destination-out` against the real context does not erase "the
+ * layer" — it erases the *destination*, which is the scene canvas: the
+ * background and every already-drawn lower-zIndex layer inside the band rect
+ * would be punched through with it. `applyWipe` isolates its `destination-in`
+ * for exactly the same reason.
+ *
+ * The returned bitmap is a whole layer, torn bands and all, so it replaces the
+ * base draw rather than being stamped on top of it — drawing it in addition
+ * would show every untorn band twice and leave the original strip visible
+ * under each displaced one.
+ *
+ * Returns `src` untouched when no band passes the probability gate, so a quiet
+ * frame allocates nothing.
+ */
+function applyGlitch(
+  src: HTMLCanvasElement,
   fx: GlitchFx,
   frameInLayer: number,
   env: number,
-): void {
+): HTMLCanvasElement {
   const bands = Math.max(1, Math.round(fx.bands));
-  const w = bitmap.width;
-  const h = bitmap.height;
+  const w = src.width;
+  const h = src.height;
   const size = h / bands;
 
-  // `cs` doesn't vary per band, so it's computed once here. The channel
-  // bitmaps are built lazily, on the first band that actually tears — a
-  // frame where every band fails its probability gate should pay nothing,
-  // and a frame with several torn bands should pay for the two canvases once.
+  // `cs` doesn't vary per band, so it's computed once here. The scratch canvas
+  // and the channel bitmaps are built lazily, on the first band that actually
+  // tears — a frame where every band fails its probability gate should pay
+  // nothing, and a frame with several torn bands should pay once.
   const cs = fx.channelShift * env;
+  let torn: HTMLCanvasElement | null = null;
+  let tctx: CanvasRenderingContext2D | null = null;
   let r: HTMLCanvasElement | null = null;
   let b: HTMLCanvasElement | null = null;
 
-  ctx.save();
   for (let i = 0; i < bands; i++) {
     // Deterministic gate: the same frame always tears the same bands.
     if (hash(frameInLayer, i, 4001) >= fx.probability) continue;
@@ -255,23 +273,31 @@ function drawGlitch(
     const sh = Math.min(Math.ceil(size) + 1, h - sy);
     if (sh <= 0) continue;
 
+    if (!tctx) {
+      torn = createCanvas(w, h);
+      tctx = torn.getContext('2d');
+      if (!tctx) return src;
+      tctx.drawImage(src, 0, 0);
+    }
+
     // Erase the untorn band, then restamp it displaced, so the strip does
     // not appear twice.
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillRect(0, sy, w, sh);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(bitmap, 0, sy, w, sh, shift, sy, w, sh);
+    tctx.globalCompositeOperation = 'destination-out';
+    tctx.fillRect(0, sy, w, sh);
+    tctx.globalCompositeOperation = 'source-over';
+    tctx.drawImage(src, 0, sy, w, sh, shift, sy, w, sh);
 
     if (cs > 0) {
-      if (!r) r = channel(bitmap, '#ff0000');
-      if (!b) b = channel(bitmap, '#0000ff');
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.drawImage(r, 0, sy, w, sh, shift - cs, sy, w, sh);
-      ctx.drawImage(b, 0, sy, w, sh, shift + cs, sy, w, sh);
-      ctx.globalCompositeOperation = 'source-over';
+      if (!r) r = channel(src, '#ff0000');
+      if (!b) b = channel(src, '#0000ff');
+      tctx.globalCompositeOperation = 'lighter';
+      tctx.drawImage(r, 0, sy, w, sh, shift - cs, sy, w, sh);
+      tctx.drawImage(b, 0, sy, w, sh, shift + cs, sy, w, sh);
+      tctx.globalCompositeOperation = 'source-over';
     }
   }
-  ctx.restore();
+
+  return torn ?? src;
 }
 
 /** A reveal's output: the rewritten bitmap plus an alpha multiplier for
@@ -518,13 +544,22 @@ function drawOutline(
 }
 
 /**
- * Composite a pre-rendered layer bitmap with its FX stack.
+ * Composite a layer bitmap with its FX stack's decoration phase.
+ *
+ * `src` must already be through `applyReveals` — the caller runs that in
+ * `drawLayerAtFrame`, because the box shadow masks against the same bitmap and
+ * has to see the revealed one. Decorations therefore bloom off what is
+ * actually visible, which is the point of reveal-first ordering.
+ *
+ * `frameInLayer` and `layerDuration` are still needed here: every continuous
+ * effect reads its own envelope off them.
+ *
  * `filter` carries the layer's CSS filter effects, applied to every stamp so
  * blur/brightness still behave as before.
  */
 export function compositeLayerFx(
   ctx: CanvasRenderingContext2D,
-  bitmap: HTMLCanvasElement,
+  src: HTMLCanvasElement,
   fx: LayerFxDef[] | undefined,
   pad: number,
   frameInLayer: number,
@@ -539,9 +574,6 @@ export function compositeLayerFx(
   const outline = getFx(fx, 'outline');
   const gooey: GooeyFx | undefined = getFx(fx, 'gooey');
 
-  const reveal = applyReveals(bitmap, fx, frameInLayer, layerDuration);
-  const src = reveal.bitmap;
-
   ctx.save();
   ctx.translate(-pad, -pad);
   const gooeyEnv = gooey ? fxEnv(gooey, frameInLayer, layerDuration) : 0;
@@ -551,7 +583,6 @@ export function compositeLayerFx(
   const combined = [filter === 'none' ? '' : filter, gooeyFilter]
     .filter(Boolean).join(' ');
   if (combined) ctx.filter = combined;
-  ctx.globalAlpha *= reveal.alpha;
 
   if (longShadow) {
     const e = fxEnv(longShadow, frameInLayer, layerDuration);
@@ -570,18 +601,21 @@ export function compositeLayerFx(
     }
   }
 
+  // The tear rewrites the bitmap instead of painting over the destination, so
+  // it feeds the base draw and is composited exactly once. The decorations
+  // above still key off the untorn silhouette, as they did before.
+  const glitchEnv = glitch ? fxEnv(glitch, frameInLayer, layerDuration) : 0;
+  const base = glitch && glitchEnv > 0
+    ? applyGlitch(src, glitch, frameInLayer, glitchEnv)
+    : src;
+
   const splitEnv = rgbSplit ? fxEnv(rgbSplit, frameInLayer, layerDuration) : 0;
   if (rgbSplit && splitEnv > 0) {
     drawRgbSplit(
-      ctx, src, { ...rgbSplit, offset: rgbSplit.offset * splitEnv }, frameInLayer,
+      ctx, base, { ...rgbSplit, offset: rgbSplit.offset * splitEnv }, frameInLayer,
     );
   } else {
-    ctx.drawImage(src, 0, 0);
-  }
-
-  if (glitch) {
-    const e = fxEnv(glitch, frameInLayer, layerDuration);
-    if (e > 0) drawGlitch(ctx, src, glitch, frameInLayer, e);
+    ctx.drawImage(base, 0, 0);
   }
 
   if (shine) {
