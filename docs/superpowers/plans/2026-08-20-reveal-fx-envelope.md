@@ -207,9 +207,10 @@ describe('envelope', () => {
   it('multiplies rather than mins, so overlapping windows never reach full', () => {
     // duration 12 -> lastFrame 11, outStart 1. Entrance and exit overlap.
     const w = linear({ inFrames: 10, outFrames: 10 });
-    const mid = envelope(w, 6, 12, true);
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(1);
+    // enter = 0.6, exit = 0.5. The product is 0.3; Math.min would be 0.5.
+    // Asserting the exact value is what makes this test detect the regression
+    // it is named for — a range assertion passes under both formulas.
+    expect(envelope(w, 6, 12, true)).toBeCloseTo(0.3);
   });
 
   it('preserves easing overshoot when clamp is false', () => {
