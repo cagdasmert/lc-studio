@@ -27,6 +27,8 @@ npm run tauri dev     # Full desktop app with hot-reload
 | `npm run tauri build` | Production build (.app/.dmg/.exe/.deb) |
 | `npm run tauri build -- --debug` | Debug build (faster, includes devtools) |
 | `npx tsc --noEmit` | Type-check without emitting |
+| `npm test` | Run the Vitest suite once |
+| `npm run test:watch` | Vitest in watch mode |
 
 ## Tech Stack
 
@@ -73,6 +75,11 @@ src/                              # React frontend
     draw-video.ts                 # Video layer rendering (frame-accurate seek)
     video-cache.ts                # HTMLVideoElement management + seek cache
     effects.ts                    # CSS filter string builder
+    layer-fx.ts                   # Layer FX: reveal phase + decoration compositing
+    scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
+    fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
+    fx-geometry.ts                # Slice band ordering and staggered progress (pure)
+    noise.ts                      # Deterministic hash/noise — never Math.random()
     transitions.ts                # 12 scene transition implementations
     compositor.ts                 # Frame resolver + composition drawer
     capture.ts                    # Render pipeline (canvas → pixels → FFmpeg)
@@ -228,6 +235,66 @@ The `zundo` temporal middleware wraps the store to provide undo/redo, tracking o
 1. Add the name to `TransitionType` union in `src/types/scene.ts`
 2. Implement the transition in `src/renderer/transitions.ts` inside `drawTransition()`
 3. Add it to the `TRANSITIONS` array in `PropertyInspector.tsx`
+
+### Adding a New Layer FX
+
+The inspector is schema-driven, so no UI code is needed — an entry in
+`fx-schema.ts` is what makes the controls appear.
+
+1. Define the interface in `src/types/scene.ts` with a `type` tag and
+   `window?: FxWindow`, add it to the `LayerFxDef` union, and add the name to
+   the explicit re-export list in `src/types/index.ts` (it is hand-maintained,
+   not `export *` — omitting it is a compile error at the first import).
+2. Add a spec to `LAYER_FX_SPECS` in `src/lib/fx-schema.ts`: `label`, `hint`,
+   `kind`, `defaults`, and the `fields` to render. Use the `num`, `color` and
+   `select` helpers. Reveal specs should ship a `window` in their defaults.
+3. Implement it in `src/renderer/layer-fx.ts`:
+   - **Decoration** (always on, dimmed by the envelope): write a
+     `drawX(ctx, bitmap, fx, …)` and call it from `compositeLayerFx`'s
+     decoration block. Draw *before* the base bitmap if it belongs behind the
+     layer, as `outline` and `long-shadow` do.
+   - **Reveal** (geometry driven by the envelope): write an
+     `applyX(src, fx, env): HTMLCanvasElement` and add a case to
+     `applyReveals`. Reveals rewrite the bitmap and chain in list order.
+4. Register the type: add it to `BITMAP_FX` if it needs the layer bitmap, and to
+   `REVEAL_FX` if it is a reveal. `fx-kinds.test.ts` enforces that `REVEAL_FX`
+   matches the `kind: 'reveal'` specs and that every type is accounted for.
+5. If the effect reaches outside the layer box, add a `fxPadding` case.
+   Decorations contribute to the decoration max; reveals that displace content
+   contribute to the displacement term, which is added on top. **Never derive
+   padding from the envelope** — a canvas that resizes between frames crawls.
+
+Two rules that are not optional:
+
+- **The renderer must not import `src/lib/fx-schema.ts`.** It is UI metadata.
+  Anything the renderer needs to know is duplicated into `layer-fx.ts` and
+  guarded by `fx-kinds.test.ts`. The one sanctioned exception is that test.
+- **Never call `Math.random()`.** Preview and FFmpeg render draw the same frame
+  at different times and must match. Derive every random value from `hash` /
+  `signedHash` in `noise.ts`, keyed on the frame number and other integers.
+
+Keep pure geometry in `fx-envelope.ts` or `fx-geometry.ts` — those are DOM-free
+so they can be unit-tested under Vitest's `node` environment.
+
+### Adding a New Scene FX
+
+Same shape, one layer up: define the interface in `src/types/scene.ts`, add it
+to `SceneFxDef` and to `src/types/index.ts`, add a spec to `SCENE_FX_SPECS`, and
+implement it in `src/renderer/scene-fx.ts`. Scene FX have no timing envelope.
+
+## Testing
+
+```bash
+npm test          # Vitest, single run
+npm run test:watch
+```
+
+Tests live beside the code as `src/**/*.test.ts` and run under the `node`
+environment, so anything they touch must be DOM-free — which is why the pure FX
+logic is split out of `layer-fx.ts`. The one exception is
+`layer-fx-composite.test.ts`, which uses `node-canvas` to composite over a
+non-empty destination; that condition is what catches effects wrongly erasing
+the scene rather than their own bitmap.
 
 ## Tauri IPC Protocol
 

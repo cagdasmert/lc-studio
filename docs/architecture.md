@@ -90,17 +90,70 @@ drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoCache?)
               └── drawSceneLayers()
                     │ Sort layers by zIndex
                     │ For each visible, active layer:
-                    ├── resolveLayerTransform() → interpolate keyframes
-                    ├── ctx.save()
-                    ├── Apply opacity, blend mode, effects (CSS filter)
-                    ├── Apply 2D transform matrix
-                    ├── Dispatch to type-specific drawer:
-                    │     ├── drawTextLayer()
-                    │     ├── drawShapeLayer()
-                    │     ├── drawImageLayer()
-                    │     └── drawVideoLayer()
-                    └── ctx.restore()
+                    ├── [Echo FX] re-draw the layer at earlier frames, fading
+                    └── drawLayerAtFrame()
+                          ├── resolveLayerTransform() → interpolate keyframes
+                          ├── Motion path override (x/y, optional rotation)
+                          ├── [Zoom reveal] multiply resolved scale, fold alpha
+                          ├── ctx.save()
+                          ├── Apply opacity, blend mode, 2D transform, clip path
+                          ├── [If layer FX / CSS effects / box shadow]
+                          │     ├── Render the layer into a padded offscreen
+                          │     ├── applyReveals() → rewrite the bitmap
+                          │     ├── drawSilhouetteShadow() from the revealed bitmap
+                          │     └── compositeLayerFx() → stamp decorations
+                          ├── [Else] dispatch to type-specific drawer:
+                          │     ├── drawTextLayer()
+                          │     ├── drawShapeLayer()
+                          │     ├── drawImageLayer()
+                          │     └── drawVideoLayer()
+                          └── ctx.restore()
 ```
+
+#### Layer FX pipeline (`layer-fx.ts`)
+
+Layer FX composite the layer's own pixels several times, so they need the layer
+rendered to an offscreen canvas first. That canvas is padded by `fxPadding()`
+so bloom, extrusion and channel offsets are not clipped; padding is derived from
+effect parameters only, never from the current frame, because a canvas that
+changes size between frames resamples differently each frame and crawls.
+
+Effects run in three places, not one:
+
+| Site | Effects | Why there |
+| --- | --- | --- |
+| Scene loop (`draw.ts`) | `echo` | Re-runs the whole layer draw at earlier frames |
+| Transform stage (`draw.ts`) | `zoom` | Writes the resolved scale, read before the offscreen exists |
+| Bitmap stage (`layer-fx.ts`) | everything else | Operates on the rendered bitmap |
+
+Within the bitmap stage there are two phases. **Reveals** (`pixelate`, `slice`,
+`wipe`) rewrite the bitmap in list order; **decorations** (`long-shadow`,
+`outline`, `glow`, `rgb-split`, `glitch`, `shine`, `gooey`) then stamp onto the
+result. Reveals go first deliberately — a glow must bloom off what is actually
+visible, not off the full silhouette.
+
+#### The FX timing envelope (`fx-envelope.ts`)
+
+Every layer FX may carry an optional `window`. `envelope()` reduces it to one
+scalar per effect per frame: 0 across the entrance, 1 while held, back to 0
+across the exit. With no window it returns 1, which is why effects saved before
+the envelope existed render unchanged.
+
+Reveals read the scalar **unclamped**, so back/elastic easings overshoot — that
+is the intended look. Continuous effects read it **clamped** to `[0, 1]`, since
+an overshoot there would mean a negative glow radius. Which list an effect
+belongs to lives in `REVEAL_FX` in `layer-fx.ts`, deliberately duplicated from
+`kind: 'reveal'` in `fx-schema.ts` so the renderer never imports the UI layer; a
+test keeps the two in sync.
+
+#### Determinism
+
+Effects must never call `Math.random()`. The preview and the FFmpeg render draw
+the same frame at different times, and a reopened project has to look like it
+did yesterday. Every stochastic value — glitch's tear gating, slice's random
+band order, pixelate's flicker, grain, shake — comes from the hash functions in
+`noise.ts`, which are pure functions of integer inputs including the frame
+number.
 
 ### Component Architecture (`src/components/`)
 

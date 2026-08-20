@@ -18,7 +18,51 @@ Each layer has:
 - Opacity (0-1) and blend mode (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn)
 - z-index ordering, visibility toggle, lock toggle
 - Visual effects pipeline (blur, brightness, contrast, saturate, grayscale, sepia, hue-rotate, drop-shadow)
+- Layer FX stack (see below) — compositing effects distinct from the CSS filter pipeline
 - Per-property keyframe animation
+
+### Layer FX
+
+Effects built by compositing the layer's own pixels more than once, rather than
+by a CSS filter. Every layer FX can carry an optional **timing envelope**, which
+the renderer reduces to a single 0→1→0 value over the layer's life. Two kinds
+read that value differently:
+
+**Reveal FX** are *driven* by the envelope — they are how a layer arrives or leaves.
+
+| Effect | What it does |
+| --- | --- |
+| Zoom reveal | Punches in from a smaller scale, or recedes from a larger one |
+| Pixelate reveal | Content resolves out of coarse blocks, with optional per-block flicker |
+| Slice reveal | The layer arrives in strips; alternate bands slide in from opposite sides |
+| Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors |
+
+**Continuous FX** are always on, and the envelope only *dims* them — so you can
+also fade one in over the first half-second and hold it.
+
+| Effect | What it does |
+| --- | --- |
+| Echo trail | Copies of the layer from earlier frames — reads as motion blur |
+| RGB split | Colour channels pulled apart — chromatic aberration |
+| Shine sweep | A specular band travelling across the layer |
+| Neon glow | Coloured bloom around the layer, optionally pulsing |
+| Long shadow | Repeated silhouettes receding at an angle — fake 3D extrusion |
+| Glitch blocks | Horizontal strips tear sideways on random frames, with RGB fringing |
+| Sticker outline | A solid border traced around the layer's real shape, not its bounding box |
+| Gooey melt | Blur plus contrast, so nearby shapes fuse and separate like liquid |
+
+Reveals are composited before continuous FX, so a glow blooms off what is
+actually visible rather than off the finished layer.
+
+### Scene FX
+
+Full-frame treatments applied after the scene is composited: **film grain**,
+**vignette**, **scanlines** (with optional vertical roll), and **camera shake**
+(with optional decay). Scene FX have no timing envelope.
+
+All FX are frame-deterministic — the stochastic ones derive every random value
+from a hash of the frame number, so preview and final render produce identical
+pixels.
 
 ### Keyframe Animation System
 

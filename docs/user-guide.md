@@ -365,4 +365,9 @@ The Render Panel supports queue-based rendering:
 - **Layer timing** — Use Start Frame and End Frame in the Property Inspector to make layers appear and disappear at specific points within a scene.
 - **Blend modes** — Experiment with multiply, screen, overlay, and other blend modes for creative compositing effects.
 - **Effects stack** — Multiple effects (blur, brightness, contrast, etc.) can be applied to a single layer and are processed in order.
+- **Layer FX vs Effects** — These are two different sections in the Property Inspector. *Effects* are CSS filters applied to the finished layer. *Layer FX* composite the layer's own pixels several times over — glow, echo trails, glitch tearing, and the reveal effects that animate a layer into frame.
+- **Reveal effects** — Zoom, Pixelate, Slice and Wipe are how a layer arrives. Add one and it brings a **Timing** panel with Delay, In, Out and Easing. Set *In* to control how long the entrance takes; set *Out* to make the layer leave the same way before the scene ends. Reveals cannot be switched off — a reveal with no timing would simply be a layer that is already there.
+- **Timing on continuous effects** — Glow, glitch, shine and the rest are always on by default, but tick **Timing** on any of them and the same Delay/In/Out controls appear. That is how you get a glow that blooms in over the first twenty frames, or glitching that eases off rather than stopping dead.
+- **Easing on reveals** — Try `ease-out-back` on a Zoom reveal. Reveals deliberately allow the easing to overshoot, so the layer scales past its final size and settles back.
+- **Stacking order** — Reveals are applied before decorations, so a glow or outline follows the revealed shape. Stack Slice with Sticker outline to see the border trace each strip as it arrives.
 - **Performance** — Large canvas resolutions (e.g., 4K) may slow down preview playback. The final render is unaffected since it runs frame-by-frame.

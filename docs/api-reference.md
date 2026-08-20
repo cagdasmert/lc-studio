@@ -63,7 +63,8 @@ interface LayerBase {
   anchorY: number;        // 0-1
   zIndex: number;
   blendMode: BlendMode;
-  effects: LayerEffect[];
+  effects: LayerEffect[];      // CSS filter pipeline
+  layerFx?: LayerFxDef[];      // compositing FX stack
   visible: boolean;
   locked: boolean;
   keyframes: Record<string, KeyframeTrack>;
@@ -81,6 +82,78 @@ interface LayerEffect {
   value: number | string;
 }
 ```
+
+### Layer FX
+
+Compositing effects, distinct from the CSS filter `effects` above. Each is a
+member of a discriminated union tagged by `type`, and each may carry an optional
+timing envelope.
+
+```typescript
+type LayerFxDef =
+  // Continuous — always on; the envelope only dims them
+  | EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx
+  | GlitchFx | OutlineFx | GooeyFx
+  // Reveal — geometry driven by the envelope
+  | ZoomFx | PixelateFx | SliceFx | WipeFx;
+
+type LayerFxType = LayerFxDef['type'];
+
+/**
+ * Optional timing window on any layer FX. The renderer reduces it to a single
+ * scalar: 0 across the entrance, 1 while held, 0 across the exit. Absent means
+ * the scalar is always 1 — for a continuous effect that is "always on", and for
+ * a reveal it means "already fully revealed".
+ */
+interface FxWindow {
+  inDelay: number;    // frames after layer start before the entrance begins
+  inFrames: number;   // entrance length; 0 = no entrance
+  outFrames: number;  // exit length, back from the last frame; 0 = no exit
+  easing: EasingType;
+  easingParams?: EasingParams;
+}
+```
+
+Representative members — every variant carries `window?: FxWindow`:
+
+```typescript
+interface GlowFx {
+  type: 'glow';
+  color: string;
+  radius: number;
+  intensity: number;    // 0-3, how many passes worth of bloom
+  pulseFrames: number;  // 0 = steady
+  window?: FxWindow;
+}
+
+interface ZoomFx {
+  type: 'zoom';
+  from: number;  // starting scale; <1 punches in, >1 recedes
+  fade: number;  // 0-1, how much layer alpha couples to the envelope
+  window?: FxWindow;
+}
+
+interface SliceFx {
+  type: 'slice';
+  bands: number;
+  direction: 'horizontal' | 'vertical';
+  order: 'sequential' | 'center-out' | 'random';
+  travel: number;   // px each band slides in from; 0 = fade only
+  stagger: number;  // 0 = all bands together, approaching 1 = strictly sequential
+  window?: FxWindow;
+}
+```
+
+### Scene FX
+
+Full-frame treatments applied after the scene is composited. No timing envelope.
+
+```typescript
+type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx;
+type SceneFxType = SceneFxDef['type'];
+```
+
+`Scene` carries these as `sceneFx?: SceneFxDef[]`.
 
 ### Layer Types
 
