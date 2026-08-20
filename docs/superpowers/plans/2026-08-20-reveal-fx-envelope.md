@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - **Never call `Math.random()` in renderer code.** Every stochastic value must derive from `hash` / `signedHash` in `src/renderer/noise.ts`, keyed on integer inputs. Preview and FFmpeg render draw the same frame at different times and must produce identical pixels.
-- **`fx-schema.ts` is UI metadata only.** No file under `src/renderer/` may import from `src/lib/fx-schema.ts`. The renderer keeps its own type lists.
+- **`fx-schema.ts` is UI metadata only.** No **non-test** file under `src/renderer/` may import from `src/lib/fx-schema.ts`. The renderer keeps its own type lists. `src/renderer/fx-kinds.test.ts` is the deliberate exception: verifying that the two independent lists agree is only possible by importing both, and a test file ships nothing.
+- **`src/types/index.ts` is an explicit re-export list, not a `export *`.** Every new interface added to `src/types/scene.ts` must also be added there, or importing it from `'../types'` fails to compile.
 - **`fxPadding` must never depend on `env`.** Padding is computed from FX parameters alone. A canvas that changes size between frames resamples differently each frame and produces visible edge crawl.
 - **Backward compatibility is absolute.** No `.lcs.json` migration. `window` absent → `env = 1` → identical output to tag `fx-v1`.
 - **`npx tsc --noEmit` must pass at the end of every task.** `tsconfig.json` sets `strict`, `noUnusedLocals`, and `noUnusedParameters` — an unused function parameter is a build error here, not a warning.
@@ -41,7 +42,7 @@ Pure logic lives in `fx-envelope.ts` and `fx-geometry.ts` specifically so Vitest
 ## Task 1: Vitest harness and the envelope scalar
 
 **Files:**
-- Modify: `package.json`
+- Modify: `package.json`, `src/types/scene.ts`, `src/types/index.ts`
 - Create: `vitest.config.ts`
 - Create: `src/renderer/fx-envelope.ts`
 - Test: `src/renderer/fx-envelope.test.ts`, `src/renderer/noise.test.ts`
@@ -139,6 +140,8 @@ export interface FxWindow {
   easingParams?: EasingParams;
 }
 ```
+
+Then add `FxWindow` to the explicit re-export list in `src/types/index.ts` — it is a hand-maintained list, not `export *`, so the test in Step 6 will not compile without it.
 
 - [ ] **Step 6: Write the failing envelope test**
 
@@ -305,7 +308,7 @@ Expected: exit 0, no output.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add package.json package-lock.json vitest.config.ts src/renderer/fx-envelope.ts src/renderer/fx-envelope.test.ts src/renderer/noise.test.ts src/types/scene.ts
+git add package.json package-lock.json vitest.config.ts src/renderer/fx-envelope.ts src/renderer/fx-envelope.test.ts src/renderer/noise.test.ts src/types/scene.ts src/types/index.ts
 git commit -m "Add Vitest and the FX timing envelope scalar"
 ```
 
@@ -318,7 +321,7 @@ Deliverable: every existing effect accepts a `window` and dims by it. Nothing ad
 **Files:**
 - Modify: `src/types/scene.ts`
 - Modify: `src/renderer/layer-fx.ts`
-- Modify: `src/renderer/draw.ts:141-153`
+- Modify: `src/renderer/draw.ts:40-52` and `src/renderer/draw.ts:141-153`
 - Test: `src/renderer/fx-padding.test.ts`
 
 **Interfaces:**
@@ -807,7 +810,7 @@ git commit -m "Add FX envelope controls and select fields to the inspector"
 The simplest reveal, and the only transform-stage one. Proves the reveal model end to end before any bitmap work.
 
 **Files:**
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/renderer/draw.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/renderer/draw.ts`, `src/lib/fx-schema.ts`
 - Test: `src/renderer/fx-kinds.test.ts`
 
 **Interfaces:**
@@ -833,6 +836,8 @@ Extend the union:
 ```ts
 export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx;
 ```
+
+Add `ZoomFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 2: Write the failing kinds test**
 
@@ -936,7 +941,7 @@ Run `npm run tauri dev`. Add **Zoom reveal** to a text layer. Scrub: the layer s
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/types/scene.ts src/renderer/layer-fx.ts src/renderer/draw.ts src/lib/fx-schema.ts src/renderer/fx-kinds.test.ts
+git add src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/renderer/draw.ts src/lib/fx-schema.ts src/renderer/fx-kinds.test.ts
 git commit -m "Add zoom reveal effect"
 ```
 
@@ -947,7 +952,7 @@ git commit -m "Add zoom reveal effect"
 The first bitmap-stage reveal. This task restructures `compositeLayerFx` into its reveal phase and decoration phase.
 
 **Files:**
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
 
 **Interfaces:**
 - Produces: `interface RevealResult { bitmap: HTMLCanvasElement; alpha: number }`, and `applyReveals(bitmap, fx, frameInLayer, layerDuration): RevealResult` in `layer-fx.ts`. Tasks 6 and 7 add cases to it.
@@ -967,7 +972,7 @@ export interface PixelateFx {
 }
 ```
 
-Add `PixelateFx` to the `LayerFxDef` union.
+Add `PixelateFx` to the `LayerFxDef` union, and add `PixelateFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 2: Add the reveal phase to `layer-fx.ts`**
 
@@ -1128,7 +1133,7 @@ Run `npm run tauri dev`. Add **Pixelate reveal** to an image layer. Scrub: block
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/types/scene.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
+git add src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
 git commit -m "Add pixelate reveal and split the compositor into reveal and decoration phases"
 ```
 
@@ -1139,7 +1144,7 @@ git commit -m "Add pixelate reveal and split the compositor into reveal and deco
 **Files:**
 - Create: `src/renderer/fx-geometry.ts`
 - Test: `src/renderer/fx-geometry.test.ts`
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
 
 **Interfaces:**
 - Produces: `bandOrderPosition(i, bands, order): number` and `bandProgress(env, orderPos, stagger): number` from `fx-geometry.ts`.
@@ -1291,7 +1296,7 @@ export interface SliceFx {
 }
 ```
 
-Add `SliceFx` to the `LayerFxDef` union.
+Add `SliceFx` to the `LayerFxDef` union, and add `SliceFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 6: Implement the draw**
 
@@ -1407,7 +1412,7 @@ Run `npm run tauri dev`. Add **Slice reveal** to a text layer. Confirm: bands sl
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/renderer/fx-geometry.ts src/renderer/fx-geometry.test.ts src/types/scene.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
+git add src/renderer/fx-geometry.ts src/renderer/fx-geometry.test.ts src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
 git commit -m "Add slice reveal effect"
 ```
 
@@ -1416,7 +1421,7 @@ git commit -m "Add slice reveal effect"
 ## Task 7: Wipe reveal
 
 **Files:**
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
 
 - [ ] **Step 1: Add the type**
 
@@ -1433,7 +1438,7 @@ export interface WipeFx {
 }
 ```
 
-Add `WipeFx` to the `LayerFxDef` union.
+Add `WipeFx` to the `LayerFxDef` union, and add `WipeFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 2: Implement the draw**
 
@@ -1559,7 +1564,7 @@ Run `npm run tauri dev`. Add **Wipe reveal**. Check all three shapes: linear swe
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/types/scene.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
+git add src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
 git commit -m "Add wipe reveal effect"
 ```
 
@@ -1568,7 +1573,7 @@ git commit -m "Add wipe reveal effect"
 ## Task 8: Glitch blocks
 
 **Files:**
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
 
 - [ ] **Step 1: Add the type**
 
@@ -1586,7 +1591,7 @@ export interface GlitchFx {
 }
 ```
 
-Add `GlitchFx` to the `LayerFxDef` union.
+Add `GlitchFx` to the `LayerFxDef` union, and add `GlitchFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 2: Implement the draw**
 
@@ -1695,7 +1700,7 @@ Run `npm run tauri dev`. Add **Glitch blocks**. Scrub to a specific frame, note 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/types/scene.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
+git add src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
 git commit -m "Add glitch blocks effect"
 ```
 
@@ -1706,7 +1711,7 @@ git commit -m "Add glitch blocks effect"
 Two small continuous effects, grouped because each is a handful of lines and neither needs its own review cycle.
 
 **Files:**
-- Modify: `src/types/scene.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
+- Modify: `src/types/scene.ts`, `src/types/index.ts`, `src/renderer/layer-fx.ts`, `src/lib/fx-schema.ts`
 
 - [ ] **Step 1: Add both types**
 
@@ -1730,7 +1735,7 @@ export interface GooeyFx {
 }
 ```
 
-Add both to the `LayerFxDef` union.
+Add both to the `LayerFxDef` union, and add `OutlineFx` and `GooeyFx` to the explicit re-export list in `src/types/index.ts`.
 
 - [ ] **Step 2: Implement outline**
 
@@ -1849,7 +1854,7 @@ Expected: exit 0.
 - [ ] **Step 9: Commit and tag**
 
 ```bash
-git add src/types/scene.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
+git add src/types/scene.ts src/types/index.ts src/renderer/layer-fx.ts src/lib/fx-schema.ts
 git commit -m "Add sticker outline and gooey melt effects"
 git tag -a fx-v2 -m "FX system v2: timing envelope, four reveal effects, three continuous effects"
 ```
@@ -1864,6 +1869,6 @@ Run before declaring the feature done:
 - [ ] `npx tsc --noEmit` — exit 0
 - [ ] `npm run build` — exit 0
 - [ ] `grep -rn "Math.random" src/renderer/` returns nothing
-- [ ] `grep -rn "fx-schema" src/renderer/` returns nothing
+- [ ] `grep -rn "fx-schema" src/renderer/ --include='*.ts' | grep -v '\.test\.ts'` returns nothing
 - [ ] Open a project saved before this work and confirm every existing effect renders as it did at tag `fx-v1`
 - [ ] Render a short clip to video and confirm the FFmpeg output matches the preview frame for frame
