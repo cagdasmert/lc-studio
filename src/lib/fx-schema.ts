@@ -165,6 +165,18 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('softness', 'Softness', 0, 300, 5),
     ],
   },
+  glitch: {
+    label: 'Glitch blocks',
+    hint: 'Horizontal strips tear sideways on random frames, with rgb fringing.',
+    kind: 'continuous',
+    defaults: { type: 'glitch', bands: 12, maxOffset: 30, channelShift: 6, probability: 0.25 },
+    fields: [
+      num('bands', 'Bands', 1, 60),
+      num('maxOffset', 'Max offset', 0, 200),
+      num('channelShift', 'Channel shift', 0, 40),
+      num('probability', 'Frequency', 0, 1, 0.05),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {

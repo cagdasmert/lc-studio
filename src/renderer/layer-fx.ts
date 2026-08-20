@@ -1,5 +1,5 @@
 import type {
-  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx, WipeFx,
+  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx, WipeFx, GlitchFx,
 } from '../types';
 import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
@@ -14,7 +14,7 @@ import { bandOrderPosition, bandProgress } from './fx-geometry';
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
  *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe'];
+const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
@@ -58,6 +58,7 @@ export function fxPadding(fx: LayerFxDef[] | undefined): number {
       case 'long-shadow': pad = Math.max(pad, f.distance + 4); break;
       case 'rgb-split': pad = Math.max(pad, f.offset * 2 + 4); break;
       case 'slice': pad = Math.max(pad, Math.abs(f.travel)); break;
+      case 'glitch': pad = Math.max(pad, f.maxOffset + f.channelShift); break;
       default: break;
     }
   }
@@ -219,6 +220,51 @@ function drawShine(
   ctx.globalAlpha *= Math.max(0, Math.min(1, fx.intensity));
   ctx.globalCompositeOperation = 'lighter';
   ctx.drawImage(band, 0, 0);
+  ctx.restore();
+}
+
+function drawGlitch(
+  ctx: CanvasRenderingContext2D,
+  bitmap: HTMLCanvasElement,
+  fx: GlitchFx,
+  frameInLayer: number,
+  env: number,
+): void {
+  const bands = Math.max(1, Math.round(fx.bands));
+  const w = bitmap.width;
+  const h = bitmap.height;
+  const size = h / bands;
+
+  // `cs` and the channel bitmaps depend only on the bitmap/params, not on the
+  // band, so they're computed once here rather than per torn band.
+  const cs = fx.channelShift * env;
+  const r = cs > 0 ? channel(bitmap, '#ff0000') : null;
+  const b = cs > 0 ? channel(bitmap, '#0000ff') : null;
+
+  ctx.save();
+  for (let i = 0; i < bands; i++) {
+    // Deterministic gate: the same frame always tears the same bands.
+    if (hash(frameInLayer, i, 4001) >= fx.probability) continue;
+
+    const shift = signedHash(frameInLayer, i, 4002) * fx.maxOffset * env;
+    const sy = Math.floor(i * size);
+    const sh = Math.min(Math.ceil(size) + 1, h - sy);
+    if (sh <= 0) continue;
+
+    // Erase the untorn band, then restamp it displaced, so the strip does
+    // not appear twice.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(0, sy, w, sh);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(bitmap, 0, sy, w, sh, shift, sy, w, sh);
+
+    if (r && b) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(r, 0, sy, w, sh, shift - cs, sy, w, sh);
+      ctx.drawImage(b, 0, sy, w, sh, shift + cs, sy, w, sh);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
   ctx.restore();
 }
 
@@ -461,6 +507,7 @@ export function compositeLayerFx(
   const glow = getFx(fx, 'glow');
   const rgbSplit = getFx(fx, 'rgb-split');
   const shine = getFx(fx, 'shine');
+  const glitch = getFx(fx, 'glitch');
 
   const reveal = applyReveals(bitmap, fx, frameInLayer, layerDuration);
   const src = reveal.bitmap;
@@ -490,6 +537,11 @@ export function compositeLayerFx(
     );
   } else {
     ctx.drawImage(src, 0, 0);
+  }
+
+  if (glitch) {
+    const e = fxEnv(glitch, frameInLayer, layerDuration);
+    if (e > 0) drawGlitch(ctx, src, glitch, frameInLayer, e);
   }
 
   if (shine) {

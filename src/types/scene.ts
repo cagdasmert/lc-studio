@@ -226,7 +226,17 @@ export interface WipeFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx;
+/** Horizontal strips jumping sideways on random frames — digital tearing. */
+export interface GlitchFx {
+  type: 'glitch';
+  bands: number;
+  maxOffset: number;    // px of horizontal displacement
+  channelShift: number; // px of rgb fringing on displaced bands
+  probability: number;  // 0–1, chance a given band tears on a given frame
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

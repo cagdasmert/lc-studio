@@ -30,6 +30,7 @@ export type {
   PixelateFx,
   SliceFx,
   WipeFx,
+  GlitchFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,
