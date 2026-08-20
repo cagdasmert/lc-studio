@@ -361,33 +361,42 @@ function applyWipe(
     const dx = Math.cos(rad);
     const dy = Math.sin(rad);
     const span = Math.abs(w * dx) + Math.abs(h * dy);
-    // Barn doors open from the centre outward, so each half covers half the
-    // span in the same time a linear wipe covers all of it.
-    const reach = fx.shape === 'barn' ? (t * (span / 2 + soft)) : (t * (span + soft));
     const cx = w / 2;
     const cy = h / 2;
-
-    const edge = (from: number, to: number) => {
-      const grad = mctx.createLinearGradient(
-        cx + dx * from, cy + dy * from,
-        cx + dx * to, cy + dy * to,
-      );
-      grad.addColorStop(0, '#fff');
-      grad.addColorStop(1, 'transparent');
-      return grad;
-    };
+    // A zero-length gradient is undefined across canvas implementations, so
+    // every ramp keeps a hair of length even at softness 0.
+    const softEdge = Math.max(fx.softness, 0.01);
+    const at = (d: number): [number, number] => [cx + dx * d, cy + dy * d];
 
     if (fx.shape === 'barn') {
-      // At softness 0 `from` and `to` coincide (a zero-length gradient renders
-      // unpredictably), so each door's far endpoint is nudged a hair past the
-      // near one — same guard the iris branch uses for its radii.
-      mctx.fillStyle = edge(reach - soft, Math.max(reach - soft + 0.01, reach));
-      mctx.fillRect(0, 0, w, h);
-      mctx.fillStyle = edge(-(reach - soft), Math.min(-(reach - soft) - 0.01, -reach));
+      // One gradient, not two. Canvas extends a gradient's end stops outward
+      // forever, so two white-to-transparent half-planes union to full cover
+      // almost immediately. Spanning -reach..+reach with transparent ends and
+      // white interior gives a band that genuinely opens from the centre.
+      // Each door only crosses half the layer, hence span / 2.
+      const reach = Math.max(t * (span / 2 + softEdge), 0.01);
+      const [x0, y0] = at(-reach);
+      const [x1, y1] = at(reach);
+      const grad = mctx.createLinearGradient(x0, y0, x1, y1);
+      // Capped at 0.5 so the two ramps can never cross and unorder the stops.
+      const ramp = Math.min(0.5, softEdge / (2 * reach));
+      grad.addColorStop(0, 'transparent');
+      grad.addColorStop(ramp, '#fff');
+      grad.addColorStop(1 - ramp, '#fff');
+      grad.addColorStop(1, 'transparent');
+      mctx.fillStyle = grad;
       mctx.fillRect(0, 0, w, h);
     } else {
-      const head = -span / 2 + reach;
-      mctx.fillStyle = edge(head - soft - span, head);
+      // A single edge sweeping the full span: white behind the head,
+      // transparent ahead of it. The extended end stops are what keep the
+      // already-swept region covered as the head advances.
+      const head = -span / 2 + t * (span + softEdge);
+      const [x0, y0] = at(head - softEdge);
+      const [x1, y1] = at(head);
+      const grad = mctx.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0, '#fff');
+      grad.addColorStop(1, 'transparent');
+      mctx.fillStyle = grad;
       mctx.fillRect(0, 0, w, h);
     }
   }
