@@ -10,6 +10,10 @@ the review workspace they were tracked in is deleted once the branch is done.
 
 ## Correctness — worth doing
 
+> **All four items in this section were fixed in `c6775d6`.** Kept here for the
+> reasoning; the code, tests and UI now reflect the resolutions described below.
+
+
 **`BITMAP_FX` has no exhaustiveness guard.** `fx-kinds.test.ts` keeps `REVEAL_FX`
 and the schema's `kind: 'reveal'` entries in sync, but nothing guards `BITMAP_FX`.
 A future bitmap effect added to `REVEAL_FX` and forgotten in `BITMAP_FX` makes
