@@ -236,7 +236,23 @@ export interface GlitchFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx;
+/** Sticker-style border hugging the layer's silhouette. */
+export interface OutlineFx {
+  type: 'outline';
+  color: string;
+  width: number;  // px
+  window?: FxWindow;
+}
+
+/** Blur-plus-contrast melt — neighbouring shapes fuse like liquid. */
+export interface GooeyFx {
+  type: 'gooey';
+  blur: number;      // px
+  contrast: number;  // multiplier; higher tightens the edge
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

@@ -1,5 +1,5 @@
 import type {
-  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx, WipeFx, GlitchFx,
+  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx, WipeFx, GlitchFx, OutlineFx, GooeyFx,
 } from '../types';
 import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
@@ -14,7 +14,7 @@ import { bandOrderPosition, bandProgress } from './fx-geometry';
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
  *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch'];
+const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch', 'outline', 'gooey'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
@@ -59,6 +59,8 @@ export function fxPadding(fx: LayerFxDef[] | undefined): number {
       case 'rgb-split': pad = Math.max(pad, f.offset * 2 + 4); break;
       case 'slice': pad = Math.max(pad, Math.abs(f.travel)); break;
       case 'glitch': pad = Math.max(pad, f.maxOffset + f.channelShift); break;
+      case 'outline': pad = Math.max(pad, f.width + 2); break;
+      case 'gooey': pad = Math.max(pad, f.blur * 2); break;
       default: break;
     }
   }
@@ -493,6 +495,28 @@ export function applyReveals(
   return { bitmap: current, alpha };
 }
 
+/** Number of stamps used to fake a dilation. Twelve is enough that the ring
+ *  reads as a smooth outline at the widths this control allows. */
+const OUTLINE_STAMPS = 12;
+
+function drawOutline(
+  ctx: CanvasRenderingContext2D,
+  bitmap: HTMLCanvasElement,
+  fx: OutlineFx,
+  env: number,
+): void {
+  const width = fx.width * env;
+  if (width <= 0) return;
+
+  const ring = silhouette(bitmap, fx.color);
+  ctx.save();
+  for (let i = 0; i < OUTLINE_STAMPS; i++) {
+    const a = (i / OUTLINE_STAMPS) * Math.PI * 2;
+    ctx.drawImage(ring, Math.cos(a) * width, Math.sin(a) * width);
+  }
+  ctx.restore();
+}
+
 /**
  * Composite a pre-rendered layer bitmap with its FX stack.
  * `filter` carries the layer's CSS filter effects, applied to every stamp so
@@ -512,13 +536,21 @@ export function compositeLayerFx(
   const rgbSplit = getFx(fx, 'rgb-split');
   const shine = getFx(fx, 'shine');
   const glitch = getFx(fx, 'glitch');
+  const outline = getFx(fx, 'outline');
+  const gooey: GooeyFx | undefined = getFx(fx, 'gooey');
 
   const reveal = applyReveals(bitmap, fx, frameInLayer, layerDuration);
   const src = reveal.bitmap;
 
   ctx.save();
   ctx.translate(-pad, -pad);
-  if (filter !== 'none') ctx.filter = filter;
+  const gooeyEnv = gooey ? fxEnv(gooey, frameInLayer, layerDuration) : 0;
+  const gooeyFilter = gooey && gooeyEnv > 0
+    ? `blur(${(gooey.blur * gooeyEnv).toFixed(2)}px) contrast(${gooey.contrast})`
+    : '';
+  const combined = [filter === 'none' ? '' : filter, gooeyFilter]
+    .filter(Boolean).join(' ');
+  if (combined) ctx.filter = combined;
   ctx.globalAlpha *= reveal.alpha;
 
   if (longShadow) {
@@ -526,6 +558,10 @@ export function compositeLayerFx(
     if (e > 0) {
       drawLongShadow(ctx, src, { ...longShadow, distance: longShadow.distance * e });
     }
+  }
+  if (outline) {
+    const e = fxEnv(outline, frameInLayer, layerDuration);
+    if (e > 0) drawOutline(ctx, src, outline, e);
   }
   if (glow) {
     const e = fxEnv(glow, frameInLayer, layerDuration);

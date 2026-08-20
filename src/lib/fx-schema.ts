@@ -177,6 +177,26 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('probability', 'Frequency', 0, 1, 0.05),
     ],
   },
+  outline: {
+    label: 'Sticker outline',
+    hint: 'A solid border traced around the layer’s real shape.',
+    kind: 'continuous',
+    defaults: { type: 'outline', color: '#ffffff', width: 6 },
+    fields: [
+      color('color', 'Colour'),
+      num('width', 'Width', 0, 60),
+    ],
+  },
+  gooey: {
+    label: 'Gooey melt',
+    hint: 'Blur plus contrast, so nearby shapes fuse and separate like liquid.',
+    kind: 'continuous',
+    defaults: { type: 'gooey', blur: 8, contrast: 30 },
+    fields: [
+      num('blur', 'Blur', 0, 40),
+      num('contrast', 'Contrast', 1, 60),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {

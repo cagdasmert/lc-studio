@@ -31,6 +31,8 @@ export type {
   SliceFx,
   WipeFx,
   GlitchFx,
+  OutlineFx,
+  GooeyFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,
