@@ -28,6 +28,7 @@ export type {
   LongShadowFx,
   ZoomFx,
   PixelateFx,
+  SliceFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,

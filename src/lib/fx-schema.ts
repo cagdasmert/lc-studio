@@ -126,6 +126,30 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('fade', 'Fade', 0, 1, 0.05),
     ],
   },
+  slice: {
+    label: 'Slice reveal',
+    hint: 'The layer arrives in strips. Alternate bands slide in from opposite sides.',
+    kind: 'reveal',
+    defaults: {
+      type: 'slice', bands: 10, direction: 'horizontal',
+      order: 'sequential', travel: 60, stagger: 0.5,
+      window: { ...DEFAULT_FX_WINDOW },
+    },
+    fields: [
+      num('bands', 'Bands', 1, 40),
+      select('direction', 'Direction', [
+        { value: 'horizontal', label: 'Horizontal' },
+        { value: 'vertical', label: 'Vertical' },
+      ]),
+      select('order', 'Order', [
+        { value: 'sequential', label: 'Sequential' },
+        { value: 'center-out', label: 'Centre out' },
+        { value: 'random', label: 'Random' },
+      ]),
+      num('travel', 'Travel', 0, 400, 5),
+      num('stagger', 'Stagger', 0, 0.95, 0.05),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {

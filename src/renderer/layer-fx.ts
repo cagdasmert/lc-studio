@@ -1,8 +1,9 @@
 import type {
-  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx,
+  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx,
 } from '../types';
 import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
+import { bandOrderPosition, bandProgress } from './fx-geometry';
 
 /**
  * Layer FX are composited from the layer's own rendered pixels: draw the layer
@@ -13,13 +14,13 @@ import { envelope } from './fx-envelope';
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
  *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate'];
+const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
  *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
  *  that module, so the knowledge is duplicated and a test keeps them in sync. */
-export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate'];
+export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate', 'slice'];
 
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,
@@ -56,6 +57,7 @@ export function fxPadding(fx: LayerFxDef[] | undefined): number {
       case 'glow': pad = Math.max(pad, f.radius * 2); break;
       case 'long-shadow': pad = Math.max(pad, f.distance + 4); break;
       case 'rgb-split': pad = Math.max(pad, f.offset * 2 + 4); break;
+      case 'slice': pad = Math.max(pad, Math.abs(f.travel)); break;
       default: break;
     }
   }
@@ -278,6 +280,50 @@ function applyPixelate(
   return out;
 }
 
+function applySlice(
+  src: HTMLCanvasElement,
+  fx: SliceFx,
+  env: number,
+): HTMLCanvasElement {
+  const bands = Math.max(1, Math.round(fx.bands));
+  const w = src.width;
+  const h = src.height;
+  const out = createCanvas(w, h);
+  const octx = out.getContext('2d');
+  if (!octx) return src;
+
+  const horizontal = fx.direction === 'horizontal';
+  const size = (horizontal ? h : w) / bands;
+
+  for (let i = 0; i < bands; i++) {
+    const local = bandProgress(env, bandOrderPosition(i, bands, fx.order), fx.stagger);
+    if (local <= 0) continue;
+
+    // Alternating direction is what makes this read as slicing rather than
+    // as the whole layer sliding in.
+    const sign = i % 2 === 0 ? 1 : -1;
+    const shift = (1 - local) * fx.travel * sign;
+
+    // Bands are drawn a hair oversized so rounding cannot leave seams.
+    const start = i * size;
+    const span = Math.ceil(size) + 1;
+    const sy = horizontal ? Math.floor(start) : 0;
+    const sx = horizontal ? 0 : Math.floor(start);
+    const sh = horizontal ? Math.min(span, h - sy) : h;
+    const sw = horizontal ? w : Math.min(span, w - sx);
+    if (sw <= 0 || sh <= 0) continue;
+
+    octx.globalAlpha = local;
+    octx.drawImage(
+      src,
+      sx, sy, sw, sh,
+      sx + (horizontal ? shift : 0), sy + (horizontal ? 0 : shift), sw, sh,
+    );
+  }
+  octx.globalAlpha = 1;
+  return out;
+}
+
 /**
  * Run every bitmap-stage reveal in list order. Reveals go before decorations
  * so that glow, shadow and shine bloom off what is actually visible rather
@@ -301,6 +347,9 @@ export function applyReveals(
         if (f.fade > 0) {
           alpha *= 1 - f.fade + f.fade * Math.max(0, Math.min(1, env));
         }
+        break;
+      case 'slice':
+        current = applySlice(current, f, env);
         break;
       default:
         break;

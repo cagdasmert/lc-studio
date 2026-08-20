@@ -206,7 +206,18 @@ export interface PixelateFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx;
+/** Banded reveal — the layer arrives in strips. */
+export interface SliceFx {
+  type: 'slice';
+  bands: number;
+  direction: 'horizontal' | 'vertical';
+  order: 'sequential' | 'center-out' | 'random';
+  travel: number;   // px each band slides in from; 0 = fade only
+  stagger: number;  // 0 = all bands together, approaching 1 = strictly sequential
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────
