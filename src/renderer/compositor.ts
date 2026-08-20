@@ -3,6 +3,7 @@ import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { drawScene, drawSceneBackground } from './draw';
 import { drawTransition } from './transitions';
+import { applyShake, applyScenePostFx, hasShake } from './scene-fx';
 
 export function getTotalFrames(composition: Composition): number {
   return composition.scenes.reduce((sum, s) => sum + s.durationFrames, 0);
@@ -58,6 +59,12 @@ export function drawCompositionFrame(
     transitionDuration > 0 &&
     frameInScene >= transitionStart;
 
+  // Camera shake displaces everything, so it wraps the whole scene draw —
+  // including transitions — while the overlay FX go on top afterwards.
+  const shake = hasShake(scene.sceneFx);
+  ctx.save();
+  if (shake) applyShake(ctx, shake, frameInScene, fps, width, height);
+
   if (isInTransition) {
     const progress = (frameInScene - transitionStart) / transitionDuration;
 
@@ -70,4 +77,8 @@ export function drawCompositionFrame(
   } else {
     drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
   }
+
+  ctx.restore();
+
+  applyScenePostFx(ctx, scene.sceneFx, frameInScene, width, height);
 }

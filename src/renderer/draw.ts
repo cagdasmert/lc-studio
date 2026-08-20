@@ -1,8 +1,9 @@
-import type { Scene, Layer, ClipPathDef } from '../types';
+import type { Scene, Layer, ClipPathDef, BoxShadow } from '../types';
 import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
+import { getFx, hasBitmapFx, fxPadding, compositeLayerFx } from './layer-fx';
 import { createCanvasGradient } from './gradient';
 import { evaluateMotionPath } from './motion-path';
 import { drawTextLayer } from './draw-text';
@@ -36,103 +37,166 @@ export function drawSceneLayers(
       continue;
     }
 
-    const frameInLayer = frameInScene - layer.startFrame;
-    const resolved = resolveLayerTransform(layer, frameInLayer);
-
-    // Motion path override — replaces x/y (and optionally rotation)
-    if (layer.motionPath && layer.motionPath.points.length >= 2) {
-      const layerDuration = layer.endFrame - layer.startFrame;
-      const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
-      const pos = evaluateMotionPath(layer.motionPath, t);
-      resolved.x = pos.x;
-      resolved.y = pos.y;
-      if (layer.motionPath.alignToPath) {
-        resolved.rotation = (pos.angle * 180) / Math.PI;
+    // Echo: stamp the layer as it was a few frames ago, fading with distance.
+    // Drawn first so the trail sits behind the layer itself.
+    const echo = getFx(layer.layerFx, 'echo');
+    if (echo && echo.count > 0 && echo.frameGap > 0) {
+      for (let step = echo.count; step >= 1; step--) {
+        const pastFrame = frameInScene - step * echo.frameGap;
+        if (pastFrame < layer.startFrame) continue;
+        drawLayerAtFrame(
+          ctx, layer, pastFrame, mediaCache, fps, videoCache,
+          Math.pow(echo.decay, step),
+        );
       }
     }
 
-    ctx.save();
-
-    // Opacity (clamp to valid range)
-    ctx.globalAlpha *= Math.max(0, Math.min(1, resolved.opacity));
-    if (ctx.globalAlpha <= 0) {
-      ctx.restore();
-      continue;
-    }
-
-    // Blend mode
-    if (layer.blendMode !== 'normal') {
-      ctx.globalCompositeOperation = layer.blendMode;
-    }
-
-    // Apply 2D transform: place anchor at (x,y), rotate/scale/skew around it, then shift to top-left
-    ctx.translate(resolved.x, resolved.y);
-    ctx.rotate((resolved.rotation * Math.PI) / 180);
-    if (resolved.skewX !== 0 || resolved.skewY !== 0) {
-      const sx = Math.tan((resolved.skewX * Math.PI) / 180);
-      const sy = Math.tan((resolved.skewY * Math.PI) / 180);
-      ctx.transform(1, sy, sx, 1, 0, 0);
-    }
-    ctx.scale(resolved.scaleX, resolved.scaleY);
-    ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
-
-    // Clip path
-    if (layer.clipPath) {
-      applyClipPath(ctx, layer.clipPath, resolved.width, resolved.height);
-    }
-
-    // Box shadow — render to offscreen canvas to avoid destination-out erasing other layers
-    if (layer.boxShadow && layer.boxShadow.blur > 0) {
-      const bs = layer.boxShadow;
-      const pad = bs.blur + bs.spread + Math.max(Math.abs(bs.offsetX), Math.abs(bs.offsetY)) + 10;
-      const ow = Math.round(resolved.width + pad * 2);
-      const oh = Math.round(resolved.height + pad * 2);
-      const offscreen = document.createElement('canvas');
-      offscreen.width = ow;
-      offscreen.height = oh;
-      const oc = offscreen.getContext('2d');
-      if (oc) {
-        oc.shadowColor = bs.color;
-        oc.shadowBlur = bs.blur + bs.spread;
-        oc.shadowOffsetX = bs.offsetX;
-        oc.shadowOffsetY = bs.offsetY;
-        oc.fillStyle = bs.color;
-        oc.fillRect(pad, pad, resolved.width, resolved.height);
-        // Erase the rect, leaving only the shadow
-        oc.globalCompositeOperation = 'destination-out';
-        oc.shadowColor = 'transparent';
-        oc.shadowBlur = 0;
-        oc.shadowOffsetX = 0;
-        oc.shadowOffsetY = 0;
-        oc.fillStyle = '#000';
-        oc.fillRect(pad, pad, resolved.width, resolved.height);
-        ctx.drawImage(offscreen, -pad, -pad);
-      }
-    }
-
-    if (layer.effects.length > 0) {
-      // WebKit (WKWebView) doesn't reliably apply ctx.filter to text/shape drawing ops.
-      // Workaround: draw layer onto an offscreen canvas, then composite with filter
-      // via drawImage() which IS reliably filtered in all WebKit versions.
-      const w = Math.max(1, Math.round(resolved.width));
-      const h = Math.max(1, Math.round(resolved.height));
-      const offscreen = document.createElement('canvas');
-      offscreen.width = w;
-      offscreen.height = h;
-      const offCtx = offscreen.getContext('2d');
-      if (offCtx) {
-        drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
-        ctx.filter = buildFilterString(layer.effects);
-        ctx.drawImage(offscreen, 0, 0);
-        ctx.filter = 'none';
-      }
-    } else {
-      // Dispatch to type-specific drawer
-      drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
-    }
-
-    ctx.restore();
+    drawLayerAtFrame(ctx, layer, frameInScene, mediaCache, fps, videoCache, 1);
   }
+}
+
+/**
+ * Draw a single layer as it appears at `frameInScene`.
+ * `alphaMultiplier` lets echo stamps fade without touching layer opacity.
+ */
+function drawLayerAtFrame(
+  ctx: CanvasRenderingContext2D,
+  layer: Layer,
+  frameInScene: number,
+  mediaCache: MediaCache,
+  fps: number,
+  videoCache: VideoCache | undefined,
+  alphaMultiplier: number,
+): void {
+  const frameInLayer = frameInScene - layer.startFrame;
+  const resolved = resolveLayerTransform(layer, frameInLayer);
+
+  // Motion path override — replaces x/y (and optionally rotation)
+  if (layer.motionPath && layer.motionPath.points.length >= 2) {
+    const layerDuration = layer.endFrame - layer.startFrame;
+    const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
+    const pos = evaluateMotionPath(layer.motionPath, t);
+    resolved.x = pos.x;
+    resolved.y = pos.y;
+    if (layer.motionPath.alignToPath) {
+      resolved.rotation = (pos.angle * 180) / Math.PI;
+    }
+  }
+
+  ctx.save();
+
+  // Opacity (clamp to valid range)
+  ctx.globalAlpha *= Math.max(0, Math.min(1, resolved.opacity)) * alphaMultiplier;
+  if (ctx.globalAlpha <= 0) {
+    ctx.restore();
+    return;
+  }
+
+  // Blend mode
+  if (layer.blendMode !== 'normal') {
+    ctx.globalCompositeOperation = layer.blendMode;
+  }
+
+  // Apply 2D transform: place anchor at (x,y), rotate/scale/skew around it, then shift to top-left
+  ctx.translate(resolved.x, resolved.y);
+  ctx.rotate((resolved.rotation * Math.PI) / 180);
+  if (resolved.skewX !== 0 || resolved.skewY !== 0) {
+    const sx = Math.tan((resolved.skewX * Math.PI) / 180);
+    const sy = Math.tan((resolved.skewY * Math.PI) / 180);
+    ctx.transform(1, sy, sx, 1, 0, 0);
+  }
+  ctx.scale(resolved.scaleX, resolved.scaleY);
+  ctx.translate(-resolved.width * resolved.anchorX, -resolved.height * resolved.anchorY);
+
+  // Clip path
+  if (layer.clipPath) {
+    applyClipPath(ctx, layer.clipPath, resolved.width, resolved.height);
+  }
+
+  const bitmapFx = hasBitmapFx(layer.layerFx);
+  const needsFxCanvas = layer.effects.length > 0 || bitmapFx;
+  const shadow = layer.boxShadow && layer.boxShadow.blur > 0 ? layer.boxShadow : null;
+
+  // Reasons to render the layer into an offscreen canvas first:
+  //  - WebKit (WKWebView) doesn't reliably apply ctx.filter to text/shape
+  //    drawing ops, but drawImage() IS filtered in every version.
+  //  - Layer FX composite the layer's own pixels several times over.
+  //  - The drop shadow masks against it, so a cutout PNG or a glyph casts a
+  //    shadow in its own shape rather than the shape of its bounding box.
+  let layerCanvas: HTMLCanvasElement | null = null;
+  let fxPad = 0;
+  if (needsFxCanvas || shadow) {
+    fxPad = bitmapFx ? fxPadding(layer.layerFx) : 0;
+    const w = Math.max(1, Math.round(resolved.width)) + fxPad * 2;
+    const h = Math.max(1, Math.round(resolved.height)) + fxPad * 2;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = w;
+    offscreen.height = h;
+    const offCtx = offscreen.getContext('2d');
+    if (offCtx) {
+      offCtx.translate(fxPad, fxPad);
+      drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+      layerCanvas = offscreen;
+    }
+  }
+
+  // Drawn before the layer itself so the shadow sits behind it.
+  if (shadow && layerCanvas) {
+    drawSilhouetteShadow(ctx, layerCanvas, shadow, fxPad, resolved.width, resolved.height);
+  }
+
+  if (needsFxCanvas && layerCanvas) {
+    compositeLayerFx(
+      ctx, layerCanvas, layer.layerFx, fxPad, frameInLayer,
+      buildFilterString(layer.effects),
+    );
+  } else {
+    // Dispatch to type-specific drawer
+    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Stamp a layer's drop shadow using the already-rendered layer as the mask.
+ * The shadow is drawn on its own canvas, then the layer is erased out of it
+ * with destination-out — leaving only the shadow, in the layer's real shape.
+ */
+function drawSilhouetteShadow(
+  ctx: CanvasRenderingContext2D,
+  layerCanvas: HTMLCanvasElement,
+  bs: BoxShadow,
+  fxPad: number,
+  width: number,
+  height: number,
+): void {
+  const pad = bs.blur + bs.spread + Math.max(Math.abs(bs.offsetX), Math.abs(bs.offsetY)) + 10;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = Math.round(width + pad * 2);
+  offscreen.height = Math.round(height + pad * 2);
+  const oc = offscreen.getContext('2d');
+  if (!oc) return;
+
+  // Line the layer's own origin up with (pad, pad) on the shadow canvas.
+  const dx = pad - fxPad;
+  const dy = pad - fxPad;
+
+  oc.shadowColor = bs.color;
+  oc.shadowBlur = bs.blur + bs.spread;
+  oc.shadowOffsetX = bs.offsetX;
+  oc.shadowOffsetY = bs.offsetY;
+  oc.drawImage(layerCanvas, dx, dy);
+
+  // Erase the layer, leaving only the shadow it cast.
+  oc.globalCompositeOperation = 'destination-out';
+  oc.shadowColor = 'transparent';
+  oc.shadowBlur = 0;
+  oc.shadowOffsetX = 0;
+  oc.shadowOffsetY = 0;
+  oc.drawImage(layerCanvas, dx, dy);
+
+  ctx.drawImage(offscreen, -pad, -pad);
 }
 
 function drawLayer(

@@ -890,6 +890,26 @@ body {
 .ai-save-btn:hover { background: #6d28d9; }
 .ai-save-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
 
+/* ── FX cards (layer FX / scene FX) ────────────────────── */
+
+.fx-card {
+  background: #171717; border: 1px solid #2a2a2a; border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 6px;
+}
+
+.fx-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 2px;
+}
+.fx-card-title { font-size: 11px; font-weight: 600; color: #ddd; }
+.fx-card-hint { font-size: 10px; color: #666; line-height: 1.4; margin-bottom: 6px; }
+
+.fx-slider-field input[type="range"] { flex: 1; min-width: 0; }
+.fx-value {
+  flex-shrink: 0; width: 34px; text-align: right;
+  font-size: 10px; color: #888; font-variant-numeric: tabular-nums;
+}
+
 /* ── Keyframe Editor ───────────────────────────────────── */
 
 .keyframe-editor {

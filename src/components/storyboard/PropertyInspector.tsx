@@ -5,7 +5,12 @@ import type {
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
   ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
+  LayerFxDef, SceneFxDef,
 } from '../../types';
+import {
+  LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES,
+  type FxField,
+} from '../../lib/fx-schema';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
 import { FontPicker } from '../shared/FontPicker';
 import { pickImageFile } from '../../lib/file-utils';
@@ -509,6 +514,130 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
   );
 }
 
+// ── FX lists (layer FX and scene FX share one editor) ─────
+
+/**
+ * Generic add/remove/tune list for schema-described effects. Both layer FX and
+ * scene FX are arrays of discriminated unions with a `type` tag, so the same
+ * component drives both — new effects only need an entry in fx-schema.ts.
+ */
+function FxListEditor<T extends { type: string }>({
+  title, items, specs, typeList, onChange,
+}: {
+  title: string;
+  items: T[];
+  specs: Record<string, { label: string; hint: string; defaults: T; fields: FxField[] }>;
+  typeList: string[];
+  onChange: (items: T[]) => void;
+}) {
+  const used = new Set(items.map((i) => i.type));
+
+  function add(type: string) {
+    onChange([...items, { ...specs[type].defaults }]);
+  }
+
+  function patch(index: number, key: string, value: number | string) {
+    const next = [...items];
+    next[index] = { ...next[index], [key]: value };
+    onChange(next);
+  }
+
+  function remove(index: number) {
+    onChange(items.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>{title}</h4>
+
+      {items.map((item, i) => {
+        const spec = specs[item.type];
+        if (!spec) return null;
+        return (
+          <div key={`${item.type}-${i}`} className="fx-card">
+            <div className="fx-card-header">
+              <span className="fx-card-title">{spec.label}</span>
+              <button className="effect-remove-btn" onClick={() => remove(i)} title="Remove">x</button>
+            </div>
+            <p className="fx-card-hint">{spec.hint}</p>
+            {spec.fields.map((field) => (
+              field.kind === 'color' ? (
+                <label key={field.key} className="prop-field">
+                  <span>{field.label}</span>
+                  <input
+                    type="color"
+                    value={String((item as Record<string, unknown>)[field.key] ?? '#ffffff')}
+                    onChange={(e) => patch(i, field.key, e.target.value)}
+                  />
+                </label>
+              ) : (
+                <label key={field.key} className="prop-field fx-slider-field">
+                  <span>{field.label}</span>
+                  <input
+                    type="range"
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    value={Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                    onChange={(e) => patch(i, field.key, Number(e.target.value))}
+                  />
+                  <span className="fx-value">
+                    {Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                  </span>
+                </label>
+              )
+            ))}
+          </div>
+        );
+      })}
+
+      <select
+        className="effect-add-select"
+        value=""
+        onChange={(e) => {
+          if (e.target.value) {
+            add(e.target.value);
+            e.target.value = '';
+          }
+        }}
+      >
+        <option value="">+ Add {title.toLowerCase()}...</option>
+        {typeList.filter((t) => !used.has(t)).map((t) => (
+          <option key={t} value={t}>{specs[t].label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function LayerFxSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+
+  return (
+    <FxListEditor<LayerFxDef>
+      title="Layer FX"
+      items={layer.layerFx ?? []}
+      specs={LAYER_FX_SPECS}
+      typeList={LAYER_FX_TYPES as string[]}
+      onChange={(layerFx) => updateLayer(sceneIndex, layer.id, { layerFx } as Partial<Layer>)}
+    />
+  );
+}
+
+function SceneFxSection({ scene, sceneIndex }: { scene: Scene; sceneIndex: number }) {
+  const updateScene = useStore((s) => s.updateScene);
+
+  return (
+    <FxListEditor<SceneFxDef>
+      title="Scene FX"
+      items={scene.sceneFx ?? []}
+      specs={SCENE_FX_SPECS}
+      typeList={SCENE_FX_TYPES as string[]}
+      onChange={(sceneFx) => updateScene(sceneIndex, { sceneFx })}
+    />
+  );
+}
+
 const DEFAULT_BOX_SHADOW: BoxShadow = { color: 'rgba(0,0,0,0.5)', blur: 10, offsetX: 4, offsetY: 4, spread: 0 };
 
 function BoxShadowSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: number }) {
@@ -680,7 +809,7 @@ function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: nu
 
 // ── Character Animation (text only) ───────────────────
 
-const CHAR_ANIM_TYPES: CharAnimationType[] = ['none', 'fade-in', 'slide-up', 'slide-down', 'scale-in', 'rotate-in', 'typewriter'];
+const CHAR_ANIM_TYPES: CharAnimationType[] = ['none', 'fade-in', 'slide-up', 'slide-down', 'scale-in', 'rotate-in', 'typewriter', 'scramble', 'wave'];
 const CHAR_ANIM_EASINGS: EasingType[] = ['linear', 'ease-out', 'ease-in', 'ease-in-out', 'ease-out-cubic', 'ease-out-bounce', 'ease-out-elastic'];
 
 function CharAnimationSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: number }) {
@@ -939,6 +1068,8 @@ export function PropertyInspector() {
         fps={composition.output.fps}
       />
 
+      <SceneFxSection scene={scene} sceneIndex={selectedSceneIndex} />
+
       {/* Output preset */}
       <div className="prop-section">
         <h4>Output</h4>
@@ -993,6 +1124,7 @@ export function PropertyInspector() {
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'svg' && <SvgSection layer={layer} sceneIndex={selectedSceneIndex} />}
 
+          <LayerFxSection layer={layer} sceneIndex={selectedSceneIndex} />
           <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
           <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
           <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />

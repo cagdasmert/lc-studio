@@ -2,6 +2,7 @@ import type { TextLayerData, ResolvedTransform, CharAnimationDef } from '../type
 import { resolveNumericProperty, resolveColorProperty } from './interpolation';
 import { createCanvasGradient } from './gradient';
 import { getEasing } from './easing';
+import { hash } from './noise';
 
 export function drawTextLayer(
   ctx: CanvasRenderingContext2D,
@@ -205,8 +206,19 @@ function drawWithCharAnimation(
         progress = easeFn(Math.max(0, Math.min(1, progress)));
       }
 
+      // Wave floats continuously rather than revealing, so it is always drawn
+      if (anim.type === 'wave') progress = 1;
+
+      // Scramble shows random glyphs until the character settles
+      const drawnChar = anim.type === 'scramble' && progress < 1 && progress > 0
+        ? scrambleChar(globalCharIdx, frameInLayer)
+        : ch;
+
       if (progress > 0) {
-        applyCharEffect(ctx, anim, ch, cx, ly, charW, lineHeightPx, progress, layer);
+        applyCharEffect(
+          ctx, anim, drawnChar, cx, ly, charW, lineHeightPx, progress, layer,
+          globalCharIdx, frameInLayer,
+        );
       }
 
       cx += charW + letterSpacing;
@@ -219,6 +231,19 @@ function drawWithCharAnimation(
   ctx.textAlign = savedAlign;
 }
 
+const SCRAMBLE_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@$?/\\<>*+=';
+
+/**
+ * Pick a stand-in glyph for a character that hasn't settled yet. Changes a few
+ * times a second (not every frame, which reads as noise) and is a pure
+ * function of the character index and frame, so renders stay reproducible.
+ */
+function scrambleChar(charIndex: number, frameInLayer: number): string {
+  const tick = Math.floor(frameInLayer / 2);
+  const i = Math.floor(hash(charIndex, tick) * SCRAMBLE_GLYPHS.length);
+  return SCRAMBLE_GLYPHS[Math.min(SCRAMBLE_GLYPHS.length - 1, i)];
+}
+
 function applyCharEffect(
   ctx: CanvasRenderingContext2D,
   anim: CharAnimationDef,
@@ -229,6 +254,8 @@ function applyCharEffect(
   lineH: number,
   progress: number,
   layer: TextLayerData,
+  charIndex: number,
+  frameInLayer: number,
 ): void {
   ctx.save();
 
@@ -275,6 +302,20 @@ function applyCharEffect(
         return;
       }
       break;
+
+    case 'scramble':
+      // Unsettled characters are dimmer, so the settled ones read as "locked in"
+      if (progress < 1) ctx.globalAlpha *= 0.45 + progress * 0.55;
+      break;
+
+    case 'wave': {
+      // staggerFrames sets the phase offset per character, durationFrames the
+      // period — reusing the existing controls rather than adding new ones.
+      const period = Math.max(1, anim.durationFrames);
+      const phase = (frameInLayer / period) * Math.PI * 2 + charIndex * (anim.staggerFrames * 0.2);
+      ctx.translate(0, Math.sin(phase) * lineH * 0.15);
+      break;
+    }
   }
 
   // Stroke

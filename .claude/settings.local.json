@@ -3,7 +3,9 @@
     "allow": [
       "Bash(shopt -s dotglob)",
       "Bash(mv temp-scaffold/* .)",
-      "Bash(rmdir temp-scaffold:*)"
+      "Bash(rmdir temp-scaffold:*)",
+      "Bash(git:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

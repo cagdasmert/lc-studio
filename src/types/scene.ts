@@ -90,7 +90,7 @@ export interface MotionPathDef {
 // ── Per-character text animation ─────────────────────
 
 export type CharAnimationType = 'none' | 'fade-in' | 'slide-up' | 'slide-down'
-  | 'scale-in' | 'rotate-in' | 'typewriter';
+  | 'scale-in' | 'rotate-in' | 'typewriter' | 'scramble' | 'wave';
 
 export interface CharAnimationDef {
   type: CharAnimationType;
@@ -122,6 +122,94 @@ export interface BoxShadow {
   spread: number;
 }
 
+// ── Layer FX ──────────────────────────────────────────
+// Perceptual effects built by compositing the layer more than once, rather
+// than by a CSS filter. All are frame-deterministic: the same frame always
+// produces the same pixels, in preview and in an FFmpeg render alike.
+
+/** Trailing copies of the layer from earlier frames — reads as motion blur. */
+export interface EchoFx {
+  type: 'echo';
+  count: number;       // number of trailing copies
+  frameGap: number;    // frames between copies
+  decay: number;       // 0–1 alpha multiplier per step
+}
+
+/** Colour channels pulled apart — chromatic aberration / glitch. */
+export interface RgbSplitFx {
+  type: 'rgb-split';
+  offset: number;      // px between the red and blue copies
+  angle: number;       // degrees, direction of the split
+  jitter: number;      // 0–1, per-frame randomisation of the offset
+}
+
+/** A specular band sweeping across the layer — the classic chrome glint. */
+export interface ShineFx {
+  type: 'shine';
+  color: string;
+  width: number;       // band width in px
+  angle: number;       // degrees
+  periodFrames: number; // frames per sweep
+  intensity: number;   // 0–1
+}
+
+/** Soft coloured bloom around the layer, optionally pulsing. */
+export interface GlowFx {
+  type: 'glow';
+  color: string;
+  radius: number;
+  intensity: number;    // 0–3, how many passes worth of bloom
+  pulseFrames: number;  // 0 = steady
+}
+
+/** Repeated silhouettes receding at an angle — fake 3D extrusion. */
+export interface LongShadowFx {
+  type: 'long-shadow';
+  color: string;
+  distance: number;  // px
+  angle: number;     // degrees
+  fade: number;      // 0–1, alpha falloff along the extrusion
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx;
+export type LayerFxType = LayerFxDef['type'];
+
+// ── Scene FX ──────────────────────────────────────────
+// Full-frame treatments applied after the scene is composited.
+
+/** Animated film grain. */
+export interface GrainFx {
+  type: 'grain';
+  amount: number;  // 0–1
+  scale: number;   // px per noise cell
+}
+
+/** Darkened corners. */
+export interface VignetteFx {
+  type: 'vignette';
+  amount: number;  // 0–1
+  radius: number;  // 0–1, where the falloff starts
+}
+
+/** CRT scanlines with an optional vertical roll. */
+export interface ScanlinesFx {
+  type: 'scanlines';
+  amount: number;    // 0–1
+  spacing: number;   // px between lines
+  rollSpeed: number; // px per frame, 0 = static
+}
+
+/** Camera shake — the frame is scaled up slightly and jittered. */
+export interface ShakeFx {
+  type: 'shake';
+  amplitude: number;    // px
+  frequency: number;    // oscillations per second
+  decayFrames: number;  // 0 = never settles
+}
+
+export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx;
+export type SceneFxType = SceneFxDef['type'];
+
 export interface LayerBase {
   id: string;
   name: string;
@@ -143,6 +231,7 @@ export interface LayerBase {
   zIndex: number;
   blendMode: BlendMode;
   effects: LayerEffect[];
+  layerFx?: LayerFxDef[];
   boxShadow?: BoxShadow | null;
   clipPath?: ClipPathDef | null;
   motionPath?: MotionPathDef | null;
@@ -282,6 +371,7 @@ export interface Scene {
   backgroundImage?: string;
   backgroundImageFit?: ImageFitMode;
   layers: Layer[];
+  sceneFx?: SceneFxDef[];
   transition: TransitionType;
   transitionDurationFrames: number;
 }
