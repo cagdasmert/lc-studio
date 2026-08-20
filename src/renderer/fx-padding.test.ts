@@ -26,6 +26,16 @@ describe('fxPadding', () => {
     ];
     expect(fxPadding(withWindow)).toBe(fxPadding(without));
   });
+
+  it('takes glitch padding from its parameters, not the envelope', () => {
+    const base = { type: 'glitch', bands: 12, maxOffset: 30, channelShift: 6, probability: 0.25 } as const;
+    const withWindow: LayerFxDef[] = [{
+      ...base,
+      window: { inDelay: 0, inFrames: 10, outFrames: 0, easing: 'linear' },
+    }];
+    expect(fxPadding([{ ...base }])).toBe(36);
+    expect(fxPadding(withWindow)).toBe(36);
+  });
 });
 
 describe('REVEAL_FX', () => {

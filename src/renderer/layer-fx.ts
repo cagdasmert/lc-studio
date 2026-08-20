@@ -235,11 +235,13 @@ function drawGlitch(
   const h = bitmap.height;
   const size = h / bands;
 
-  // `cs` and the channel bitmaps depend only on the bitmap/params, not on the
-  // band, so they're computed once here rather than per torn band.
+  // `cs` doesn't vary per band, so it's computed once here. The channel
+  // bitmaps are built lazily, on the first band that actually tears — a
+  // frame where every band fails its probability gate should pay nothing,
+  // and a frame with several torn bands should pay for the two canvases once.
   const cs = fx.channelShift * env;
-  const r = cs > 0 ? channel(bitmap, '#ff0000') : null;
-  const b = cs > 0 ? channel(bitmap, '#0000ff') : null;
+  let r: HTMLCanvasElement | null = null;
+  let b: HTMLCanvasElement | null = null;
 
   ctx.save();
   for (let i = 0; i < bands; i++) {
@@ -258,7 +260,9 @@ function drawGlitch(
     ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(bitmap, 0, sy, w, sh, shift, sy, w, sh);
 
-    if (r && b) {
+    if (cs > 0) {
+      if (!r) r = channel(bitmap, '#ff0000');
+      if (!b) b = channel(bitmap, '#0000ff');
       ctx.globalCompositeOperation = 'lighter';
       ctx.drawImage(r, 0, sy, w, sh, shift - cs, sy, w, sh);
       ctx.drawImage(b, 0, sy, w, sh, shift + cs, sy, w, sh);
