@@ -56,10 +56,11 @@ describe('envelope', () => {
 
   it('multiplies rather than mins, so overlapping windows never reach full', () => {
     // duration 12 -> lastFrame 11, outStart 1. Entrance and exit overlap.
+    // enter = ease(6/10) = 0.6, exit = ease(1 - (6-1)/10) = ease(0.5) = 0.5.
+    // enter * exit = 0.3; Math.min(enter, exit) would be 0.5 and fail this.
     const w = linear({ inFrames: 10, outFrames: 10 });
     const mid = envelope(w, 6, 12, true);
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(1);
+    expect(mid).toBeCloseTo(0.3);
   });
 
   it('preserves easing overshoot when clamp is false', () => {
