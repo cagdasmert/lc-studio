@@ -217,7 +217,16 @@ export interface SliceFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx;
+/** Masked reveal — a soft edge sweeps across and the layer appears behind it. */
+export interface WipeFx {
+  type: 'wipe';
+  shape: 'linear' | 'iris' | 'barn';
+  angle: number;     // degrees; applies to linear and barn
+  softness: number;  // px of gradient ramp; 0 = hard edge
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

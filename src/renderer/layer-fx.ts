@@ -1,5 +1,5 @@
 import type {
-  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx,
+  LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx, PixelateFx, SliceFx, WipeFx,
 } from '../types';
 import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
@@ -14,13 +14,13 @@ import { bandOrderPosition, bandProgress } from './fx-geometry';
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
  *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice'];
+const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
  *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
  *  that module, so the knowledge is duplicated and a test keeps them in sync. */
-export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate', 'slice'];
+export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate', 'slice', 'wipe'];
 
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,
@@ -325,6 +325,78 @@ function applySlice(
   return out;
 }
 
+function applyWipe(
+  src: HTMLCanvasElement,
+  fx: WipeFx,
+  env: number,
+): HTMLCanvasElement {
+  const t = Math.max(0, Math.min(1, env));
+  if (t >= 1) return src;
+
+  const w = src.width;
+  const h = src.height;
+  const out = createCanvas(w, h);
+  const octx = out.getContext('2d');
+  if (!octx) return src;
+  octx.drawImage(src, 0, 0);
+
+  // Build the mask, then keep only what it covers.
+  const mask = createCanvas(w, h);
+  const mctx = mask.getContext('2d');
+  if (!mctx) return src;
+
+  const soft = Math.max(0, fx.softness);
+
+  if (fx.shape === 'iris') {
+    const maxR = Math.hypot(w, h) / 2;
+    const r = t * (maxR + soft);
+    const inner = Math.max(0, r - soft);
+    const grad = mctx.createRadialGradient(w / 2, h / 2, inner, w / 2, h / 2, Math.max(inner + 0.01, r));
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(1, 'transparent');
+    mctx.fillStyle = grad;
+    mctx.fillRect(0, 0, w, h);
+  } else {
+    const rad = (fx.angle * Math.PI) / 180;
+    const dx = Math.cos(rad);
+    const dy = Math.sin(rad);
+    const span = Math.abs(w * dx) + Math.abs(h * dy);
+    // Barn doors open from the centre outward, so each half covers half the
+    // span in the same time a linear wipe covers all of it.
+    const reach = fx.shape === 'barn' ? (t * (span / 2 + soft)) : (t * (span + soft));
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const edge = (from: number, to: number) => {
+      const grad = mctx.createLinearGradient(
+        cx + dx * from, cy + dy * from,
+        cx + dx * to, cy + dy * to,
+      );
+      grad.addColorStop(0, '#fff');
+      grad.addColorStop(1, 'transparent');
+      return grad;
+    };
+
+    if (fx.shape === 'barn') {
+      // At softness 0 `from` and `to` coincide (a zero-length gradient renders
+      // unpredictably), so each door's far endpoint is nudged a hair past the
+      // near one — same guard the iris branch uses for its radii.
+      mctx.fillStyle = edge(reach - soft, Math.max(reach - soft + 0.01, reach));
+      mctx.fillRect(0, 0, w, h);
+      mctx.fillStyle = edge(-(reach - soft), Math.min(-(reach - soft) - 0.01, -reach));
+      mctx.fillRect(0, 0, w, h);
+    } else {
+      const head = -span / 2 + reach;
+      mctx.fillStyle = edge(head - soft - span, head);
+      mctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  octx.globalCompositeOperation = 'destination-in';
+  octx.drawImage(mask, 0, 0);
+  return out;
+}
+
 /**
  * Run every bitmap-stage reveal in list order. Reveals go before decorations
  * so that glow, shadow and shine bloom off what is actually visible rather
@@ -351,6 +423,9 @@ export function applyReveals(
         break;
       case 'slice':
         current = applySlice(current, f, env);
+        break;
+      case 'wipe':
+        current = applyWipe(current, f, env);
         break;
       default:
         break;

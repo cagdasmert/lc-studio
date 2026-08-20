@@ -150,6 +150,21 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('stagger', 'Stagger', 0, 0.95, 0.05),
     ],
   },
+  wipe: {
+    label: 'Wipe reveal',
+    hint: 'A soft edge sweeps across. Linear, iris, or barn doors.',
+    kind: 'reveal',
+    defaults: { type: 'wipe', shape: 'linear', angle: 0, softness: 40, window: { ...DEFAULT_FX_WINDOW } },
+    fields: [
+      select('shape', 'Shape', [
+        { value: 'linear', label: 'Linear' },
+        { value: 'iris', label: 'Iris' },
+        { value: 'barn', label: 'Barn doors' },
+      ]),
+      num('angle', 'Angle', 0, 360, 5),
+      num('softness', 'Softness', 0, 300, 5),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {

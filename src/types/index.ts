@@ -29,6 +29,7 @@ export type {
   ZoomFx,
   PixelateFx,
   SliceFx,
+  WipeFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,
