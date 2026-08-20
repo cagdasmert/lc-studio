@@ -630,17 +630,31 @@ function FxListEditor<T extends { type: string }>({
             ))}
             {showEnvelope && (() => {
               const win = (item as Record<string, unknown>).window as FxWindow | undefined;
+              // A reveal IS its timing — with no window the envelope sits at 1,
+              // which for a reveal means "already fully revealed", so the effect
+              // stays in the list and does nothing. Continuous effects are the
+              // opposite: no window is their normal always-on state. So reveals
+              // get the controls unconditionally and no way to switch them off.
+              const isReveal = spec.kind === 'reveal';
+              // Reveal specs ship a default window, but a hand-edited project
+              // could omit one. Show the defaults rather than an empty panel;
+              // patchWindow writes a real window on the first edit.
+              const shown = isReveal ? (win ?? DEFAULT_FX_WINDOW) : win;
               return (
                 <div className="fx-envelope">
-                  <label className="fx-envelope-toggle">
-                    <input
-                      type="checkbox"
-                      checked={!!win}
-                      onChange={(e) => toggleWindow(i, e.target.checked)}
-                    />
-                    <span>Timing</span>
-                  </label>
-                  {win && (
+                  {isReveal ? (
+                    <span className="fx-envelope-title">Timing</span>
+                  ) : (
+                    <label className="fx-envelope-toggle">
+                      <input
+                        type="checkbox"
+                        checked={!!win}
+                        onChange={(e) => toggleWindow(i, e.target.checked)}
+                      />
+                      <span>Timing</span>
+                    </label>
+                  )}
+                  {shown && (
                     <>
                       {([
                         ['inDelay', 'Delay', 0, 120],
@@ -654,16 +668,16 @@ function FxListEditor<T extends { type: string }>({
                             min={min}
                             max={max}
                             step={1}
-                            value={win[key]}
+                            value={shown[key]}
                             onChange={(e) => patchWindow(i, key, Number(e.target.value))}
                           />
-                          <span className="fx-value">{win[key]}</span>
+                          <span className="fx-value">{shown[key]}</span>
                         </label>
                       ))}
                       <label className="prop-field">
                         <span>Easing</span>
                         <select
-                          value={win.easing}
+                          value={shown.easing}
                           onChange={(e) => patchWindow(i, 'easing', e.target.value)}
                         >
                           {EASING_OPTIONS.map((t) => (

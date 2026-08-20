@@ -925,6 +925,15 @@ body {
   margin-bottom: 6px;
 }
 .fx-envelope-toggle input { margin: 0; }
+/* Reveals get the same heading without a checkbox — their timing is not
+   optional, so there is nothing to switch off. */
+.fx-envelope-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ddd;
+  margin-bottom: 6px;
+}
 
 /* ── Keyframe Editor ───────────────────────────────────── */
 

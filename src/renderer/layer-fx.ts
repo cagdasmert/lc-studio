@@ -13,8 +13,17 @@ import { bandOrderPosition, bandProgress } from './fx-geometry';
  */
 
 /** FX that need the layer bitmap. `echo` is not here — it re-runs the whole
- *  layer draw at earlier frames, so it lives in draw.ts. */
-const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch', 'outline', 'gooey'];
+ *  layer draw at earlier frames, so it lives in draw.ts. `zoom` is not here
+ *  either — it only writes the resolved transform, so forcing the bitmap path
+ *  for it would allocate an offscreen canvas nothing reads.
+ *
+ *  Every OTHER reveal must appear here, and the omission is silent rather than
+ *  loud: `hasBitmapFx` would return false, `compositeLayerFx` would never run,
+ *  and the effect would simply not happen. Worse, `drawLayerAtFrame` reveals
+ *  the bitmap it hands the box shadow, so a reveal missing from this list
+ *  would reveal the shadow while the layer itself direct-draws unrevealed.
+ *  fx-kinds.test.ts asserts the containment. */
+export const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch', 'outline', 'gooey'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
@@ -48,23 +57,35 @@ export function fxEnv(
 /**
  * Extra room the bitmap needs around the layer so effects that reach outside
  * the layer box (bloom, extrusion, channel offsets) aren't cut off.
+ *
+ * Two classes, and they add rather than max against each other. Decorations
+ * each measure outward from wherever the content sits, so the widest one
+ * covers the rest. Reveals *move* the content — slice pushes bands out by up
+ * to `travel` — so a reveal's padding is consumed by the displacement itself
+ * and leaves nothing for a decoration to bloom into. Taking a single max
+ * across both classes clips a glow stacked on a slice until the reveal
+ * finishes.
+ *
+ * Never derive any of this from the envelope: a canvas that changes size
+ * between frames resamples differently each frame and crawls at the edges.
  */
 export function fxPadding(fx: LayerFxDef[] | undefined): number {
   if (!fx) return 0;
-  let pad = 0;
+  let decoration = 0;
+  let displacement = 0;
   for (const f of fx) {
     switch (f.type) {
-      case 'glow': pad = Math.max(pad, f.radius * 2); break;
-      case 'long-shadow': pad = Math.max(pad, f.distance + 4); break;
-      case 'rgb-split': pad = Math.max(pad, f.offset * 2 + 4); break;
-      case 'slice': pad = Math.max(pad, Math.abs(f.travel)); break;
-      case 'glitch': pad = Math.max(pad, f.maxOffset + f.channelShift); break;
-      case 'outline': pad = Math.max(pad, f.width + 2); break;
-      case 'gooey': pad = Math.max(pad, f.blur * 2); break;
+      case 'glow': decoration = Math.max(decoration, f.radius * 2); break;
+      case 'long-shadow': decoration = Math.max(decoration, f.distance + 4); break;
+      case 'rgb-split': decoration = Math.max(decoration, f.offset * 2 + 4); break;
+      case 'glitch': decoration = Math.max(decoration, f.maxOffset + f.channelShift); break;
+      case 'outline': decoration = Math.max(decoration, f.width + 2); break;
+      case 'gooey': decoration = Math.max(decoration, f.blur * 2); break;
+      case 'slice': displacement = Math.max(displacement, Math.abs(f.travel)); break;
       default: break;
     }
   }
-  return Math.ceil(pad);
+  return Math.ceil(decoration + displacement);
 }
 
 function createCanvas(w: number, h: number): HTMLCanvasElement {

@@ -106,7 +106,12 @@ function drawLayerAtFrame(
   let revealAlpha = 1;
   if (zoom) {
     const e = fxEnv(zoom, frameInLayer, layerDuration);
-    const scale = zoom.from + (1 - zoom.from) * e;
+    // Reveals read `env` unclamped so back/elastic easings overshoot — that is
+    // the look. But the in-elastic family dips to about -0.354 on the way out,
+    // and a small `from` turns that into a negative scale, which mirrors the
+    // layer for a frame or two. Overshoot past full size is wanted; flipping
+    // through zero is not, so the scale floors just above it.
+    const scale = Math.max(zoom.from + (1 - zoom.from) * e, 0.001);
     resolved.scaleX *= scale;
     resolved.scaleY *= scale;
     if (zoom.fade > 0) {
