@@ -2,6 +2,7 @@ import type {
   LayerFxDef, LayerFxType, RgbSplitFx, ShineFx, GlowFx, LongShadowFx,
 } from '../types';
 import { signedHash } from './noise';
+import { envelope } from './fx-envelope';
 
 /**
  * Layer FX are composited from the layer's own rendered pixels: draw the layer
@@ -14,6 +15,12 @@ import { signedHash } from './noise';
  *  layer draw at earlier frames, so it lives in draw.ts. */
 const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow'];
 
+/** FX whose geometry is driven by the envelope rather than merely dimmed by
+ *  it. These read `env` unclamped so back/elastic easings can overshoot.
+ *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
+ *  that module, so the knowledge is duplicated and a test keeps them in sync. */
+export const REVEAL_FX: LayerFxType[] = [];
+
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,
   type: T,
@@ -23,6 +30,18 @@ export function getFx<T extends LayerFxDef['type']>(
 
 export function hasBitmapFx(fx: LayerFxDef[] | undefined): boolean {
   return !!fx?.some((f) => BITMAP_FX.includes(f.type));
+}
+
+/** The envelope scalar for one effect on one frame. Reveals read it
+ *  unclamped; continuous effects are clamped so they can't go negative. */
+export function fxEnv(
+  fx: LayerFxDef,
+  frameInLayer: number,
+  layerDuration: number,
+): number {
+  return envelope(
+    fx.window, frameInLayer, layerDuration, !REVEAL_FX.includes(fx.type),
+  );
 }
 
 /**
@@ -212,6 +231,7 @@ export function compositeLayerFx(
   fx: LayerFxDef[] | undefined,
   pad: number,
   frameInLayer: number,
+  layerDuration: number,
   filter: string,
 ): void {
   const longShadow = getFx(fx, 'long-shadow');
@@ -223,16 +243,34 @@ export function compositeLayerFx(
   ctx.translate(-pad, -pad);
   if (filter !== 'none') ctx.filter = filter;
 
-  if (longShadow) drawLongShadow(ctx, bitmap, longShadow);
-  if (glow) drawGlow(ctx, bitmap, glow, frameInLayer);
+  if (longShadow) {
+    const e = fxEnv(longShadow, frameInLayer, layerDuration);
+    if (e > 0) {
+      drawLongShadow(ctx, bitmap, { ...longShadow, distance: longShadow.distance * e });
+    }
+  }
+  if (glow) {
+    const e = fxEnv(glow, frameInLayer, layerDuration);
+    if (e > 0) {
+      drawGlow(ctx, bitmap, { ...glow, radius: glow.radius * e }, frameInLayer);
+    }
+  }
 
-  if (rgbSplit) {
-    drawRgbSplit(ctx, bitmap, rgbSplit, frameInLayer);
+  const splitEnv = rgbSplit ? fxEnv(rgbSplit, frameInLayer, layerDuration) : 0;
+  if (rgbSplit && splitEnv > 0) {
+    drawRgbSplit(
+      ctx, bitmap, { ...rgbSplit, offset: rgbSplit.offset * splitEnv }, frameInLayer,
+    );
   } else {
     ctx.drawImage(bitmap, 0, 0);
   }
 
-  if (shine) drawShine(ctx, bitmap, shine, frameInLayer);
+  if (shine) {
+    const e = fxEnv(shine, frameInLayer, layerDuration);
+    if (e > 0) {
+      drawShine(ctx, bitmap, { ...shine, intensity: shine.intensity * e }, frameInLayer);
+    }
+  }
 
   ctx.filter = 'none';
   ctx.restore();

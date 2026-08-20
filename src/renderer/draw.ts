@@ -3,7 +3,7 @@ import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
-import { getFx, hasBitmapFx, fxPadding, compositeLayerFx } from './layer-fx';
+import { getFx, fxEnv, hasBitmapFx, fxPadding, compositeLayerFx } from './layer-fx';
 import { createCanvasGradient } from './gradient';
 import { evaluateMotionPath } from './motion-path';
 import { drawTextLayer } from './draw-text';
@@ -41,13 +41,18 @@ export function drawSceneLayers(
     // Drawn first so the trail sits behind the layer itself.
     const echo = getFx(layer.layerFx, 'echo');
     if (echo && echo.count > 0 && echo.frameGap > 0) {
-      for (let step = echo.count; step >= 1; step--) {
-        const pastFrame = frameInScene - step * echo.frameGap;
-        if (pastFrame < layer.startFrame) continue;
-        drawLayerAtFrame(
-          ctx, layer, pastFrame, mediaCache, fps, videoCache,
-          Math.pow(echo.decay, step),
-        );
+      const echoEnv = fxEnv(
+        echo, frameInScene - layer.startFrame, layer.endFrame - layer.startFrame,
+      );
+      if (echoEnv > 0) {
+        for (let step = echo.count; step >= 1; step--) {
+          const pastFrame = frameInScene - step * echo.frameGap;
+          if (pastFrame < layer.startFrame) continue;
+          drawLayerAtFrame(
+            ctx, layer, pastFrame, mediaCache, fps, videoCache,
+            Math.pow(echo.decay, step) * echoEnv,
+          );
+        }
       }
     }
 
@@ -148,6 +153,7 @@ function drawLayerAtFrame(
   if (needsFxCanvas && layerCanvas) {
     compositeLayerFx(
       ctx, layerCanvas, layer.layerFx, fxPad, frameInLayer,
+      layer.endFrame - layer.startFrame,
       buildFilterString(layer.effects),
     );
   } else {

@@ -146,6 +146,7 @@ export interface EchoFx {
   count: number;       // number of trailing copies
   frameGap: number;    // frames between copies
   decay: number;       // 0–1 alpha multiplier per step
+  window?: FxWindow;
 }
 
 /** Colour channels pulled apart — chromatic aberration / glitch. */
@@ -154,6 +155,7 @@ export interface RgbSplitFx {
   offset: number;      // px between the red and blue copies
   angle: number;       // degrees, direction of the split
   jitter: number;      // 0–1, per-frame randomisation of the offset
+  window?: FxWindow;
 }
 
 /** A specular band sweeping across the layer — the classic chrome glint. */
@@ -164,6 +166,7 @@ export interface ShineFx {
   angle: number;       // degrees
   periodFrames: number; // frames per sweep
   intensity: number;   // 0–1
+  window?: FxWindow;
 }
 
 /** Soft coloured bloom around the layer, optionally pulsing. */
@@ -173,6 +176,7 @@ export interface GlowFx {
   radius: number;
   intensity: number;    // 0–3, how many passes worth of bloom
   pulseFrames: number;  // 0 = steady
+  window?: FxWindow;
 }
 
 /** Repeated silhouettes receding at an angle — fake 3D extrusion. */
@@ -182,6 +186,7 @@ export interface LongShadowFx {
   distance: number;  // px
   angle: number;     // degrees
   fade: number;      // 0–1, alpha falloff along the extrusion
+  window?: FxWindow;
 }
 
 export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx;
