@@ -1,4 +1,4 @@
-import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType } from '../types';
+import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow } from '../types';
 
 /**
  * UI metadata for effects: label, default parameters, and the controls to
@@ -6,18 +6,28 @@ import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType } from '../types'
  * what the inspector offers.
  */
 
+export interface FxFieldOption {
+  value: string;
+  label: string;
+}
+
 export interface FxField {
   key: string;
   label: string;
-  kind: 'number' | 'color';
+  kind: 'number' | 'color' | 'select';
   min?: number;
   max?: number;
   step?: number;
+  options?: FxFieldOption[];  // required when kind is 'select'
 }
 
 export interface FxSpec<T> {
   label: string;
   hint: string;
+  /** 'reveal' effects are driven by the envelope; 'continuous' ones are
+   *  merely dimmed by it. UI only — the renderer keeps its own REVEAL_FX
+   *  list in layer-fx.ts and must not import this module. */
+  kind: 'reveal' | 'continuous';
   defaults: T;
   fields: FxField[];
 }
@@ -27,10 +37,19 @@ const num = (key: string, label: string, min: number, max: number, step = 1): Fx
 
 const color = (key: string, label: string): FxField => ({ key, label, kind: 'color' });
 
+export const select = (key: string, label: string, options: FxFieldOption[]): FxField =>
+  ({ key, label, kind: 'select', options });
+
+/** What a reveal gets when you add it: a 12-frame entrance, no exit. */
+export const DEFAULT_FX_WINDOW: FxWindow = {
+  inDelay: 0, inFrames: 12, outFrames: 0, easing: 'ease-out-cubic',
+};
+
 export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
   echo: {
     label: 'Echo trail',
     hint: 'Copies of the layer from earlier frames — reads as motion blur.',
+    kind: 'continuous',
     defaults: { type: 'echo', count: 5, frameGap: 2, decay: 0.6 },
     fields: [
       num('count', 'Copies', 1, 20),
@@ -41,6 +60,7 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
   'rgb-split': {
     label: 'RGB split',
     hint: 'Colour channels pulled apart — chromatic aberration / glitch.',
+    kind: 'continuous',
     defaults: { type: 'rgb-split', offset: 6, angle: 0, jitter: 0 },
     fields: [
       num('offset', 'Offset', 0, 60),
@@ -51,6 +71,7 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
   shine: {
     label: 'Shine sweep',
     hint: 'A specular band travelling across the layer.',
+    kind: 'continuous',
     defaults: { type: 'shine', color: '#ffffff', width: 120, angle: 20, periodFrames: 60, intensity: 0.8 },
     fields: [
       color('color', 'Colour'),
@@ -63,6 +84,7 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
   glow: {
     label: 'Neon glow',
     hint: 'Coloured bloom around the layer, optionally pulsing.',
+    kind: 'continuous',
     defaults: { type: 'glow', color: '#e94560', radius: 24, intensity: 2, pulseFrames: 0 },
     fields: [
       color('color', 'Colour'),
@@ -74,6 +96,7 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
   'long-shadow': {
     label: 'Long shadow',
     hint: 'Repeated silhouettes receding at an angle — fake 3D extrusion.',
+    kind: 'continuous',
     defaults: { type: 'long-shadow', color: '#000000', distance: 40, angle: 45, fade: 0.7 },
     fields: [
       color('color', 'Colour'),
@@ -88,6 +111,7 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
   grain: {
     label: 'Film grain',
     hint: 'Animated noise over the whole frame.',
+    kind: 'continuous',
     defaults: { type: 'grain', amount: 0.15, scale: 2 },
     fields: [
       num('amount', 'Amount', 0, 1, 0.01),
@@ -97,6 +121,7 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
   vignette: {
     label: 'Vignette',
     hint: 'Darkened corners that pull the eye to the centre.',
+    kind: 'continuous',
     defaults: { type: 'vignette', amount: 0.5, radius: 0.45 },
     fields: [
       num('amount', 'Amount', 0, 1, 0.05),
@@ -106,6 +131,7 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
   scanlines: {
     label: 'Scanlines',
     hint: 'CRT lines, with an optional vertical roll.',
+    kind: 'continuous',
     defaults: { type: 'scanlines', amount: 0.25, spacing: 4, rollSpeed: 0 },
     fields: [
       num('amount', 'Amount', 0, 1, 0.05),
@@ -116,6 +142,7 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
   shake: {
     label: 'Camera shake',
     hint: 'Jitters the whole frame; decays to still if you set a decay.',
+    kind: 'continuous',
     defaults: { type: 'shake', amplitude: 8, frequency: 12, decayFrames: 0 },
     fields: [
       num('amplitude', 'Amplitude', 0, 80),

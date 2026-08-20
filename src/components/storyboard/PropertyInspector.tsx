@@ -5,10 +5,10 @@ import type {
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
   ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
-  LayerFxDef, SceneFxDef,
+  LayerFxDef, SceneFxDef, FxWindow,
 } from '../../types';
 import {
-  LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES,
+  LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES, DEFAULT_FX_WINDOW,
   type FxField,
 } from '../../lib/fx-schema';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
@@ -24,6 +24,17 @@ const BLEND_MODES: BlendMode[] = [
 ];
 const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
 const FONT_WEIGHTS: FontWeight[] = ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+const EASING_OPTIONS: EasingType[] = [
+  'linear',
+  'ease-in', 'ease-out', 'ease-in-out',
+  'ease-in-cubic', 'ease-out-cubic', 'ease-in-out-cubic',
+  'ease-in-sine', 'ease-out-sine', 'ease-in-out-sine',
+  'ease-in-expo', 'ease-out-expo', 'ease-in-out-expo',
+  'ease-in-circ', 'ease-out-circ', 'ease-in-out-circ',
+  'ease-in-back', 'ease-out-back', 'ease-in-out-back',
+  'ease-in-elastic', 'ease-out-elastic', 'ease-in-out-elastic',
+  'ease-in-bounce', 'ease-out-bounce', 'ease-in-out-bounce',
+];
 
 function NumericField({ label, value, onChange, min, max, step = 1 }: {
   label: string; value: number; onChange: (v: number) => void;
@@ -522,13 +533,14 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
  * component drives both — new effects only need an entry in fx-schema.ts.
  */
 function FxListEditor<T extends { type: string }>({
-  title, items, specs, typeList, onChange,
+  title, items, specs, typeList, onChange, showEnvelope = false,
 }: {
   title: string;
   items: T[];
-  specs: Record<string, { label: string; hint: string; defaults: T; fields: FxField[] }>;
+  specs: Record<string, { label: string; hint: string; kind: 'reveal' | 'continuous'; defaults: T; fields: FxField[] }>;
   typeList: string[];
   onChange: (items: T[]) => void;
+  showEnvelope?: boolean;
 }) {
   const used = new Set(items.map((i) => i.type));
 
@@ -539,6 +551,23 @@ function FxListEditor<T extends { type: string }>({
   function patch(index: number, key: string, value: number | string) {
     const next = [...items];
     next[index] = { ...next[index], [key]: value };
+    onChange(next);
+  }
+
+  function patchWindow(index: number, key: string, value: number | string) {
+    const next = [...items];
+    const current = (next[index] as Record<string, unknown>).window as FxWindow | undefined;
+    const base = current ?? DEFAULT_FX_WINDOW;
+    next[index] = { ...next[index], window: { ...base, [key]: value } };
+    onChange(next);
+  }
+
+  function toggleWindow(index: number, on: boolean) {
+    const next = [...items];
+    const copy = { ...next[index] } as Record<string, unknown>;
+    if (on) copy.window = { ...DEFAULT_FX_WINDOW };
+    else delete copy.window;
+    next[index] = copy as T;
     onChange(next);
   }
 
@@ -570,6 +599,18 @@ function FxListEditor<T extends { type: string }>({
                     onChange={(e) => patch(i, field.key, e.target.value)}
                   />
                 </label>
+              ) : field.kind === 'select' ? (
+                <label key={field.key} className="prop-field">
+                  <span>{field.label}</span>
+                  <select
+                    value={String((item as Record<string, unknown>)[field.key] ?? '')}
+                    onChange={(e) => patch(i, field.key, e.target.value)}
+                  >
+                    {(field.options ?? []).map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
               ) : (
                 <label key={field.key} className="prop-field fx-slider-field">
                   <span>{field.label}</span>
@@ -587,6 +628,54 @@ function FxListEditor<T extends { type: string }>({
                 </label>
               )
             ))}
+            {showEnvelope && (() => {
+              const win = (item as Record<string, unknown>).window as FxWindow | undefined;
+              return (
+                <div className="fx-envelope">
+                  <label className="fx-envelope-toggle">
+                    <input
+                      type="checkbox"
+                      checked={!!win}
+                      onChange={(e) => toggleWindow(i, e.target.checked)}
+                    />
+                    <span>Timing</span>
+                  </label>
+                  {win && (
+                    <>
+                      {([
+                        ['inDelay', 'Delay', 0, 120],
+                        ['inFrames', 'In', 0, 120],
+                        ['outFrames', 'Out', 0, 120],
+                      ] as const).map(([key, label, min, max]) => (
+                        <label key={key} className="prop-field fx-slider-field">
+                          <span>{label}</span>
+                          <input
+                            type="range"
+                            min={min}
+                            max={max}
+                            step={1}
+                            value={win[key]}
+                            onChange={(e) => patchWindow(i, key, Number(e.target.value))}
+                          />
+                          <span className="fx-value">{win[key]}</span>
+                        </label>
+                      ))}
+                      <label className="prop-field">
+                        <span>Easing</span>
+                        <select
+                          value={win.easing}
+                          onChange={(e) => patchWindow(i, 'easing', e.target.value)}
+                        >
+                          {EASING_OPTIONS.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -620,6 +709,7 @@ function LayerFxSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
       specs={LAYER_FX_SPECS}
       typeList={LAYER_FX_TYPES as string[]}
       onChange={(layerFx) => updateLayer(sceneIndex, layer.id, { layerFx } as Partial<Layer>)}
+      showEnvelope
     />
   );
 }
