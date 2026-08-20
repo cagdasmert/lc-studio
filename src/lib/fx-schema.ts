@@ -105,6 +105,16 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('fade', 'Fade', 0, 1, 0.05),
     ],
   },
+  zoom: {
+    label: 'Zoom reveal',
+    hint: 'Punches in or recedes as it appears. Set From above 1 to zoom out.',
+    kind: 'reveal',
+    defaults: { type: 'zoom', from: 0.6, fade: 1, window: { ...DEFAULT_FX_WINDOW } },
+    fields: [
+      num('from', 'From', 0.1, 3, 0.05),
+      num('fade', 'Fade', 0, 1, 0.05),
+    ],
+  },
 };
 
 export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {

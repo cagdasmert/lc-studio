@@ -189,7 +189,15 @@ export interface LongShadowFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx;
+/** Scale-based reveal — punches in from `from` (or recedes, when from > 1). */
+export interface ZoomFx {
+  type: 'zoom';
+  from: number;    // starting scale multiplier; <1 punches in, >1 recedes
+  fade: number;    // 0–1, how much layer alpha is coupled to the envelope
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

@@ -19,7 +19,7 @@ const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow'];
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
  *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
  *  that module, so the knowledge is duplicated and a test keeps them in sync. */
-export const REVEAL_FX: LayerFxType[] = [];
+export const REVEAL_FX: LayerFxType[] = ['zoom'];
 
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,

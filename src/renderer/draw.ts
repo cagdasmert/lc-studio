@@ -75,10 +75,10 @@ function drawLayerAtFrame(
 ): void {
   const frameInLayer = frameInScene - layer.startFrame;
   const resolved = resolveLayerTransform(layer, frameInLayer);
+  const layerDuration = layer.endFrame - layer.startFrame;
 
   // Motion path override — replaces x/y (and optionally rotation)
   if (layer.motionPath && layer.motionPath.points.length >= 2) {
-    const layerDuration = layer.endFrame - layer.startFrame;
     const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
     const pos = evaluateMotionPath(layer.motionPath, t);
     resolved.x = pos.x;
@@ -88,10 +88,24 @@ function drawLayerAtFrame(
     }
   }
 
+  // Zoom reveal runs here, not in compositeLayerFx: it changes the resolved
+  // scale, and `resolved` is what sizes the offscreen canvas further down.
+  const zoom = getFx(layer.layerFx, 'zoom');
+  let revealAlpha = 1;
+  if (zoom) {
+    const e = fxEnv(zoom, frameInLayer, layerDuration);
+    const scale = zoom.from + (1 - zoom.from) * e;
+    resolved.scaleX *= scale;
+    resolved.scaleY *= scale;
+    if (zoom.fade > 0) {
+      revealAlpha *= 1 - zoom.fade + zoom.fade * Math.max(0, Math.min(1, e));
+    }
+  }
+
   ctx.save();
 
   // Opacity (clamp to valid range)
-  ctx.globalAlpha *= Math.max(0, Math.min(1, resolved.opacity)) * alphaMultiplier;
+  ctx.globalAlpha *= Math.max(0, Math.min(1, resolved.opacity)) * alphaMultiplier * revealAlpha;
   if (ctx.globalAlpha <= 0) {
     ctx.restore();
     return;

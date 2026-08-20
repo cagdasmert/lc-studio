@@ -26,6 +26,7 @@ export type {
   ShineFx,
   GlowFx,
   LongShadowFx,
+  ZoomFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,
