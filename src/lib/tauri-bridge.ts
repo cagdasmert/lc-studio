@@ -16,13 +16,16 @@ export async function startRender(params: {
   format?: ExportFormat;
   quality?: QualityPreset;
 }): Promise<void> {
+  // Command argument keys must be camelCase — Tauri v2 maps them to the
+  // snake_case Rust parameters. The nested audio-track fields, by contrast,
+  // are deserialized by serde and keep their snake_case names.
   return invoke('start_render', {
-    output_path: params.outputPath,
+    outputPath: params.outputPath,
     width: params.width,
     height: params.height,
     fps: params.fps,
-    total_frames: params.totalFrames,
-    audio_tracks: params.audioTracks?.map((t) => ({
+    totalFrames: params.totalFrames,
+    audioTracks: params.audioTracks?.map((t) => ({
       path: t.path,
       start_time_secs: t.startTimeSecs,
       duration_secs: t.durationSecs,
