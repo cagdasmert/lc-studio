@@ -4,6 +4,7 @@ import { join } from '@tauri-apps/api/path';
 import type { Composition } from '../types';
 import { ensureProjectDir, bundleAssets } from './asset-manager';
 import { loadProjectFonts } from './font-manager';
+import { allowProjectDir } from './tauri-bridge';
 
 const PROJECT_JSON_FILENAME = 'project.json';
 const PROJECT_VERSION = 3;
@@ -38,6 +39,7 @@ export async function saveProjectAs(composition: Composition): Promise<SaveResul
   // Ensure path ends with .lcs
   const projectDir = path.endsWith('.lcs') ? path : `${path}.lcs`;
 
+  await allowProjectDir(projectDir);
   await ensureProjectDir(projectDir);
   const bundled = await bundleAssets(composition, projectDir);
   const jsonPath = await join(projectDir, PROJECT_JSON_FILENAME);
@@ -133,6 +135,12 @@ export async function loadProjectFromPath(
       projectDir = path;
       jsonPath = await join(path, PROJECT_JSON_FILENAME);
     }
+  }
+
+  // Bundled media and fonts live in subfolders the open dialog didn't scope.
+  // Legacy flat .lcs.json files have no asset folder to grant.
+  if (jsonPath !== projectDir) {
+    await allowProjectDir(projectDir);
   }
 
   const composition = await readProjectFile(jsonPath);

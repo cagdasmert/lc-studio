@@ -2,6 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { RenderProgress, AudioTrackSpec, ExportFormat, QualityPreset } from '../types';
 
+/**
+ * Let the frontend read and write everything inside a project folder.
+ * The dialog plugin only scopes the exact file or folder the user picked
+ * (non-recursively), which leaves `assets/` unreadable on reopen.
+ * Accepts a `.lcs` folder or its `project.json`; returns the granted folder.
+ */
+export async function allowProjectDir(path: string): Promise<string> {
+  return invoke<string>('allow_project_dir', { path });
+}
+
 export async function checkFfmpeg(): Promise<string> {
   return invoke<string>('check_ffmpeg');
 }

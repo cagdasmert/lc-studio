@@ -1,3 +1,4 @@
+mod project_scope;
 mod render;
 
 use render::job::RenderState;
@@ -14,6 +15,7 @@ pub fn run() {
             active_job: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            project_scope::allow_project_dir,
             render::commands::check_ffmpeg,
             render::commands::start_render,
             render::commands::write_frame,
