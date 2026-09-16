@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useStore } from '../../store';
 import { drawCompositionFrame, getTotalFrames } from '../../renderer/compositor';
-import { createMediaCache, preloadScene, type MediaCache } from '../../renderer/media-cache';
+import { createMediaCache, preloadComposition, clearCache, type MediaCache } from '../../renderer/media-cache';
 import type { Layer, TextLayerData, ShapeLayerData } from '../../types';
 import { ContextMenu, type ContextMenuItem } from '../shared/ContextMenu';
 
@@ -59,14 +59,6 @@ export function CanvasWorkspace() {
 
   const { width, height, fps } = composition.output;
   const totalFrames = getTotalFrames(composition);
-
-  // Preload image assets for current scene (resolves relative paths)
-  useEffect(() => {
-    const scene = composition.scenes[selectedSceneIndex];
-    if (scene) {
-      preloadScene(mediaCacheRef.current, scene, projectPath);
-    }
-  }, [composition, selectedSceneIndex, projectPath]);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(
@@ -243,6 +235,33 @@ export function CanvasWorkspace() {
   playingRef.current = playing;
   const frameRef = useRef(currentFrame);
   frameRef.current = currentFrame;
+
+  // Preload images for every scene, not just the selected one — playback and
+  // scrubbing cross scene boundaries. Already-cached sources are skipped, so
+  // re-running this on each edit is cheap. The paused canvas is redrawn once
+  // loading finishes; otherwise a freshly opened project stays imageless until
+  // the frame happens to change.
+  //
+  // The cache is keyed by src, and relative paths like "assets/logo.png" repeat
+  // across projects, so switching projects starts a fresh cache. In-flight
+  // loads from the old project land in the discarded map, not the new one.
+  const cacheProjectRef = useRef(projectPath);
+  useEffect(() => {
+    if (cacheProjectRef.current !== projectPath) {
+      const previous = mediaCacheRef.current;
+      mediaCacheRef.current = createMediaCache();
+      cacheProjectRef.current = projectPath;
+      clearCache(previous);
+    }
+
+    let cancelled = false;
+    preloadComposition(mediaCacheRef.current, composition.scenes, projectPath).then(() => {
+      if (!cancelled && !playingRef.current) drawFrameRef.current(frameRef.current);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [composition, projectPath]);
 
   // Resize canvas to fill container — uses refs to avoid recreating the observer
   useEffect(() => {
