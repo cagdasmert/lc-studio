@@ -10,8 +10,11 @@ export const MORPH_GRID = 24;
  *  1 px is the smallest value that leaves no partly transparent pixels. */
 const SEAM_PX = 1;
 
-/** Cap on the miter factor, so sliver triangles grow by at most ~4·SEAM_PX. */
-const MAX_MITER = 2 * SEAM_PX;
+/** Longest miter, as a multiple of SEAM_PX, before a corner is bevelled instead. */
+const MITER_LIMIT = 2;
+
+/** Destination triangles thinner than this (px) are not drawn. */
+const MIN_THICKNESS_PX = 0.5;
 
 /** Clamp-to-edge padding around each texture, in px. */
 const PAD = 2;
@@ -86,9 +89,11 @@ function texture(bitmap: ImageBitmap, fitMode: ImageFitMode, w: number, h: numbe
 }
 
 /**
- * The triangle with every edge moved SEAM_PX outward. Each vertex slides along
- * its corner's bisector by the miter length, capped so a sliver triangle
- * can't throw out a long spike.
+ * The triangle with every edge moved SEAM_PX outward, as a polygon. A corner
+ * takes a miter (the offset edges' intersection) when that stays within
+ * MITER_LIMIT·SEAM_PX of the vertex, and a bevel otherwise: a sharp corner's
+ * miter would spike far into the neighbours, while capping it instead would
+ * leave the edges near the corner under-grown and a seam along them.
  */
 function grow(
   x0: number, y0: number, x1: number, y1: number, x2: number, y2: number,
@@ -101,18 +106,26 @@ function grow(
     const len = Math.hypot(bx - ax, by - ay) || 1;
     return [(sign * (by - ay)) / len, (sign * -(bx - ax)) / len];
   });
-  return pts.map(([x, y], i) => {
+  const out: [number, number][] = [];
+  pts.forEach(([x, y], i) => {
     const [ax, ay] = normals[(i + 2) % 3]; // edge arriving at this vertex
     const [bx, by] = normals[i];           // edge leaving it
-    const k = Math.min(SEAM_PX / Math.max(1 + ax * bx + ay * by, 1e-6), MAX_MITER);
-    return [x + (ax + bx) * k, y + (ay + by) * k];
+    const cos = ax * bx + ay * by;
+    // Miter length is SEAM_PX · sqrt(2 / (1 + cos)).
+    if (1 + cos >= 2 / (MITER_LIMIT * MITER_LIMIT)) {
+      const k = SEAM_PX / (1 + cos);
+      out.push([x + (ax + bx) * k, y + (ay + by) * k]);
+    } else {
+      out.push([x + ax * SEAM_PX, y + ay * SEAM_PX], [x + bx * SEAM_PX, y + by * SEAM_PX]);
+    }
   });
+  return out;
 }
 
 /**
  * Fill one destination triangle with the texture mapped from its source
  * triangle. The context is set to the texture→destination affine map and the
- * (grown) destination triangle is filled in texture space with the texture as
+ * (grown) destination polygon is filled in texture space with the texture as
  * a pattern — no clip, no save/restore, and no DOMMatrix, which keeps it an
  * order of magnitude faster in WebKit than clip + drawImage.
  */
@@ -129,6 +142,14 @@ function drawTriangle(
   const srcDet = ux1 * uy2 - ux2 * uy1;
   if (Math.abs(srcDet) < 1e-9) return;
   const vx1 = dx1 - dx0, vy1 = dy1 - dy0, vx2 = dx2 - dx0, vy2 = dy2 - dy0;
+
+  // Skip slivers. A triangle folded down to under half a pixel thick is
+  // invisible, and every point of it lies within that half pixel of its longest
+  // edge, which a neighbour (grown by SEAM_PX) already covers. Mapping one back
+  // into texture space would divide by its near-zero scale, and coordinates
+  // past Cairo's 16.16 fixed-point range corrupt a node-canvas surface.
+  const longest = Math.max(Math.hypot(vx1, vy1), Math.hypot(vx2, vy2), Math.hypot(dx2 - dx1, dy2 - dy1));
+  if (Math.abs(vx1 * vy2 - vx2 * vy1) < MIN_THICKNESS_PX * longest) return;
   // Affine map taking the source triangle onto the destination triangle.
   const a = (vx1 * uy2 - vx2 * uy1) / srcDet;
   const b = (vy1 * uy2 - vy2 * uy1) / srcDet;
@@ -145,11 +166,10 @@ function drawTriangle(
     const X = x - e, Y = y - f;
     return [(dd * X - c * Y) / det + PAD, (a * Y - b * X) / det + PAD];
   };
-  const [p0, p1, p2] = grow(dx0, dy0, dx1, dy1, dx2, dy2).map(toTexture);
+  const polygon = grow(dx0, dy0, dx1, dy1, dx2, dy2).map(toTexture);
   ctx.beginPath();
-  ctx.moveTo(p0[0], p0[1]);
-  ctx.lineTo(p1[0], p1[1]);
-  ctx.lineTo(p2[0], p2[1]);
+  ctx.moveTo(polygon[0][0], polygon[0][1]);
+  for (let i = 1; i < polygon.length; i++) ctx.lineTo(polygon[i][0], polygon[i][1]);
   ctx.closePath();
   ctx.fill();
 }

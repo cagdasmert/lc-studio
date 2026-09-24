@@ -146,8 +146,12 @@ partner point.
 2. For each image, each grid cell is two triangles. For each triangle: set
    the context to the affine map from the source triangle to the destination
    triangle, and fill the destination triangle **with every edge pushed 1 px
-   outward** (miter offset, capped for slivers; mapped back into texture
-   space) using the padded texture as a `no-repeat` pattern. Pattern fills
+   outward** (miter joins, bevelled where a miter would pass 2 px; mapped
+   back into texture space) using the padded texture as a `no-repeat`
+   pattern. Triangles folded to under 0.5 px thick are skipped: they are
+   invisible, their neighbours' grown edges cover them, and mapping them back
+   divides by a near-zero scale — texture coordinates past Cairo's 16.16
+   fixed-point range corrupted the node-canvas surface (a blank frame). Pattern fills
    replaced clip + `drawImage` after measuring WebKit: 78 ms → 11 ms per 1080²
    frame (Chromium ~10 ms either way).
    Warped A goes into canvas `WA`, warped B into `WB`, both at full opacity,

@@ -48,6 +48,25 @@ describe('renderMorph', () => {
     expect(minAlpha).toBeGreaterThanOrEqual(254);
   });
 
+  // Grid 2 on a 40 px box: every vertex is pinned except the centre, which is
+  // this pair's control. At t = 0.5 it lands `cy` px below the top edge,
+  // squashing two triangles into slivers. At 1e-5 px the sliver, mapped back
+  // into texture space, reached coordinates past Cairo's 16.16 fixed-point
+  // range and silently corrupted the whole node-canvas surface (a blank
+  // frame); at 1e-3 px it left a part-transparent pixel.
+  for (const cy of [1e-5, 1e-3]) {
+    it(`stays opaque when a triangle collapses to a sliver (${cy} px)`, () => {
+      const out = renderMorph({
+        a: RED, b: BLUE, fitMode: 'fill', t: 0.5, width: S, height: S, grid: 2,
+        pairs: [{ id: 'sq', a: { x: 0.5, y: 0.5 }, b: { x: 0.5, y: (2 * cy - S / 2) / S }, source: 'manual' }],
+      });
+      const data = (out.getContext('2d') as CanvasRenderingContext2D).getImageData(0, 0, S, S).data;
+      let minAlpha = 255;
+      for (let i = 3; i < data.length; i += 4) minAlpha = Math.min(minAlpha, data[i]);
+      expect(minAlpha).toBeGreaterThanOrEqual(254);
+    });
+  }
+
   it('carries a matched feature to the in-between spot', () => {
     // A red dot at (10,20) in A and at (30,20) in B, matched by one pair.
     // At t = 0.5 both warped images put their dot at (20,20).
