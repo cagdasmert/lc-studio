@@ -1,6 +1,7 @@
 import type { ImageLayerData, ResolvedTransform } from '../types';
 import type { MediaCache } from './media-cache';
 import { resolveNumericProperty } from './interpolation';
+import { fitRect } from './fit';
 
 type FitMode = ImageLayerData['fitMode'];
 
@@ -12,34 +13,8 @@ function drawFitted(
   dw: number,
   dh: number,
 ): void {
-  const sw = bitmap.width;
-  const sh = bitmap.height;
-
-  switch (fitMode) {
-    case 'fill':
-      ctx.drawImage(bitmap, 0, 0, dw, dh);
-      break;
-
-    case 'contain': {
-      const scale = Math.min(dw / sw, dh / sh);
-      const w = sw * scale;
-      const h = sh * scale;
-      ctx.drawImage(bitmap, (dw - w) / 2, (dh - h) / 2, w, h);
-      break;
-    }
-
-    case 'cover': {
-      const scale = Math.max(dw / sw, dh / sh);
-      const w = sw * scale;
-      const h = sh * scale;
-      ctx.drawImage(bitmap, (dw - w) / 2, (dh - h) / 2, w, h);
-      break;
-    }
-
-    case 'none':
-      ctx.drawImage(bitmap, (dw - sw) / 2, (dh - sh) / 2);
-      break;
-  }
+  const r = fitRect(fitMode, bitmap.width, bitmap.height, dw, dh);
+  ctx.drawImage(bitmap, r.x, r.y, r.w, r.h);
 }
 
 /** True when the fitted bitmap can extend past the layer box. */
