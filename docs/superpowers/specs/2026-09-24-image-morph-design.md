@@ -284,7 +284,7 @@ A large `.dialog-overlay` dialog (about 90 % of the window) with three panes:
 | Click / hover a point | Selects / highlights it and its partner in both panes. |
 | Arrow keys (Shift = ×10) | Nudges the selected point by 1 (10) screen px. |
 | Delete / Backspace | Deletes the selected pair. |
-| Wheel / Space-drag / double-click | Zoom at the cursor / pan / reset; each pane separately. |
+| Wheel / Space-drag / **Fit** | Zoom at the cursor / pan / reset; each pane separately. (Not double-click: its first click would add a pair.) |
 | Auto-match | Runs the worker with a progress bar and Cancel; results are merged into the draft with `mergeAuto`. |
 | Clear auto | Removes all auto pairs. |
 
@@ -297,9 +297,9 @@ component stays thin.
 
 ## Integration
 
-`forEachAssetRef(layer, fn)` in `src/lib/asset-manager.ts` visits `src` and,
-for image layers, `morph.target`. It replaces the separate `src`-only logic
-in:
+`assetRefs(layer)` in the new pure module `src/lib/asset-refs.ts` lists `src`
+and, for image layers, `morph.target`, each with a getter and setter. It
+replaces the separate `src`-only logic in:
 
 - `rewriteAssetPaths` and `bundleAssets` (asset-manager): the target is saved
   relative and copied into `assets/`;
