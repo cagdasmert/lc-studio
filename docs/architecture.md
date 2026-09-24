@@ -105,7 +105,7 @@ drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoCache?)
                           ├── [Else] dispatch to type-specific drawer:
                           │     ├── drawTextLayer()
                           │     ├── drawShapeLayer()
-                          │     ├── drawImageLayer()
+                          │     ├── drawImageLayer()  (→ renderMorph() when morph is set)
                           │     └── drawVideoLayer()
                           └── ctx.restore()
 ```
@@ -145,6 +145,29 @@ an overshoot there would mean a negative glow radius. Which list an effect
 belongs to lives in `REVEAL_FX` in `layer-fx.ts`, deliberately duplicated from
 `kind: 'reveal'` in `fx-schema.ts` so the renderer never imports the UI layer; a
 test keeps the two in sync.
+
+#### Image morph (`fit.ts`, `morph-field.ts`, `draw-morph.ts`)
+
+An image layer with `morph` draws `renderMorph()` in place of the plain image,
+so tint, clip, shadow and layer FX apply unchanged.
+
+- `fit.ts` — `fitRect()`, the single definition of where a bitmap lands in the
+  layer box under each fit mode, shared by the drawer, the warp and the editor.
+  Pair points are stored in each image's own 0–1 UV space and converted to box
+  space through it.
+- `morph-field.ts` — rigid moving-least-squares (Schaefer et al. 2006) maps the
+  pairs plus eight pinned border anchors toward the in-between positions
+  `lerp(a, b, t)`, sampled on a `MORPH_GRID`² grid. Border vertices may slide
+  along their edge but never leave it.
+- `draw-morph.ts` — each grid cell is two textured triangles (clip + affine
+  `transform` + `drawImage` of the triangle's neighbourhood). Triangle edges
+  grow 1 px outward and the texture is padded clamp-to-edge, so the warped mesh
+  has no seams. The two warped images blend as `(1−τ)·A + τ·B` with `lighter`
+  compositing, exact under transparency. `t` is unclamped for geometry,
+  clamped for the blend.
+
+`t` comes from the `morphProgress` keyframe track. A 1080² frame renders in
+about 10 ms in a GPU-backed canvas.
 
 #### Determinism
 
@@ -191,6 +214,25 @@ generate.ts (orchestrator)
   ├── http.ts → aiFetch() wraps @tauri-apps/plugin-http for CORS bypass
   └── parse.ts → extracts JSON from LLM response text
 ```
+
+### Auto-match (`src/lib/morph-match/`)
+
+Runs only when the user presses Auto-match; its output is saved in the
+project, so rendering never touches the model.
+
+- `index.ts` (main thread) — reads the bundled model from the Tauri resource
+  directory, downscales both images to the model's input size, and drives a
+  Web Worker; supports progress and cancellation.
+- `worker.ts` — `onnxruntime-web` (WASM, one thread; multi-threading would need
+  cross-origin isolation) runs DINOv2-small (`features.ts`) on each image.
+- `match.ts` (pure) — mutual nearest neighbours between the two patch grids,
+  one best pair per 8 × 8 bucket, a local displacement-consistency filter, a
+  visibility check against the layer box, capped at 48 pairs.
+- `src/lib/morph-edit.ts` merges results so manual pairs always survive.
+
+The 24 MB model is not in git. `scripts/fetch-models.mjs` downloads a pinned
+revision and checks its SHA-256; `tauri build` runs it, so installers ship the
+model and auto-match works offline.
 
 ### Project I/O (`src/lib/project-io.ts`)
 

@@ -207,6 +207,32 @@ Click the orange diamond button at a frame that has a keyframe. It will revert t
 3. At frame 20, set X to 540 (centered), add keyframe
 4. The layer slides in from the left
 
+## Morphing One Image into Another
+
+1. Add an image layer with the first image (**A**).
+2. In the Property Inspector, turn on **Morph to…** and click **Browse...** to
+   pick the second image (**B**). A `morphProgress` track appears in the
+   keyframe editor, running 0 → 1 over the layer's duration.
+3. Click **Edit points...**. The editor shows A, the live result, and B.
+4. Click **Auto-match**. After a few seconds, numbered dots appear on both
+   images: green are confident matches, amber are weak ones worth checking.
+5. Fix what's wrong:
+   - **Click** empty space on A or B to add a pair; its partner appears where
+     the current warp predicts. Drag it onto the right feature.
+   - **Drag** a dot to move it (it turns blue: your points are never touched by
+     Auto-match again). **Arrow keys** nudge the selected dot; Shift moves 10 px.
+   - **Delete** removes the selected pair; **Clear auto** removes every
+     auto-matched pair.
+   - **Wheel** zooms a pane, **Space-drag** pans, **Fit** resets it.
+   - Drag the slider or press ▶ to watch the result; **Mesh** overlays the
+     warp grid and marks folded areas in red.
+6. Click **Done** (one undo step), or **Cancel** / Esc to discard.
+7. Shape the timing by editing the `morphProgress` keyframes like any other
+   property.
+
+Tips: a few well-placed pairs on distinctive features (eyes, corners, tips)
+beat many vague ones. If the result tears or folds, remove the pair causing it.
+
 ## Rendering
 
 ### Checking FFmpeg
