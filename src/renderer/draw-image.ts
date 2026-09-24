@@ -2,6 +2,7 @@ import type { ImageLayerData, ResolvedTransform } from '../types';
 import type { MediaCache } from './media-cache';
 import { resolveNumericProperty } from './interpolation';
 import { fitRect } from './fit';
+import { renderMorph } from './draw-morph';
 
 type FitMode = ImageLayerData['fitMode'];
 
@@ -31,6 +32,25 @@ function overflowsBox(bitmap: ImageBitmap, fitMode: FitMode, dw: number, dh: num
   }
 }
 
+/** The morphed content for this frame, or null to draw the plain image. */
+function morphContent(
+  layer: ImageLayerData,
+  bitmap: ImageBitmap,
+  mediaCache: MediaCache,
+  frameInLayer: number,
+  dw: number,
+  dh: number,
+): HTMLCanvasElement | null {
+  const morph = layer.morph;
+  if (!morph) return null;
+  const target = mediaCache.get(morph.target);
+  if (!target) return null; // Target still loading — show the plain image meanwhile
+  const t = resolveNumericProperty(layer.keyframes, 'morphProgress', frameInLayer, morph.progress);
+  return renderMorph({
+    a: bitmap, b: target, fitMode: layer.fitMode, pairs: morph.pairs, t, width: dw, height: dh,
+  });
+}
+
 export function drawImageLayer(
   ctx: CanvasRenderingContext2D,
   layer: ImageLayerData,
@@ -58,8 +78,16 @@ export function drawImageLayer(
     ctx.clip();
   }
 
+  // Rendered once and drawn wherever the plain image would be — the tint path
+  // draws the content twice (colour, then alpha mask).
+  const morphed = morphContent(layer, bitmap, mediaCache, frameInLayer, dw, dh);
+  const drawContent = (target: CanvasRenderingContext2D) => {
+    if (morphed) target.drawImage(morphed, 0, 0, dw, dh);
+    else drawFitted(target, bitmap, layer.fitMode, dw, dh);
+  };
+
   if (!layer.tintColor) {
-    drawFitted(ctx, bitmap, layer.fitMode, dw, dh);
+    drawContent(ctx);
     return;
   }
 
@@ -72,16 +100,16 @@ export function drawImageLayer(
   tinted.height = Math.max(1, Math.ceil(dh));
   const tctx = tinted.getContext('2d');
   if (!tctx) {
-    drawFitted(ctx, bitmap, layer.fitMode, dw, dh);
+    drawContent(ctx);
     return;
   }
 
-  drawFitted(tctx, bitmap, layer.fitMode, dw, dh);
+  drawContent(tctx);
   tctx.globalCompositeOperation = layer.tintBlend ?? 'multiply';
   tctx.fillStyle = layer.tintColor;
   tctx.fillRect(0, 0, dw, dh);
   tctx.globalCompositeOperation = 'destination-in';
-  drawFitted(tctx, bitmap, layer.fitMode, dw, dh);
+  drawContent(tctx);
 
   ctx.drawImage(tinted, 0, 0);
 }
