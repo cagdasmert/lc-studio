@@ -143,12 +143,13 @@ partner point.
    cached (WeakMap on the bitmap, keyed by fit mode and box size), plus a copy
    padded by 2 px of repeated edge pixels (clamp-to-edge), so stretched border
    triangles don't sample transparency past the edge.
-2. For each image, each grid cell is two triangles. For each triangle: clip
-   to the destination triangle **with every edge pushed 1 px outward** (miter
-   offset, capped for slivers) to hide antialiasing seams, apply the affine
-   map from the source triangle to the destination triangle with
-   `ctx.transform`, and draw only the triangle's neighbourhood of the padded
-   texture.
+2. For each image, each grid cell is two triangles. For each triangle: set
+   the context to the affine map from the source triangle to the destination
+   triangle, and fill the destination triangle **with every edge pushed 1 px
+   outward** (miter offset, capped for slivers; mapped back into texture
+   space) using the padded texture as a `no-repeat` pattern. Pattern fills
+   replaced clip + `drawImage` after measuring WebKit: 78 ms → 11 ms per 1080²
+   frame (Chromium ~10 ms either way).
    Warped A goes into canvas `WA`, warped B into `WB`, both at full opacity,
    so the seam overlap is invisible.
 3. Blend into output canvas `O`: draw `WA` with `globalAlpha = 1 − τ`, then

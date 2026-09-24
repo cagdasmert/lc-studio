@@ -159,15 +159,16 @@ so tint, clip, shadow and layer FX apply unchanged.
   pairs plus eight pinned border anchors toward the in-between positions
   `lerp(a, b, t)`, sampled on a `MORPH_GRID`² grid. Border vertices may slide
   along their edge but never leave it.
-- `draw-morph.ts` — each grid cell is two textured triangles (clip + affine
-  `transform` + `drawImage` of the triangle's neighbourhood). Triangle edges
-  grow 1 px outward and the texture is padded clamp-to-edge, so the warped mesh
-  has no seams. The two warped images blend as `(1−τ)·A + τ·B` with `lighter`
+- `draw-morph.ts` — each grid cell is two textured triangles: the context is
+  set to the triangle's affine map and the triangle is filled with the texture
+  as a pattern (no clip, no save/restore — clip + `drawImage` was 7× slower in
+  WebKit). Triangle edges grow 1 px outward and the texture is padded
+  clamp-to-edge, so the warped mesh has no seams. The two warped images blend as `(1−τ)·A + τ·B` with `lighter`
   compositing, exact under transparency. `t` is unclamped for geometry,
   clamped for the blend.
 
-`t` comes from the `morphProgress` keyframe track. A 1080² frame renders in
-about 10 ms in a GPU-backed canvas.
+`t` comes from the `morphProgress` keyframe track. A 1080² frame with 40
+pairs renders in about 11 ms in WebKit (the macOS webview) and Chromium.
 
 #### Determinism
 

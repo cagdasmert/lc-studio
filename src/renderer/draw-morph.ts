@@ -13,9 +13,6 @@ const SEAM_PX = 1;
 /** Cap on the miter factor, so sliver triangles grow by at most ~4·SEAM_PX. */
 const MAX_MITER = 2 * SEAM_PX;
 
-/** Source-rect margin around each triangle, in texture px. */
-const SRC_MARGIN = 2;
-
 /** Clamp-to-edge padding around each texture, in px. */
 const PAD = 2;
 
@@ -112,10 +109,15 @@ function grow(
   });
 }
 
-/** Draw one textured triangle: source (s) triangle of `tex` onto destination (d). */
+/**
+ * Fill one destination triangle with the texture mapped from its source
+ * triangle. The context is set to the texture→destination affine map and the
+ * (grown) destination triangle is filled in texture space with the texture as
+ * a pattern — no clip, no save/restore, and no DOMMatrix, which keeps it an
+ * order of magnitude faster in WebKit than clip + drawImage.
+ */
 function drawTriangle(
   ctx: CanvasRenderingContext2D,
-  tex: HTMLCanvasElement,
   s: Float64Array,
   d: Float64Array,
   i0: number, i1: number, i2: number,
@@ -124,45 +126,39 @@ function drawTriangle(
   const dx0 = d[i0], dy0 = d[i0 + 1], dx1 = d[i1], dy1 = d[i1 + 1], dx2 = d[i2], dy2 = d[i2 + 1];
 
   const ux1 = sx1 - sx0, uy1 = sy1 - sy0, ux2 = sx2 - sx0, uy2 = sy2 - sy0;
-  const det = ux1 * uy2 - ux2 * uy1;
-  if (Math.abs(det) < 1e-9) return;
+  const srcDet = ux1 * uy2 - ux2 * uy1;
+  if (Math.abs(srcDet) < 1e-9) return;
   const vx1 = dx1 - dx0, vy1 = dy1 - dy0, vx2 = dx2 - dx0, vy2 = dy2 - dy0;
   // Affine map taking the source triangle onto the destination triangle.
-  const a = (vx1 * uy2 - vx2 * uy1) / det;
-  const b = (vy1 * uy2 - vy2 * uy1) / det;
-  const c = (vx2 * ux1 - vx1 * ux2) / det;
-  const dd = (vy2 * ux1 - vy1 * ux2) / det;
+  const a = (vx1 * uy2 - vx2 * uy1) / srcDet;
+  const b = (vy1 * uy2 - vy2 * uy1) / srcDet;
+  const c = (vx2 * ux1 - vx1 * ux2) / srcDet;
+  const dd = (vy2 * ux1 - vy1 * ux2) / srcDet;
   const e = dx0 - a * sx0 - c * sy0;
   const f = dy0 - b * sx0 - dd * sy0;
+  const det = a * dd - b * c;
+  if (Math.abs(det) < 1e-9) return; // Collapsed to a line: nothing to fill
 
-  const [p0, p1, p2] = grow(dx0, dy0, dx1, dy1, dx2, dy2);
-
-  // Only the triangle's neighbourhood of the texture is drawn: a full-texture
-  // draw per triangle costs area × triangles on CPU and GPU canvases alike.
-  // Box coordinates; the padded texture holds box (x, y) at (x + PAD, y + PAD).
-  const minX = Math.max(-PAD, Math.floor(Math.min(sx0, sx1, sx2)) - SRC_MARGIN);
-  const minY = Math.max(-PAD, Math.floor(Math.min(sy0, sy1, sy2)) - SRC_MARGIN);
-  const maxX = Math.min(tex.width - PAD, Math.ceil(Math.max(sx0, sx1, sx2)) + SRC_MARGIN);
-  const maxY = Math.min(tex.height - PAD, Math.ceil(Math.max(sy0, sy1, sy2)) + SRC_MARGIN);
-  if (maxX <= minX || maxY <= minY) return;
-
-  ctx.save();
+  // The padded texture holds box (x, y) at (x + PAD, y + PAD).
+  ctx.setTransform(a, b, c, dd, e - (a + c) * PAD, f - (b + dd) * PAD);
+  const toTexture = ([x, y]: [number, number]): [number, number] => {
+    const X = x - e, Y = y - f;
+    return [(dd * X - c * Y) / det + PAD, (a * Y - b * X) / det + PAD];
+  };
+  const [p0, p1, p2] = grow(dx0, dy0, dx1, dy1, dx2, dy2).map(toTexture);
   ctx.beginPath();
   ctx.moveTo(p0[0], p0[1]);
   ctx.lineTo(p1[0], p1[1]);
   ctx.lineTo(p2[0], p2[1]);
   ctx.closePath();
-  ctx.clip();
-  ctx.transform(a, b, c, dd, e, f);
-  ctx.drawImage(
-    tex, minX + PAD, minY + PAD, maxX - minX, maxY - minY,
-    minX, minY, maxX - minX, maxY - minY,
-  );
-  ctx.restore();
+  ctx.fill();
 }
 
 function warp(target: HTMLCanvasElement, tex: HTMLCanvasElement, mesh: MorphMesh, dst: Float64Array): void {
   const ctx = ctx2d(target);
+  const pattern = ctx.createPattern(tex, 'no-repeat');
+  if (!pattern) return;
+  ctx.fillStyle = pattern;
   const stride = mesh.cols + 1;
   for (let r = 0; r < mesh.rows; r++) {
     for (let c = 0; c < mesh.cols; c++) {
@@ -170,10 +166,11 @@ function warp(target: HTMLCanvasElement, tex: HTMLCanvasElement, mesh: MorphMesh
       const i10 = i00 + 2;
       const i01 = i00 + stride * 2;
       const i11 = i01 + 2;
-      drawTriangle(ctx, tex, mesh.src, dst, i00, i10, i11);
-      drawTriangle(ctx, tex, mesh.src, dst, i00, i11, i01);
+      drawTriangle(ctx, mesh.src, dst, i00, i10, i11);
+      drawTriangle(ctx, mesh.src, dst, i00, i11, i01);
     }
   }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 /**
