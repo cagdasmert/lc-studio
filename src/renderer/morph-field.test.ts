@@ -83,6 +83,21 @@ describe('buildMorphMesh', () => {
     expect(mesh.dstA[27]).toBeCloseTo(50, 9);
   });
 
+  it('keeps border vertices on the box border, so the mesh covers the whole box', () => {
+    // A strong pull to the right would drag the left edge inward and leave a
+    // transparent strip; border vertices may only slide along their edge.
+    const mesh = buildMorphMesh(square, [pair([0.3, 0.4], [0.6, 0.5])], 0.5, 4);
+    const stride = 5;
+    for (let i = 0; i < stride; i++) {
+      const left = i * stride * 2, right = (i * stride + 4) * 2;
+      const top = i * 2, bottom = (4 * stride + i) * 2;
+      expect(mesh.dstA[left]).toBe(0);
+      expect(mesh.dstB[right]).toBe(100);
+      expect(mesh.dstA[top + 1]).toBe(0);
+      expect(mesh.dstB[bottom + 1]).toBe(100);
+    }
+  });
+
   it('pins the box corners', () => {
     const mesh = buildMorphMesh(square, [pair([0.3, 0.3], [0.7, 0.7])], 0.5, 4);
     const last = mesh.src.length - 2;

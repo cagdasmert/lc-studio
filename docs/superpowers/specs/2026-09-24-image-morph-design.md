@@ -129,6 +129,9 @@ Per frame, with `t` = resolved progress:
 5. A regular grid of `GRID × GRID` cells (starting value 24, tuned by the
    performance test) is laid over the box. For image A each vertex `g` maps
    through MLS with controls `pA → pT`; for B, `pB → pT`.
+6. Border vertices may slide along their edge but never leave it (x pinned on
+   the left/right edges, y on the top/bottom). Otherwise an edge pulled inward
+   opens a transparent strip along the side of the layer.
 
 Exports: `buildMorphMesh(...)` returning source and destination vertex arrays
 per image, and `mlsRigid(v, p, q)`, reused by the editor to predict a
@@ -137,11 +140,15 @@ partner point.
 ### Drawing — `src/renderer/draw-morph.ts`
 
 1. Fitted A and fitted B are each rendered once into box-sized canvases and
-   cached (WeakMap on the bitmap, keyed by fit mode and box size).
+   cached (WeakMap on the bitmap, keyed by fit mode and box size), plus a copy
+   padded by 2 px of repeated edge pixels (clamp-to-edge), so stretched border
+   triangles don't sample transparency past the edge.
 2. For each image, each grid cell is two triangles. For each triangle: clip
-   to the destination triangle, **expanded ~0.75 px from its centroid** to
-   hide antialiasing seams, apply the affine map from the source triangle to
-   the destination triangle with `ctx.transform`, and draw the fitted bitmap.
+   to the destination triangle **with every edge pushed 1 px outward** (miter
+   offset, capped for slivers) to hide antialiasing seams, apply the affine
+   map from the source triangle to the destination triangle with
+   `ctx.transform`, and draw only the triangle's neighbourhood of the padded
+   texture.
    Warped A goes into canvas `WA`, warped B into `WB`, both at full opacity,
    so the seam overlap is invisible.
 3. Blend into output canvas `O`: draw `WA` with `globalAlpha = 1 − τ`, then

@@ -101,6 +101,15 @@ export function buildMorphMesh(
   const src = new Float64Array(n);
   const dstA = new Float64Array(n);
   const dstB = new Float64Array(n);
+  // Border vertices may slide along their edge but never leave it: an edge
+  // pulled inward would open a transparent strip along the side of the layer.
+  const pin = (out: Float64Array, k: number, r: number, c: number) => {
+    if (c === 0) out[k] = 0;
+    else if (c === grid) out[k] = view.boxW;
+    if (r === 0) out[k + 1] = 0;
+    else if (r === grid) out[k + 1] = view.boxH;
+  };
+
   let k = 0;
   for (let r = 0; r <= grid; r++) {
     for (let c = 0; c <= grid; c++) {
@@ -108,8 +117,10 @@ export function buildMorphMesh(
       src[k] = g.x; src[k + 1] = g.y;
       const fa = mlsRigid(g, pA, pT);
       dstA[k] = fa.x; dstA[k + 1] = fa.y;
+      pin(dstA, k, r, c);
       const fb = mlsRigid(g, pB, pT);
       dstB[k] = fb.x; dstB[k + 1] = fb.y;
+      pin(dstB, k, r, c);
       k += 2;
     }
   }
