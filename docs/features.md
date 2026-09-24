@@ -8,7 +8,7 @@ Local Content Studio is a cross-platform desktop application for creating, previ
 
 - **Text layers** — Rich text with configurable font family, size, weight, style, color, alignment, line height, letter spacing, word wrap, stroke outline, and drop shadow.
 - **Shape layers** — Rectangle, rounded rectangle, circle, ellipse, and line with fill color, stroke, and corner radius.
-- **Image layers** — Local image files (PNG, JPG, GIF, WebP, BMP, SVG) with fit modes: cover, contain, fill, none. Supports border radius.
+- **Image layers** — Local image files (PNG, JPG, GIF, WebP, BMP, SVG) with fit modes: cover, contain, fill, none. Supports border radius, tint, and morphing into a second image (see Image Morph).
 - **Video layers** — Video file references with playback rate, start/end time, and mute controls.
 - **Audio layers** — Audio file references with volume, start/end time, fade in/out.
 
@@ -63,6 +63,32 @@ Full-frame treatments applied after the scene is composited: **film grain**,
 All FX are frame-deterministic — the stochastic ones derive every random value
 from a hash of the frame number, so preview and final render produce identical
 pixels.
+
+### Image Morph
+
+An image layer can morph into a second image: matching features (eye to eye,
+beak to beak) travel into place while one image fades into the other. It is a
+property of the image layer, so fit, border radius, tint, box shadow, clip path
+and every layer FX apply to the morphed result.
+
+- **Point pairs** — each pair marks the same feature on both images. Between
+  the pairs the image bends smoothly (rigid moving-least-squares on a grid);
+  the layer's edges stay put.
+- **`morphProgress`** — a keyframable 0→1 value drives the morph. Turning a
+  morph on seeds an ease-in-out track across the whole layer; back/elastic
+  easings overshoot the shape change.
+- **Auto-match** — proposes pairs with a bundled DINOv2-small model that
+  recognises parts by meaning, so it works across different subjects
+  (owl → eagle) as well as the same subject shot twice. Runs offline, in a
+  background worker, in a few seconds. Pairs are colour-coded by confidence.
+- **Point editor** — three panes (A | live result | B): click to add a pair
+  (its partner is predicted), drag or nudge points, delete, zoom, show the warp
+  mesh with fold-overs highlighted. Auto-match never overwrites manual points.
+- **Deterministic** — the model only runs when you press Auto-match; its pairs
+  are saved in the project, so rendering never depends on it.
+
+Limits: images only (not video), one target image per layer — stack layers for
+a chain of morphs.
 
 ### Keyframe Animation System
 

@@ -1,4 +1,5 @@
-import type { Composition, Layer, ImageLayerData, VideoLayerData, AudioLayerData } from '../types';
+import type { Composition } from '../types';
+import { assetRefs } from './asset-refs';
 
 export interface AssetReference {
   path: string;
@@ -11,49 +12,18 @@ export interface AssetReference {
 
 export function scanCompositionAssets(composition: Composition): AssetReference[] {
   const refs: AssetReference[] = [];
-
   composition.scenes.forEach((scene, sceneIndex) => {
-    scene.layers.forEach((layer: Layer) => {
-      if (layer.type === 'image') {
-        const img = layer as ImageLayerData;
-        if (img.src) {
-          refs.push({
-            path: img.src,
-            type: 'image',
-            layerName: layer.name,
-            sceneLabel: scene.label,
-            sceneIndex,
-            layerId: layer.id,
-          });
-        }
-      } else if (layer.type === 'video') {
-        const vid = layer as VideoLayerData;
-        if (vid.src) {
-          refs.push({
-            path: vid.src,
-            type: 'video',
-            layerName: layer.name,
-            sceneLabel: scene.label,
-            sceneIndex,
-            layerId: layer.id,
-          });
-        }
-      } else if (layer.type === 'audio') {
-        const aud = layer as AudioLayerData;
-        if (aud.src) {
-          refs.push({
-            path: aud.src,
-            type: 'audio',
-            layerName: layer.name,
-            sceneLabel: scene.label,
-            sceneIndex,
-            layerId: layer.id,
-          });
-        }
+    for (const layer of scene.layers) {
+      for (const ref of assetRefs(layer)) {
+        const path = ref.get();
+        if (!path) continue;
+        refs.push({
+          path, type: ref.kind, layerName: layer.name,
+          sceneLabel: scene.label, sceneIndex, layerId: layer.id,
+        });
       }
-    });
+    }
   });
-
   return refs;
 }
 

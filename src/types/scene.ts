@@ -366,6 +366,26 @@ export type ImageFitMode = 'cover' | 'contain' | 'fill' | 'none';
 
 export type TintBlendMode = 'multiply' | 'screen' | 'overlay' | 'color';
 
+/** 0–1 position in an image's own pixel space (not the layer box). */
+export interface MorphPoint {
+  x: number;
+  y: number;
+}
+
+export interface MorphPair {
+  id: string;
+  a: MorphPoint;            // on the layer's own image (`src`)
+  b: MorphPoint;            // on the target image
+  source: 'auto' | 'manual';
+  confidence?: number;      // 0–1; auto pairs only
+}
+
+export interface ImageMorphDef {
+  target: string;           // second image; same path rules as `src`
+  pairs: MorphPair[];
+  progress: number;         // 0–1 static value; a 'morphProgress' keyframe track overrides it
+}
+
 export interface ImageLayerData extends LayerBase {
   type: 'image';
   src: string;
@@ -373,6 +393,7 @@ export interface ImageLayerData extends LayerBase {
   borderRadius: number;
   tintColor?: string | null;
   tintBlend?: TintBlendMode;
+  morph?: ImageMorphDef | null;
 }
 
 export type ShapeType = 'rect' | 'circle' | 'ellipse' | 'rounded-rect' | 'line'

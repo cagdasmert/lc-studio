@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import type {
   Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData,
@@ -15,6 +16,8 @@ import { OUTPUT_PRESETS } from '../../lib/output-presets';
 import { FontPicker } from '../shared/FontPicker';
 import { pickImageFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
+import { enableMorph, disableMorph } from '../../lib/morph-edit';
+import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
   'normal', 'multiply', 'screen', 'overlay',
@@ -411,6 +414,59 @@ function ImageSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex
             <option value="color">Color</option>
           </select>
         </label>
+      )}
+    </div>
+  );
+}
+
+function MorphSection({ layer, sceneIndex }: { layer: ImageLayerData; sceneIndex: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const projectPath = useStore((s) => s.projectPath);
+  const [editing, setEditing] = useState(false);
+  const morph = layer.morph;
+  const update = (patch: Partial<ImageLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+
+  async function handleBrowse() {
+    const path = await pickImageFile();
+    if (!path) return;
+    const target = projectPath ? await copyAssetToProject(path, projectPath) : path;
+    update(morph ? { morph: { ...morph, target } } : enableMorph(layer, target));
+  }
+
+  return (
+    <div className="prop-section">
+      <h4>
+        Morph to…
+        <label className="prop-checkbox section-toggle">
+          <input
+            type="checkbox"
+            checked={!!morph}
+            onChange={() => update(morph ? disableMorph(layer) : enableMorph(layer, ''))}
+          />
+          <span>{morph ? 'On' : 'Off'}</span>
+        </label>
+      </h4>
+      {morph && (
+        <>
+          <label className="prop-field">
+            <span>Target</span>
+            <input
+              type="text"
+              value={morph.target}
+              placeholder="Second image"
+              onChange={(e) => update({ morph: { ...morph, target: e.target.value } })}
+            />
+          </label>
+          <button className="prop-browse-btn" onClick={handleBrowse}>Browse...</button>
+          <p className="prop-hint">{morph.pairs.length} point pairs</p>
+          <button className="prop-browse-btn" disabled={!morph.target} onClick={() => setEditing(true)}>
+            Edit points...
+          </button>
+        </>
+      )}
+      {editing && morph && createPortal(
+        <MorphEditor layer={layer} sceneIndex={sceneIndex} onClose={() => setEditing(false)} />,
+        document.body,
       )}
     </div>
   );
@@ -1225,6 +1281,7 @@ export function PropertyInspector() {
           {layer.type === 'text' && <CharAnimationSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'shape' && <ShapeSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'image' && <ImageSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'image' && <MorphSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'svg' && <SvgSection layer={layer} sceneIndex={selectedSceneIndex} />}
 

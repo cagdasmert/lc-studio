@@ -20,6 +20,7 @@ npm run tauri dev        # Launch full Tauri desktop app with hot-reload
 npm run tauri build      # Production build (creates .app/.dmg/.exe/.deb)
 npm run tauri build -- --debug  # Debug build (faster, includes devtools)
 npx tsc --noEmit         # Type-check without emitting
+npm run fetch-models     # Download + verify the auto-match model (tauri build runs it)
 npm test                 # Run the Vitest suite once
 npm run test:watch       # Vitest in watch mode
 ```
@@ -49,6 +50,7 @@ The Tauri backend (`src-tauri/`) handles windowing, file system access, and proc
 Implemented subsystems:
 - **Render pipeline** — Custom Canvas renderer (`src/renderer/`) for frame generation + FFmpeg encoding (`src-tauri/src/render/`) for video output
 - **Effects system** — Layer FX (`src/renderer/layer-fx.ts`) composited from the layer's own pixels, with an optional timing envelope (`fx-envelope.ts`) that drives reveal effects and dims continuous ones; scene FX (`scene-fx.ts`) applied full-frame. UI is schema-driven from `src/lib/fx-schema.ts`, which the renderer must never import. All FX are frame-deterministic via `noise.ts` — never `Math.random()`
+- **Image morph** — Image layers can warp into a second image (`src/renderer/morph-field.ts`, `draw-morph.ts`, driven by the `morphProgress` track). Matching points come from a bundled DINOv2 model run in a Web Worker at authoring time only (`src/lib/morph-match/`, model fetched by `npm run fetch-models`) — never during rendering
 - **AI generation** — LLM orchestration via Ollama, LM Studio, or OpenAI-compatible APIs (`src/lib/ai/`), using `@tauri-apps/plugin-http` for CORS-free local requests
 - **Storage** — JSON project manifests (`.lcs.json`) via `src/lib/project-io.ts`, recent projects tracked in localStorage
 

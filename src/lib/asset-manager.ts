@@ -1,6 +1,7 @@
 import { copyFile, mkdir, exists } from '@tauri-apps/plugin-fs';
 import { join, basename } from '@tauri-apps/api/path';
-import type { Composition, Layer } from '../types';
+import type { Composition } from '../types';
+import { assetRefs } from './asset-refs';
 
 const ASSETS_DIR = 'assets';
 
@@ -99,16 +100,10 @@ export function rewriteAssetPaths(
       scene.backgroundImage = fn(scene.backgroundImage);
     }
     for (const layer of scene.layers) {
-      if (hasAssetSrc(layer)) {
-        (layer as { src: string }).src = fn((layer as { src: string }).src);
-      }
+      for (const ref of assetRefs(layer)) ref.set(fn(ref.get()));
     }
   }
   return clone;
-}
-
-function hasAssetSrc(layer: Layer): boolean {
-  return layer.type === 'image' || layer.type === 'video' || layer.type === 'audio';
 }
 
 /**
@@ -151,10 +146,9 @@ export async function bundleAssets(
     }
 
     for (const layer of scene.layers) {
-      if (!hasAssetSrc(layer)) continue;
-      (layer as { src: string }).src = await bundleAssetSrc(
-        (layer as { src: string }).src, `layer "${layer.name}"`, projectDir,
-      );
+      for (const ref of assetRefs(layer)) {
+        ref.set(await bundleAssetSrc(ref.get(), `layer "${layer.name}"`, projectDir));
+      }
     }
   }
 

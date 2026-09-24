@@ -25,3 +25,7 @@ dist-ssr
 
 # Subagent-driven development scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Auto-match model — fetched by `npm run fetch-models`, not committed
+src-tauri/resources/models/*.onnx
+src-tauri/resources/models/*.part
