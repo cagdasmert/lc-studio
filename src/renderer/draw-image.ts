@@ -1,5 +1,6 @@
 import type { ImageLayerData, ResolvedTransform } from '../types';
 import type { MediaCache } from './media-cache';
+import { resolveNumericProperty } from './interpolation';
 
 type FitMode = ImageLayerData['fitMode'];
 
@@ -59,6 +60,7 @@ export function drawImageLayer(
   ctx: CanvasRenderingContext2D,
   layer: ImageLayerData,
   resolved: ResolvedTransform,
+  frameInLayer: number,
   mediaCache: MediaCache,
 ): void {
   const bitmap = mediaCache.get(layer.src);
@@ -67,11 +69,13 @@ export function drawImageLayer(
   const { width: dw, height: dh } = resolved;
   if (dw <= 0 || dh <= 0) return;
 
+  const borderRadius = resolveNumericProperty(layer.keyframes, 'borderRadius', frameInLayer, layer.borderRadius);
+
   // Keep the bitmap inside the layer box. `cover` scales past the box by
   // definition, and `none` does whenever the source is larger than the box.
-  if (layer.borderRadius > 0) {
+  if (borderRadius > 0) {
     ctx.beginPath();
-    ctx.roundRect(0, 0, dw, dh, layer.borderRadius);
+    ctx.roundRect(0, 0, dw, dh, borderRadius);
     ctx.clip();
   } else if (overflowsBox(bitmap, layer.fitMode, dw, dh)) {
     ctx.beginPath();

@@ -1,12 +1,20 @@
 import type { ShapeLayerData, ResolvedTransform } from '../types';
 import { createCanvasGradient } from './gradient';
+import { resolveNumericProperty } from './interpolation';
 
 export function drawShapeLayer(
   ctx: CanvasRenderingContext2D,
   layer: ShapeLayerData,
   resolved: ResolvedTransform,
+  frameInLayer: number,
 ): void {
   const { width, height } = resolved;
+  // Back/elastic easings overshoot, which can carry the radius below zero,
+  // and roundRect throws on a negative radius.
+  const cornerRadius = Math.max(
+    0, resolveNumericProperty(layer.keyframes, 'cornerRadius', frameInLayer, layer.cornerRadius),
+  );
+  const strokeWidth = resolveNumericProperty(layer.keyframes, 'strokeWidth', frameInLayer, layer.strokeWidth);
 
   ctx.beginPath();
 
@@ -16,7 +24,7 @@ export function drawShapeLayer(
       break;
 
     case 'rounded-rect':
-      ctx.roundRect(0, 0, width, height, layer.cornerRadius);
+      ctx.roundRect(0, 0, width, height, cornerRadius);
       break;
 
     case 'circle': {
@@ -104,9 +112,9 @@ export function drawShapeLayer(
     ctx.fill();
   }
 
-  if (layer.stroke && layer.strokeWidth > 0) {
+  if (layer.stroke && strokeWidth > 0) {
     ctx.strokeStyle = layer.stroke;
-    ctx.lineWidth = layer.strokeWidth;
+    ctx.lineWidth = strokeWidth;
     if (layer.strokeDash && layer.strokeDash.length > 0) {
       ctx.setLineDash(layer.strokeDash);
       if (layer.strokeDashOffset) {
