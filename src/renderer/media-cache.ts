@@ -1,5 +1,6 @@
 import type { Scene, Layer } from '../types';
 import { resolveAssetPath } from '../lib/asset-manager';
+import { assetRefs } from '../lib/asset-refs';
 
 export type MediaCache = Map<string, ImageBitmap>;
 
@@ -50,11 +51,12 @@ export async function loadImage(
   }
 }
 
-function getImageSources(layers: Layer[]): string[] {
+/** Every image a set of layers draws — including morph targets. */
+export function getImageSources(layers: Layer[]): string[] {
   const sources: string[] = [];
   for (const layer of layers) {
-    if (layer.type === 'image' && layer.src) {
-      sources.push(layer.src);
+    for (const ref of assetRefs(layer)) {
+      if (ref.kind === 'image' && ref.get()) sources.push(ref.get());
     }
   }
   return sources;
