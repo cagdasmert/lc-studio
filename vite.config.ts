@@ -8,6 +8,11 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // onnxruntime-web locates its .wasm relative to its own module; pre-bundling
+  // moves the module and breaks that. The auto-match worker is an ES module.
+  optimizeDeps: { exclude: ["onnxruntime-web"] },
+  worker: { format: "es" as const },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
