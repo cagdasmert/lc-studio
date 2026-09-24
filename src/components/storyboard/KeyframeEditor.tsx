@@ -12,12 +12,14 @@ function getAnimatableProperties(layer: Layer): string[] {
   switch (layer.type) {
     case 'text': return TEXT_PROPERTIES;
     case 'shape': return SHAPE_PROPERTIES;
-    case 'image': return IMAGE_PROPERTIES;
+    case 'image': return layer.morph ? [...IMAGE_PROPERTIES, 'morphProgress'] : IMAGE_PROPERTIES;
     default: return BASE_PROPERTIES;
   }
 }
 
 function getPropertyValue(layer: Layer, property: string): number {
+  // morphProgress lives on the morph block, not on the layer itself.
+  if (property === 'morphProgress' && layer.type === 'image') return layer.morph?.progress ?? 0;
   return (layer as unknown as Record<string, number>)[property] ?? 0;
 }
 
