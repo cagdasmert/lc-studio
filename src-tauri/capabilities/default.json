@@ -8,6 +8,7 @@
     "opener:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-resource-read-recursive",
     {
       "identifier": "http:default",
       "allow": [
