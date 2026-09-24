@@ -263,10 +263,10 @@ function drawLayer(
       drawTextLayer(ctx, layer, resolved, frameInLayer);
       break;
     case 'shape':
-      drawShapeLayer(ctx, layer, resolved);
+      drawShapeLayer(ctx, layer, resolved, frameInLayer);
       break;
     case 'image':
-      drawImageLayer(ctx, layer, resolved, mediaCache);
+      drawImageLayer(ctx, layer, resolved, frameInLayer, mediaCache);
       break;
     case 'video':
       if (videoCache) {
