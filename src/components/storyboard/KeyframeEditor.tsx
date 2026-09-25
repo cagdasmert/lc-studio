@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store';
-import type { Layer, EasingType, Keyframe } from '../../types';
+import type { Layer, EasingType, Keyframe, KeyframeValue } from '../../types';
 
 // Animatable properties per layer type
 const BASE_PROPERTIES = ['x', 'y', 'width', 'height', 'scaleX', 'scaleY', 'rotation', 'opacity'];
@@ -63,7 +63,7 @@ export function KeyframeEditor() {
     property: string;
     originalFrame: number;
     currentFrame: number;
-    value: number;
+    value: KeyframeValue;
     easing: EasingType;
   } | null>(null);
 
@@ -86,7 +86,7 @@ export function KeyframeEditor() {
   const totalWidth = sceneDuration * pixelsPerFrame;
 
   // Get selected keyframe's easing
-  const selectedKfData: Keyframe | undefined =
+  const selectedKfData: Keyframe<KeyframeValue> | undefined =
     selectedKf && layer
       ? layer.keyframes[selectedKf.property]?.keyframes.find(
           (k) => k.frame === selectedKf.frame,
@@ -145,7 +145,7 @@ export function KeyframeEditor() {
   }
 
   // Diamond drag start
-  function handleDiamondMouseDown(e: React.MouseEvent, property: string, kf: Keyframe) {
+  function handleDiamondMouseDown(e: React.MouseEvent, property: string, kf: Keyframe<KeyframeValue>) {
     if (e.detail >= 2) return; // skip double-click
     e.stopPropagation();
     e.preventDefault();
@@ -298,8 +298,7 @@ export function KeyframeEditor() {
           {/* Tracks */}
           <div className="ke-tracks" style={{ width: totalWidth }}>
             {properties.map((prop, idx) => {
-              const track = layer.keyframes[prop];
-              const keyframes = track?.keyframes ?? [];
+              const keyframes: Keyframe<KeyframeValue>[] = layer.keyframes[prop]?.keyframes ?? [];
 
               return (
                 <div

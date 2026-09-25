@@ -13,10 +13,7 @@ export function drawTextLayer(
   const fontSize = resolveNumericProperty(layer.keyframes, 'fontSize', frameInLayer, layer.fontSize);
   const letterSpacing = resolveNumericProperty(layer.keyframes, 'letterSpacing', frameInLayer, layer.letterSpacing);
   const lineHeight = resolveNumericProperty(layer.keyframes, 'lineHeight', frameInLayer, layer.lineHeight);
-  const color = resolveColorProperty(
-    layer.keyframes as unknown as Record<string, import('../types').KeyframeTrack<string>>,
-    'color', frameInLayer, layer.color,
-  );
+  const color = resolveColorProperty(layer.keyframes, 'color', frameInLayer, layer.color);
 
   const weight = layer.fontWeight === 'normal' ? '' : layer.fontWeight;
   const style = layer.fontStyle === 'normal' ? '' : layer.fontStyle;
