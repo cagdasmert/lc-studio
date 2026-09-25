@@ -67,7 +67,7 @@ interface LayerBase {
   layerFx?: LayerFxDef[];      // compositing FX stack
   visible: boolean;
   locked: boolean;
-  keyframes: Record<string, KeyframeTrack>;
+  keyframes: Record<string, LayerKeyframeTrack>;
 }
 
 type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio';
@@ -228,6 +228,11 @@ interface Keyframe<T = number> {
 interface KeyframeTrack<T = number> {
   keyframes: Keyframe<T>[];
 }
+
+type KeyframeValue = number | string;
+
+// What a layer stores per property: all numbers, or all hex colours (text `color`).
+type LayerKeyframeTrack = KeyframeTrack<number> | KeyframeTrack<string>;
 
 interface EasingParams {
   controlPoints?: [number, number, number, number];  // cubic-bezier
@@ -403,9 +408,12 @@ function drawCompositionFrame(ctx: CanvasRenderingContext2D,
 ```typescript
 function interpolateNumeric(track: KeyframeTrack<number>, frame: number): number;
 function interpolateColor(track: KeyframeTrack<string>, frame: number): string;
-function resolveNumericProperty(keyframes: Record<string, KeyframeTrack>,
+function isNumericTrack(track: LayerKeyframeTrack): track is KeyframeTrack<number>;
+function isColorTrack(track: LayerKeyframeTrack): track is KeyframeTrack<string>;
+// Both resolvers fall back to defaultValue for a missing, empty or wrong-kind track.
+function resolveNumericProperty(keyframes: Record<string, LayerKeyframeTrack>,
   propertyName: string, frame: number, defaultValue: number): number;
-function resolveColorProperty(keyframes: Record<string, KeyframeTrack<string>>,
+function resolveColorProperty(keyframes: Record<string, LayerKeyframeTrack>,
   propertyName: string, frame: number, defaultValue: string): string;
 function resolveLayerTransform(layer: LayerBase, frameInLayer: number): ResolvedTransform;
 ```

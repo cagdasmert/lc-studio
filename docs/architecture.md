@@ -54,7 +54,7 @@ KeyframeTrack<T>
         └── easingParams?: EasingParams
 ```
 
-Each layer has `keyframes: Record<string, KeyframeTrack>` mapping property names to tracks. The interpolation engine in `src/renderer/interpolation.ts` resolves the value of any property at any frame.
+Each layer has `keyframes: Record<string, LayerKeyframeTrack>` mapping property names to tracks. A track is `KeyframeTrack<number>` for numeric properties or `KeyframeTrack<string>` (hex colours) for a text layer's `color`, never a mix. The interpolation engine in `src/renderer/interpolation.ts` resolves the value of any property at any frame, narrowing each track with `isNumericTrack` / `isColorTrack`.
 
 ### State Management (`src/store/`)
 

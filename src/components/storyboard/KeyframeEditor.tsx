@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store';
-import type { Layer, EasingType, Keyframe } from '../../types';
+import type { Layer, EasingType, Keyframe, KeyframeValue } from '../../types';
 
 // Animatable properties per layer type
 const BASE_PROPERTIES = ['x', 'y', 'width', 'height', 'scaleX', 'scaleY', 'rotation', 'opacity'];
-const TEXT_PROPERTIES = [...BASE_PROPERTIES, 'fontSize', 'letterSpacing', 'lineHeight'];
+const TEXT_PROPERTIES = [...BASE_PROPERTIES, 'fontSize', 'letterSpacing', 'lineHeight', 'color'];
 const SHAPE_PROPERTIES = [...BASE_PROPERTIES, 'strokeWidth', 'cornerRadius'];
 const IMAGE_PROPERTIES = [...BASE_PROPERTIES, 'borderRadius'];
 
@@ -17,9 +17,11 @@ function getAnimatableProperties(layer: Layer): string[] {
   }
 }
 
-function getPropertyValue(layer: Layer, property: string): number {
+function getPropertyValue(layer: Layer, property: string): KeyframeValue {
   // morphProgress lives on the morph block, not on the layer itself.
   if (property === 'morphProgress' && layer.type === 'image') return layer.morph?.progress ?? 0;
+  // The only colour track: a hex string, captured from the inspector's colour.
+  if (property === 'color' && layer.type === 'text') return layer.color;
   return (layer as unknown as Record<string, number>)[property] ?? 0;
 }
 
@@ -63,7 +65,7 @@ export function KeyframeEditor() {
     property: string;
     originalFrame: number;
     currentFrame: number;
-    value: number;
+    value: KeyframeValue;
     easing: EasingType;
   } | null>(null);
 
@@ -86,7 +88,7 @@ export function KeyframeEditor() {
   const totalWidth = sceneDuration * pixelsPerFrame;
 
   // Get selected keyframe's easing
-  const selectedKfData: Keyframe | undefined =
+  const selectedKfData: Keyframe<KeyframeValue> | undefined =
     selectedKf && layer
       ? layer.keyframes[selectedKf.property]?.keyframes.find(
           (k) => k.frame === selectedKf.frame,
@@ -145,7 +147,7 @@ export function KeyframeEditor() {
   }
 
   // Diamond drag start
-  function handleDiamondMouseDown(e: React.MouseEvent, property: string, kf: Keyframe) {
+  function handleDiamondMouseDown(e: React.MouseEvent, property: string, kf: Keyframe<KeyframeValue>) {
     if (e.detail >= 2) return; // skip double-click
     e.stopPropagation();
     e.preventDefault();
@@ -186,6 +188,11 @@ export function KeyframeEditor() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [dragState, layer, selectedSceneIndex, removeKeyframe, setKeyframe, xToFrame]);
+
+  // The label column scrolls the rows; the timeline follows it
+  function handleLabelsScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (timelineRef.current) timelineRef.current.scrollTop = e.currentTarget.scrollTop;
+  }
 
   // Zoom via mouse wheel
   function handleWheel(e: React.WheelEvent) {
@@ -261,7 +268,7 @@ export function KeyframeEditor() {
 
       <div className="ke-body">
         {/* Property labels */}
-        <div className="ke-labels">
+        <div className="ke-labels" onScroll={handleLabelsScroll}>
           <div className="ke-label-ruler" />
           {properties.map((prop) => (
             <div
@@ -298,8 +305,7 @@ export function KeyframeEditor() {
           {/* Tracks */}
           <div className="ke-tracks" style={{ width: totalWidth }}>
             {properties.map((prop, idx) => {
-              const track = layer.keyframes[prop];
-              const keyframes = track?.keyframes ?? [];
+              const keyframes: Keyframe<KeyframeValue>[] = layer.keyframes[prop]?.keyframes ?? [];
 
               return (
                 <div
@@ -312,12 +318,14 @@ export function KeyframeEditor() {
                     const isDragging = dragState?.property === prop && dragState.originalFrame === kf.frame;
                     const displayFrame = isDragging ? dragState.currentFrame : kf.frame;
                     const isSelected = selectedKf?.property === prop && selectedKf.frame === kf.frame;
+                    // Colour keyframes are drawn in their own colour.
+                    const swatch = typeof kf.value === 'string' ? kf.value : undefined;
 
                     return (
                       <div
                         key={kf.frame}
-                        className={`ke-diamond ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
-                        style={{ left: displayFrame * pixelsPerFrame }}
+                        className={`ke-diamond ${swatch ? 'swatch' : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
+                        style={{ left: displayFrame * pixelsPerFrame, color: swatch }}
                         onClick={(e) => handleDiamondClick(e, prop, kf.frame)}
                         onDoubleClick={(e) => handleDiamondDoubleClick(e, prop, kf.frame)}
                         onMouseDown={(e) => handleDiamondMouseDown(e, prop, kf)}

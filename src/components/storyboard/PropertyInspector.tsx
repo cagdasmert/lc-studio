@@ -6,7 +6,7 @@ import type {
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
   ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
-  LayerFxDef, SceneFxDef, FxWindow,
+  LayerFxDef, SceneFxDef, FxWindow, KeyframeValue,
 } from '../../types';
 import {
   LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES, DEFAULT_FX_WINDOW,
@@ -70,7 +70,7 @@ function ColorField({ label, value, onChange }: {
 }
 
 function KeyframeButton({ sceneIndex, layerId, property, frame, value }: {
-  sceneIndex: number; layerId: string; property: string; frame: number; value: number;
+  sceneIndex: number; layerId: string; property: string; frame: number; value: KeyframeValue;
 }) {
   const composition = useStore((s) => s.composition);
   const setKeyframe = useStore((s) => s.setKeyframe);
@@ -185,7 +185,9 @@ function GradientControls({ gradient, onChange }: {
   );
 }
 
-function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: number }) {
+function TextSection({ layer, sceneIndex, frameInScene }: {
+  layer: TextLayerData; sceneIndex: number; frameInScene: number;
+}) {
   const updateLayer = useStore((s) => s.updateLayer);
   const projectPath = useStore((s) => s.projectPath);
   const update = (patch: Partial<TextLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
@@ -249,7 +251,10 @@ function TextSection({ layer, sceneIndex }: { layer: TextLayerData; sceneIndex: 
         </select>
       </label>
       {(layer.fillType ?? 'solid') === 'solid' && (
-        <ColorField label="Color" value={layer.color} onChange={(v) => update({ color: v })} />
+        <div className="prop-row">
+          <ColorField label="Color" value={layer.color} onChange={(v) => update({ color: v })} />
+          <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="color" frame={frameInScene} value={layer.color} />
+        </div>
       )}
       {(layer.fillType ?? 'solid') !== 'solid' && layer.fillGradient && (
         <GradientControls gradient={layer.fillGradient} onChange={(g) => update({ fillGradient: g })} />
@@ -1277,7 +1282,7 @@ export function PropertyInspector() {
 
           <TransformSection layer={layer} sceneIndex={selectedSceneIndex} frameInScene={frameInScene} />
 
-          {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} frameInScene={frameInScene} />}
           {layer.type === 'text' && <CharAnimationSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'shape' && <ShapeSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'image' && <ImageSection layer={layer} sceneIndex={selectedSceneIndex} />}

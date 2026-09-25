@@ -1,4 +1,4 @@
-import type { KeyframeTrack, LayerBase, ResolvedTransform } from '../types';
+import type { KeyframeTrack, LayerBase, LayerKeyframeTrack, ResolvedTransform } from '../types';
 import { getEasing } from './easing';
 
 // ── Numeric interpolation ──────────────────────────────
@@ -103,25 +103,37 @@ export function interpolateColor(
 
 // ── Property resolution ────────────────────────────────
 
+// A track never mixes kinds, so its first keyframe tells which it is; an empty
+// track counts as either. A track of the wrong kind for its property (only
+// possible in a hand-edited file) is ignored and the static value used.
+
+export function isNumericTrack(track: LayerKeyframeTrack): track is KeyframeTrack<number> {
+  return track.keyframes.length === 0 || typeof track.keyframes[0].value === 'number';
+}
+
+export function isColorTrack(track: LayerKeyframeTrack): track is KeyframeTrack<string> {
+  return track.keyframes.length === 0 || typeof track.keyframes[0].value === 'string';
+}
+
 export function resolveNumericProperty(
-  keyframes: Record<string, KeyframeTrack>,
+  keyframes: Record<string, LayerKeyframeTrack>,
   propertyName: string,
   frame: number,
   defaultValue: number,
 ): number {
   const track = keyframes[propertyName];
-  if (!track || track.keyframes.length === 0) return defaultValue;
+  if (!track || track.keyframes.length === 0 || !isNumericTrack(track)) return defaultValue;
   return interpolateNumeric(track, frame);
 }
 
 export function resolveColorProperty(
-  keyframes: Record<string, KeyframeTrack<string>>,
+  keyframes: Record<string, LayerKeyframeTrack>,
   propertyName: string,
   frame: number,
   defaultValue: string,
 ): string {
   const track = keyframes[propertyName];
-  if (!track || track.keyframes.length === 0) return defaultValue;
+  if (!track || track.keyframes.length === 0 || !isColorTrack(track)) return defaultValue;
   return interpolateColor(track, frame);
 }
 

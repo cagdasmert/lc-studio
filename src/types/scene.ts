@@ -35,6 +35,12 @@ export interface KeyframeTrack<T = number> {
   keyframes: Keyframe<T>[];
 }
 
+/** Numbers for most properties; hex strings for colour (text `color`). */
+export type KeyframeValue = number | string;
+
+/** A track as stored on a layer: all numbers or all hex colours, never mixed. */
+export type LayerKeyframeTrack = KeyframeTrack<number> | KeyframeTrack<string>;
+
 // ── Gradients ─────────────────────────────────────────
 
 export interface GradientStop {
@@ -318,7 +324,7 @@ export interface LayerBase {
   motionPath?: MotionPathDef | null;
   visible: boolean;
   locked: boolean;
-  keyframes: Record<string, KeyframeTrack>;
+  keyframes: Record<string, LayerKeyframeTrack>;
 }
 
 // ── Layer types ────────────────────────────────────────

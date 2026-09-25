@@ -1,5 +1,8 @@
 import type { StateCreator } from 'zustand';
-import type { Composition, Scene, Layer, KeyframeTrack, TextLayerData } from '../types';
+import type {
+  Composition, Scene, Layer, KeyframeTrack, KeyframeValue, EasingType, TextLayerData,
+} from '../types';
+import { isColorTrack, isNumericTrack } from '../renderer/interpolation';
 
 export function createDefaultComposition(): Composition {
   const introTitle: TextLayerData = {
@@ -200,8 +203,8 @@ export interface CompositionSlice {
     layerId: string,
     property: string,
     frame: number,
-    value: number,
-    easing?: string,
+    value: KeyframeValue,
+    easing?: EasingType,
   ) => void;
   removeKeyframe: (
     sceneIndex: number,
@@ -209,6 +212,32 @@ export interface CompositionSlice {
     property: string,
     frame: number,
   ) => void;
+}
+
+/**
+ * Replace the value at `frame` or insert a new keyframe in order. A replaced
+ * keyframe keeps its easing unless one is given; a new one defaults to ease-out.
+ */
+function upsertKeyframe<T>(
+  track: KeyframeTrack<T> | undefined,
+  frame: number,
+  value: T,
+  easing: EasingType | undefined,
+): KeyframeTrack<T> {
+  const keyframes = [...(track?.keyframes ?? [])];
+  const existing = keyframes.findIndex((k) => k.frame === frame);
+  if (existing >= 0) {
+    const kf = keyframes[existing];
+    keyframes[existing] = { ...kf, value, easing: easing ?? kf.easing };
+  } else {
+    keyframes.push({ frame, value, easing: easing ?? 'ease-out' });
+    keyframes.sort((a, b) => a.frame - b.frame);
+  }
+  return { keyframes };
+}
+
+function withoutKeyframe<T>(track: KeyframeTrack<T>, frame: number): KeyframeTrack<T> {
+  return { keyframes: track.keyframes.filter((k) => k.frame !== frame) };
 }
 
 export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => ({
@@ -308,29 +337,20 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
       return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
-  setKeyframe: (sceneIndex, layerId, property, frame, value, easing = 'ease-out') =>
+  setKeyframe: (sceneIndex, layerId, property, frame, value, easing) =>
     set((state) => {
       const scenes = [...state.composition.scenes];
       scenes[sceneIndex] = {
         ...scenes[sceneIndex],
         layers: scenes[sceneIndex].layers.map((l) => {
           if (l.id !== layerId) return l;
-          const keyframes = { ...l.keyframes };
-          const track: KeyframeTrack = keyframes[property]
-            ? { keyframes: [...keyframes[property].keyframes] }
-            : { keyframes: [] };
-
-          // Replace existing keyframe at this frame, or insert new
-          const existing = track.keyframes.findIndex((k) => k.frame === frame);
-          if (existing >= 0) {
-            track.keyframes[existing] = { ...track.keyframes[existing], value };
-          } else {
-            track.keyframes.push({ frame, value, easing: easing as import('../types').EasingType });
-            track.keyframes.sort((a, b) => a.frame - b.frame);
-          }
-
-          keyframes[property] = track;
-          return { ...l, keyframes } as Layer;
+          // A track holds one kind of value; a write of the other kind
+          // replaces a track the renderer would ignore anyway.
+          const prev = l.keyframes[property];
+          const track = typeof value === 'number'
+            ? upsertKeyframe(prev && isNumericTrack(prev) ? prev : undefined, frame, value, easing)
+            : upsertKeyframe(prev && isColorTrack(prev) ? prev : undefined, frame, value, easing);
+          return { ...l, keyframes: { ...l.keyframes, [property]: track } } as Layer;
         }),
       };
       return { composition: { ...state.composition, scenes }, isDirty: true };
@@ -343,13 +363,11 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
         ...scenes[sceneIndex],
         layers: scenes[sceneIndex].layers.map((l) => {
           if (l.id !== layerId) return l;
-          const keyframes = { ...l.keyframes };
-          const track = keyframes[property];
+          const track = l.keyframes[property];
           if (!track) return l;
-          keyframes[property] = {
-            keyframes: track.keyframes.filter((k) => k.frame !== frame),
-          };
-          return { ...l, keyframes } as Layer;
+          // Narrowed so the filtered track keeps its kind.
+          const kept = isColorTrack(track) ? withoutKeyframe(track, frame) : withoutKeyframe(track, frame);
+          return { ...l, keyframes: { ...l.keyframes, [property]: kept } } as Layer;
         }),
       };
       return { composition: { ...state.composition, scenes }, isDirty: true };

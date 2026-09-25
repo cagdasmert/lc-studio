@@ -3,6 +3,8 @@ export type {
   EasingParams,
   Keyframe,
   KeyframeTrack,
+  KeyframeValue,
+  LayerKeyframeTrack,
   GradientStop,
   LinearGradientDef,
   RadialGradientDef,
