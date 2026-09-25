@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store';
 import type { Layer, EasingType, Keyframe, KeyframeValue } from '../../types';
+import { clampToLayer, isInLayer, toLayerFrame, toSceneFrame } from '../../lib/layer-frames';
 
 // Animatable properties per layer type
 const BASE_PROPERTIES = ['x', 'y', 'width', 'height', 'scaleX', 'scaleY', 'rotation', 'opacity'];
@@ -124,7 +125,9 @@ export function KeyframeEditor() {
     // Don't add if clicking on a diamond
     if ((e.target as HTMLElement).classList.contains('ke-diamond')) return;
 
-    const frame = xToFrame(e.clientX);
+    // The timeline counts scene frames; keyframes are stored in layer frames.
+    const frame = toLayerFrame(layer, xToFrame(e.clientX));
+    if (!isInLayer(layer, frame)) return; // shaded: the layer isn't drawn there
     const value = getPropertyValue(layer, property);
     setKeyframe(selectedSceneIndex, layer.id, property, frame, value);
     setSelectedKf({ property, frame });
@@ -166,7 +169,8 @@ export function KeyframeEditor() {
     if (!dragState || !layer) return;
 
     function handleMouseMove(e: MouseEvent) {
-      const frame = xToFrame(e.clientX);
+      if (!layer) return;
+      const frame = clampToLayer(layer, toLayerFrame(layer, xToFrame(e.clientX)));
       setDragState((prev) => prev ? { ...prev, currentFrame: frame } : null);
     }
 
@@ -215,6 +219,16 @@ export function KeyframeEditor() {
 
   // Playhead position
   const playheadX = frameInScene * pixelsPerFrame;
+  const tracksHeight = properties.length * TRACK_HEIGHT;
+
+  // The layer's lifetime on the scene timeline, in px. An edge inside the
+  // timeline sits half a frame out, where xToFrame's rounding changes sides.
+  const liveFrom = Math.min(layer?.startFrame ?? 0, sceneDuration);
+  const liveTo = Math.min(Math.max(layer?.endFrame ?? sceneDuration, liveFrom), sceneDuration);
+  const edgeX = (f: number) =>
+    f <= 0 ? 0 : f >= sceneDuration ? totalWidth : (f - 0.5) * pixelsPerFrame;
+  const liveFromX = edgeX(liveFrom);
+  const liveToX = edgeX(liveTo);
 
   if (!keyframeEditorOpen) {
     return (
@@ -325,11 +339,11 @@ export function KeyframeEditor() {
                       <div
                         key={kf.frame}
                         className={`ke-diamond ${swatch ? 'swatch' : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
-                        style={{ left: displayFrame * pixelsPerFrame, color: swatch }}
+                        style={{ left: toSceneFrame(layer, displayFrame) * pixelsPerFrame, color: swatch }}
                         onClick={(e) => handleDiamondClick(e, prop, kf.frame)}
                         onDoubleClick={(e) => handleDiamondDoubleClick(e, prop, kf.frame)}
                         onMouseDown={(e) => handleDiamondMouseDown(e, prop, kf)}
-                        title={`Frame ${kf.frame}: ${kf.value} (${kf.easing})`}
+                        title={`Frame ${kf.frame}${layer.startFrame ? ` (scene ${toSceneFrame(layer, kf.frame)})` : ''}: ${kf.value} (${kf.easing})`}
                       >
                         {'\u25C6'}
                       </div>
@@ -339,8 +353,12 @@ export function KeyframeEditor() {
               );
             })}
 
+            {/* Where the layer isn't drawn */}
+            <div className="ke-outside" style={{ left: 0, width: liveFromX, height: tracksHeight }} />
+            <div className="ke-outside" style={{ left: liveToX, width: Math.max(0, totalWidth - liveToX), height: tracksHeight }} />
+
             {/* Playhead */}
-            <div className="ke-playhead" style={{ left: playheadX, height: properties.length * TRACK_HEIGHT }} />
+            <div className="ke-playhead" style={{ left: playheadX, height: tracksHeight }} />
           </div>
         </div>
       </div>

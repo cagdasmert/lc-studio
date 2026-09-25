@@ -17,6 +17,7 @@ import { FontPicker } from '../shared/FontPicker';
 import { pickImageFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
 import { enableMorph, disableMorph } from '../../lib/morph-edit';
+import { isInLayer, toLayerFrame } from '../../lib/layer-frames';
 import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
@@ -80,10 +81,14 @@ function KeyframeButton({ sceneIndex, layerId, property, frame, value }: {
   const layer = scene?.layers.find((l) => l.id === layerId);
   const track = layer?.keyframes[property];
   const hasKeyframe = track?.keyframes.some((k) => k.frame === frame);
+  // A key where the layer isn't drawn would never be seen; one that is
+  // already there (from a file) can still be removed.
+  const canAdd = layer ? isInLayer(layer, frame) : false;
 
   return (
     <button
       className={`keyframe-btn ${hasKeyframe ? 'active' : ''}`}
+      disabled={!hasKeyframe && !canAdd}
       onClick={() => {
         if (hasKeyframe) {
           removeKeyframe(sceneIndex, layerId, property, frame);
@@ -91,15 +96,15 @@ function KeyframeButton({ sceneIndex, layerId, property, frame, value }: {
           setKeyframe(sceneIndex, layerId, property, frame, value);
         }
       }}
-      title={hasKeyframe ? 'Remove keyframe' : 'Add keyframe'}
+      title={hasKeyframe ? 'Remove keyframe' : canAdd ? 'Add keyframe' : 'Move the playhead into the layer to add a keyframe'}
     >
       {hasKeyframe ? '\u25C6' : '\u25C7'}
     </button>
   );
 }
 
-function TransformSection({ layer, sceneIndex, frameInScene }: {
-  layer: Layer; sceneIndex: number; frameInScene: number;
+function TransformSection({ layer, sceneIndex, frameInLayer }: {
+  layer: Layer; sceneIndex: number; frameInLayer: number;
 }) {
   const updateLayer = useStore((s) => s.updateLayer);
 
@@ -110,11 +115,11 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
       <h4>Transform</h4>
       <div className="prop-row">
         <NumericField label="X" value={layer.x} onChange={(v) => update({ x: v } as Partial<Layer>)} />
-        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="x" frame={frameInScene} value={layer.x} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="x" frame={frameInLayer} value={layer.x} />
       </div>
       <div className="prop-row">
         <NumericField label="Y" value={layer.y} onChange={(v) => update({ y: v } as Partial<Layer>)} />
-        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="y" frame={frameInScene} value={layer.y} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="y" frame={frameInLayer} value={layer.y} />
       </div>
       <div className="prop-row">
         <NumericField label="W" value={layer.width} onChange={(v) => update({ width: v } as Partial<Layer>)} min={1} />
@@ -122,7 +127,7 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
       </div>
       <div className="prop-row">
         <NumericField label="Rotation" value={layer.rotation} onChange={(v) => update({ rotation: v } as Partial<Layer>)} />
-        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="rotation" frame={frameInScene} value={layer.rotation} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="rotation" frame={frameInLayer} value={layer.rotation} />
       </div>
       <div className="prop-row">
         <NumericField label="Scale X" value={layer.scaleX} onChange={(v) => update({ scaleX: v } as Partial<Layer>)} step={0.1} />
@@ -134,7 +139,7 @@ function TransformSection({ layer, sceneIndex, frameInScene }: {
       </div>
       <div className="prop-row">
         <NumericField label="Opacity" value={layer.opacity} onChange={(v) => update({ opacity: v } as Partial<Layer>)} min={0} max={1} step={0.05} />
-        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="opacity" frame={frameInScene} value={layer.opacity} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="opacity" frame={frameInLayer} value={layer.opacity} />
       </div>
       <label className="prop-field">
         <span>Blend</span>
@@ -185,8 +190,8 @@ function GradientControls({ gradient, onChange }: {
   );
 }
 
-function TextSection({ layer, sceneIndex, frameInScene }: {
-  layer: TextLayerData; sceneIndex: number; frameInScene: number;
+function TextSection({ layer, sceneIndex, frameInLayer }: {
+  layer: TextLayerData; sceneIndex: number; frameInLayer: number;
 }) {
   const updateLayer = useStore((s) => s.updateLayer);
   const projectPath = useStore((s) => s.projectPath);
@@ -253,7 +258,7 @@ function TextSection({ layer, sceneIndex, frameInScene }: {
       {(layer.fillType ?? 'solid') === 'solid' && (
         <div className="prop-row">
           <ColorField label="Color" value={layer.color} onChange={(v) => update({ color: v })} />
-          <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="color" frame={frameInScene} value={layer.color} />
+          <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="color" frame={frameInLayer} value={layer.color} />
         </div>
       )}
       {(layer.fillType ?? 'solid') !== 'solid' && layer.fillGradient && (
@@ -1280,9 +1285,9 @@ export function PropertyInspector() {
             </div>
           </div>
 
-          <TransformSection layer={layer} sceneIndex={selectedSceneIndex} frameInScene={frameInScene} />
+          <TransformSection layer={layer} sceneIndex={selectedSceneIndex} frameInLayer={toLayerFrame(layer, frameInScene)} />
 
-          {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} frameInScene={frameInScene} />}
+          {layer.type === 'text' && <TextSection layer={layer} sceneIndex={selectedSceneIndex} frameInLayer={toLayerFrame(layer, frameInScene)} />}
           {layer.type === 'text' && <CharAnimationSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'shape' && <ShapeSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'image' && <ImageSection layer={layer} sceneIndex={selectedSceneIndex} />}

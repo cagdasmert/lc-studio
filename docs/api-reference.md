@@ -219,7 +219,7 @@ interface AudioLayerData extends LayerBase {
 
 ```typescript
 interface Keyframe<T = number> {
-  frame: number;
+  frame: number;                  // counted from the layer's startFrame, not the scene's start
   value: T;
   easing: EasingType;
   easingParams?: EasingParams;

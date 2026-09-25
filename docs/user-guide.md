@@ -183,6 +183,8 @@ Keyframes let you animate any numeric property over time, and a text layer's col
 3. Set the property value you want at that frame
 4. Click the **diamond button** next to the property — it turns orange when a keyframe exists at the current frame
 
+Keyframes belong to the layer, so they move with it when you change its Start frame. The diamond is greyed out while the playhead is outside the layer's Start–End range, and the Keyframes panel shades those frames.
+
 ### Removing a Keyframe
 
 Click the orange diamond button at a frame that has a keyframe. It will revert to an empty diamond.

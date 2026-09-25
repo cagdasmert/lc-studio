@@ -252,6 +252,7 @@ body {
 }
 .keyframe-btn.active { color: #ff9800; }
 .keyframe-btn:hover { color: #ffb74d; }
+.keyframe-btn:disabled { color: #333; cursor: not-allowed; }
 
 /* ── Scene timeline ───────────────────────────────────── */
 
@@ -1136,6 +1137,17 @@ body {
    outline keeps dark ones visible on the dark track. */
 .ke-diamond.swatch { -webkit-text-stroke: 1px #888; }
 .ke-diamond.swatch.selected { -webkit-text-stroke: 1px #ffb74d; }
+
+/* Frames outside the selected layer's lifetime: it isn't drawn there, so
+   keyframes can't be added. Below the diamonds and playhead. */
+.ke-outside {
+  position: absolute;
+  top: 0;
+  background: repeating-linear-gradient(
+    135deg, rgba(0, 0, 0, 0.5) 0 4px, rgba(0, 0, 0, 0.3) 4px 8px);
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* Playhead */
 .ke-playhead {
