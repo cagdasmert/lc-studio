@@ -202,14 +202,12 @@ Click the orange diamond button at a frame that has a keyframe. It will revert t
 
 ### Example: Colour Change
 
-Text colour is keyed from the **Keyframes** panel below the canvas rather than a diamond button. Scroll over the property names to reach the lower rows (the mouse wheel over the timeline zooms).
-
-1. Select a text layer and set its Color in the Property Inspector
-2. Click the `color` row in the Keyframes panel at the frame where the colour should start — the new keyframe takes the current colour and is drawn in it
-3. Pick the second colour, then click the `color` row at a later frame
+1. Select a text layer with a solid fill
+2. Go to frame 0, set Color to the starting colour, click the diamond next to Color
+3. Go to frame 30, pick the second colour, click the diamond next to Color
 4. Press play — the text blends from one colour to the other
 
-While the colour track has keyframes it overrides the Color field. Double-click a colour keyframe to delete it; with none left, the Color field applies again.
+While the colour track has keyframes it overrides the Color field. The keys also appear on the `color` row of the **Keyframes** panel below the canvas, drawn in their own colour. Scroll over the property names to reach that row (the mouse wheel over the timeline zooms). There you can drag keys to new frames or double-click one to delete it; with none left, the Color field applies again.
 
 ### Example: Slide-in Animation
 
