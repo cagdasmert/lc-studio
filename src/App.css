@@ -1023,16 +1023,25 @@ body {
   overflow: hidden;
 }
 
-/* Property labels column */
+/* Property labels column. It is the vertical scroller for the rows — the
+   wheel over the timeline zooms — and the timeline mirrors its scrollTop.
+   Both columns end in the same spare space, which keeps their scroll ranges
+   equal and lifts the last row clear of the timeline's horizontal scrollbar. */
 .ke-labels {
   width: 80px;
   flex-shrink: 0;
   border-right: 1px solid #2a2a2a;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 20px;
 }
 
 .ke-label-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   height: 20px;
+  background: #111;
   border-bottom: 1px solid #1e1e1e;
 }
 
@@ -1059,7 +1068,9 @@ body {
 
 /* Ruler */
 .ke-ruler {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   background: #1a1a1a;
   border-bottom: 1px solid #2a2a2a;
   cursor: pointer;
@@ -1082,6 +1093,7 @@ body {
 .ke-tracks {
   position: relative;
   min-height: 100%;
+  padding-bottom: 20px; /* matches .ke-labels */
 }
 
 .ke-track {
@@ -1120,6 +1132,10 @@ body {
   cursor: grabbing;
   color: #fff;
 }
+/* Colour keyframes are filled with their own colour (inline style); the
+   outline keeps dark ones visible on the dark track. */
+.ke-diamond.swatch { -webkit-text-stroke: 1px #888; }
+.ke-diamond.swatch.selected { -webkit-text-stroke: 1px #ffb74d; }
 
 /* Playhead */
 .ke-playhead {

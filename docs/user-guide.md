@@ -174,7 +174,7 @@ Click the **x** button that appears when hovering over a layer in the Layer Pane
 
 ## Animating with Keyframes
 
-Keyframes let you animate any numeric property over time.
+Keyframes let you animate any numeric property over time, and a text layer's colour.
 
 ### Setting a Keyframe
 
@@ -199,6 +199,17 @@ Click the orange diamond button at a frame that has a keyframe. It will revert t
 2. Go to frame 0, set Opacity to 0, click the diamond next to Opacity
 3. Go to frame 30, set Opacity to 1, click the diamond next to Opacity
 4. Press play — the text fades in over 1 second (at 30fps)
+
+### Example: Colour Change
+
+Text colour is keyed from the **Keyframes** panel below the canvas rather than a diamond button. Scroll over the property names to reach the lower rows (the mouse wheel over the timeline zooms).
+
+1. Select a text layer and set its Color in the Property Inspector
+2. Click the `color` row in the Keyframes panel at the frame where the colour should start — the new keyframe takes the current colour and is drawn in it
+3. Pick the second colour, then click the `color` row at a later frame
+4. Press play — the text blends from one colour to the other
+
+While the colour track has keyframes it overrides the Color field. Double-click a colour keyframe to delete it; with none left, the Color field applies again.
 
 ### Example: Slide-in Animation
 
