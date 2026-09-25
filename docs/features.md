@@ -92,8 +92,11 @@ a chain of morphs.
 
 ### Keyframe Animation System
 
-Every numeric property on a layer can be animated with keyframes:
-- **Animatable properties:** x, y, width, height, scaleX, scaleY, rotation, opacity, anchorX, anchorY, fontSize, letterSpacing, lineHeight
+These properties can be animated with keyframes:
+- **Every layer:** x, y, width, height, scaleX, scaleY, rotation, opacity, anchorX, anchorY, skewX, skewY
+- **Text:** fontSize, letterSpacing, lineHeight, color
+- **Shape:** cornerRadius, strokeWidth
+- **Image:** borderRadius, morphProgress (drives an image morph)
 - **Color animation:** Smooth interpolation between hex colors
 - **Hold behavior:** Values hold at the first keyframe before the track starts and at the last keyframe after it ends
 - **Per-keyframe easing:** Each keyframe specifies its own easing curve
