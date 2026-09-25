@@ -1,8 +1,8 @@
 // @vitest-environment node
 //
-// setKeyframe / removeKeyframe on a text layer's `color` track, as the
-// keyframe editor drives them: colour values stay hex strings, and a track
-// never ends up mixing colours with numbers.
+// setKeyframe / removeKeyframe as the keyframe editor drives them: colour
+// values stay hex strings, a track never ends up mixing colours with numbers,
+// and the Easing menu's re-set of a keyframe changes its easing.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useStore } from './index';
@@ -71,6 +71,32 @@ describe('keyframe actions on a colour track', () => {
     setKeyframe(0, LAYER, 'fontSize', 0, 40);
     setKeyframe(0, LAYER, 'fontSize', 10, 80);
     removeKeyframe(0, LAYER, 'fontSize', 0);
+
+    expect(layer().keyframes.fontSize.keyframes).toEqual([
+      { frame: 10, value: 80, easing: 'ease-out' },
+    ]);
+  });
+});
+
+describe('setKeyframe easing', () => {
+  // The Easing menu re-sets the selected keyframe with its current value and
+  // the chosen easing. Other callers pass no easing.
+  beforeEach(() => {
+    useStore.getState().setComposition(createDefaultComposition());
+  });
+
+  it('changes the easing of an existing keyframe and keeps its value', () => {
+    const { setKeyframe } = useStore.getState();
+    setKeyframe(0, LAYER, 'fontSize', 10, 80, 'linear');
+    setKeyframe(0, LAYER, 'fontSize', 10, 80, 'ease-in-bounce');
+
+    expect(layer().keyframes.fontSize.keyframes).toEqual([
+      { frame: 10, value: 80, easing: 'ease-in-bounce' },
+    ]);
+  });
+
+  it('gives a new keyframe ease-out when no easing is passed', () => {
+    useStore.getState().setKeyframe(0, LAYER, 'fontSize', 10, 80);
 
     expect(layer().keyframes.fontSize.keyframes).toEqual([
       { frame: 10, value: 80, easing: 'ease-out' },

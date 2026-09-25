@@ -214,19 +214,23 @@ export interface CompositionSlice {
   ) => void;
 }
 
-/** Replace the value at `frame` (keeping its easing) or insert a new keyframe in order. */
+/**
+ * Replace the value at `frame` or insert a new keyframe in order. A replaced
+ * keyframe keeps its easing unless one is given; a new one defaults to ease-out.
+ */
 function upsertKeyframe<T>(
   track: KeyframeTrack<T> | undefined,
   frame: number,
   value: T,
-  easing: EasingType,
+  easing: EasingType | undefined,
 ): KeyframeTrack<T> {
   const keyframes = [...(track?.keyframes ?? [])];
   const existing = keyframes.findIndex((k) => k.frame === frame);
   if (existing >= 0) {
-    keyframes[existing] = { ...keyframes[existing], value };
+    const kf = keyframes[existing];
+    keyframes[existing] = { ...kf, value, easing: easing ?? kf.easing };
   } else {
-    keyframes.push({ frame, value, easing });
+    keyframes.push({ frame, value, easing: easing ?? 'ease-out' });
     keyframes.sort((a, b) => a.frame - b.frame);
   }
   return { keyframes };
@@ -333,7 +337,7 @@ export const createCompositionSlice: StateCreator<CompositionSlice> = (set) => (
       return { composition: { ...state.composition, scenes }, isDirty: true };
     }),
 
-  setKeyframe: (sceneIndex, layerId, property, frame, value, easing = 'ease-out') =>
+  setKeyframe: (sceneIndex, layerId, property, frame, value, easing) =>
     set((state) => {
       const scenes = [...state.composition.scenes];
       scenes[sceneIndex] = {
