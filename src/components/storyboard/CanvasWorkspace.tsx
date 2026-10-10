@@ -4,6 +4,7 @@ import { drawCompositionFrame, getTotalFrames } from '../../renderer/compositor'
 import { createMediaCache, preloadComposition, clearCache, type MediaCache } from '../../renderer/media-cache';
 import { MediaBlobCache } from '../../lib/media-bytes';
 import { VideoFrameCache, prepareVideoFrames } from '../../renderer/video-frames';
+import { AudioEngine } from '../../renderer/audio';
 import type { Layer, TextLayerData, ShapeLayerData } from '../../types';
 import { ContextMenu, type ContextMenuItem } from '../shared/ContextMenu';
 
@@ -35,10 +36,13 @@ export function CanvasWorkspace() {
   // replaced together when it changes, like the image cache.
   const blobsRef = useRef(new MediaBlobCache(useStore.getState().projectPath));
   const videoFramesRef = useRef(new VideoFrameCache((src) => blobsRef.current.get(src)));
+  const audioRef = useRef(new AudioEngine((src) => blobsRef.current.get(src)));
   const dragRef = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const composition = useStore((s) => s.composition);
+  const compositionRef = useRef(composition);
+  compositionRef.current = composition;
   const currentFrame = useStore((s) => s.currentFrame);
   const playing = useStore((s) => s.playing);
   const loop = useStore((s) => s.loop);
@@ -270,6 +274,8 @@ export function CanvasWorkspace() {
       videoFramesRef.current.dispose();
       blobsRef.current = new MediaBlobCache(projectPath);
       videoFramesRef.current = new VideoFrameCache((src) => blobsRef.current.get(src));
+      audioRef.current.dispose();
+      audioRef.current = new AudioEngine((src) => blobsRef.current.get(src));
     }
     // Close the decoders of video layers that were deleted.
     videoFramesRef.current.retain(new Set(
@@ -277,6 +283,7 @@ export function CanvasWorkspace() {
     ));
 
     let cancelled = false;
+    void audioRef.current.preload(composition);
     preloadComposition(mediaCacheRef.current, composition.scenes, projectPath).then(() => {
       if (!cancelled && !playingRef.current) drawFrameRef.current(frameRef.current);
     });
@@ -285,7 +292,21 @@ export function CanvasWorkspace() {
     };
   }, [composition, projectPath]);
 
-  useEffect(() => () => videoFramesRef.current.dispose(), []);
+  useEffect(() => () => {
+    videoFramesRef.current.dispose();
+    audioRef.current.dispose();
+  }, []);
+
+  // WebKit keeps Web Audio suspended until a user gesture resumes it.
+  useEffect(() => {
+    const unlock = () => audioRef.current.unlock();
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
+    return () => {
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+    };
+  }, []);
 
   // Resize canvas to fill container — uses refs to avoid recreating the observer
   useEffect(() => {
@@ -313,6 +334,8 @@ export function CanvasWorkspace() {
     let lastTime = 0;
     const frameDuration = 1000 / (fps * speed);
     let frame = frameRef.current;
+    const audio = audioRef.current;
+    audio.seekTo(frame, compositionRef.current, speed);
 
     function tick(time: number) {
       if (lastTime === 0) {
@@ -326,6 +349,7 @@ export function CanvasWorkspace() {
         if (frame >= totalFrames) {
           if (loop) {
             frame = 0;
+            audio.seekTo(0, compositionRef.current, speed);
           } else {
             setPlaying(false);
             return;
@@ -338,7 +362,10 @@ export function CanvasWorkspace() {
     }
 
     animId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animId);
+    return () => {
+      cancelAnimationFrame(animId);
+      audio.stopAll();
+    };
   }, [playing, fps, speed, loop, totalFrames, setCurrentFrame, setPlaying]);
 
   // Redraw on state change when paused
