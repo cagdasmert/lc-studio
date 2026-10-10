@@ -55,6 +55,7 @@ Implemented subsystems:
 - **Image morph** — Image layers can warp into a second image (`src/renderer/morph-field.ts`, `draw-morph.ts`, driven by the `morphProgress` track). Matching points come from a bundled DINOv2 model run in a Web Worker at authoring time only (`src/lib/morph-match/`, model fetched by `npm run fetch-models`) — never during rendering
 - **AI generation** — LLM orchestration via Ollama, LM Studio, or OpenAI-compatible APIs (`src/lib/ai/`), using `@tauri-apps/plugin-http` for CORS-free local requests
 - **Export audio** — `buildAudioTracks()` (`src/lib/audio-tracks.ts`) times every audible layer; `build_audio_filter()` in `src-tauri/src/render/ffmpeg.rs` mixes them in one FFmpeg graph. Media bytes are read with `src/lib/media-bytes.ts` (plugin-fs), never by fetching a filesystem path
+- **Video frames** — `prepareVideoFrames()` decodes each frame's video (WebCodecs via mediabunny, `src/renderer/video-frames.ts`, adapted from OpenCut Classic — see `THIRD_PARTY_NOTICES.md`) before the synchronous draw; export awaits it, preview doesn't. Never draw a video layer by seeking an `HTMLVideoElement`
 - **Acceptance scripts** — `node scripts/e2e/<feature>.mjs` drives real exports in the debug app through the `LCS_E2E` hook (`src-tauri/src/e2e.rs`, `src/lib/e2e.ts`)
 - **Storage** — JSON project manifests (`.lcs.json`) via `src/lib/project-io.ts`, recent projects tracked in localStorage
 

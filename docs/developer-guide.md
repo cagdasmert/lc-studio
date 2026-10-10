@@ -308,6 +308,7 @@ Each script generates its test media into `test-media/` (gitignored), writes sma
 
 ```bash
 node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
+node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and preview
 ```
 
 ## Tauri IPC Protocol

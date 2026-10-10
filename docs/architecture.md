@@ -76,7 +76,7 @@ The `zundo` temporal middleware provides undo/redo by tracking snapshots of the 
 The render engine is a pure Canvas 2D pipeline:
 
 ```
-drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoCache?)
+drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoFrames?)
   │
   ├── resolveFrame() → { sceneIndex, frameInScene }
   │
@@ -172,6 +172,10 @@ so tint, clip, shadow and layer FX apply unchanged.
 
 `t` comes from the `morphProgress` keyframe track. A 1080² frame with 40
 pairs renders in about 11 ms in WebKit (the macOS webview) and Chromium.
+
+#### Video frames (`video-time.ts`, `video-frames.ts`, `draw-video.ts`)
+
+Drawing stays synchronous; decoding is a separate async pass before it. `prepareVideoFrames(composition, frame, cache)` asks `collectVideoDraws()` which video frames the draw needs and has `VideoFrameCache` decode each into a canvas, keyed by layer id; `drawVideoLayer()` then draws whatever is prepared for its layer. Export awaits the prepare for every frame. Preview starts it without awaiting, draws immediately, and redraws once when the frame's decode lands while paused. The cache reads files through `MediaBlobCache` (plugin-fs) and decodes with mediabunny's `CanvasSink`; files it can't open are reported once and draw nothing.
 
 #### Determinism
 

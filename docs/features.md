@@ -304,7 +304,10 @@ Global keyboard shortcuts registered via the `useKeyboardShortcuts` hook (`useKe
 
 ### Video Layer Rendering
 
-Canvas-based video frame rendering with a caching layer.
+Video layers are decoded frame by frame with WebCodecs through [mediabunny](https://github.com/Vanilagy/mediabunny).
 
-- **draw-video.ts** -- draws a single video layer's current frame onto the canvas. Calculates source time from layer frame position, playback rate, and start time offset. Uses cover-mode scaling to fit the video into the layer's dimensions.
-- **video-cache.ts** -- `VideoCache` class that manages `HTMLVideoElement` instances. One element per unique source URL, with deduplication of concurrent loads. Provides `seekTo()` for frame-accurate positioning (waits for the `seeked` event), `preloadScene()` to warm the cache for all video layers in a scene, and `clear()` to release all resources.
+- **video-time.ts** — `sourceTimeFor()` maps a layer frame to a source time (`startTime + frame / fps × playbackRate`, holding the last frame before `endTime`); `collectVideoDraws()` lists the frames a composition frame needs, including the incoming scene's during a transition.
+- **video-frames.ts** — `VideoFrameCache`, adapted from OpenCut Classic (MIT): one decoder per layer, decoding forward for short jumps and seeking for long ones, prefetching a frame ahead. `prepareVideoFrames()` runs before each draw. Export awaits it, so every exported frame shows its exact source frame; preview draws with what's ready and redraws when the decode lands.
+- **draw-video.ts** — draws the prepared frame cover-fitted and clipped to the layer box.
+- Files the webview can't decode (for example ProRes) are skipped, so a poster image underneath shows through, and the Render panel warns before export.
+- **Limitation:** Echo FX on a video layer repeats the current frame; the trailing copies don't show earlier video frames.

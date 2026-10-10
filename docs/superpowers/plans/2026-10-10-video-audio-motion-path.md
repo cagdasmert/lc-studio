@@ -39,6 +39,7 @@
 - **Easing menu.** The keyframe editor's grouped list moves to `src/lib/easing-options.ts` and both menus import it (R3.5 "same options").
 - **Audio clipped to its scene.** A layer whose `endFrame` runs past its scene's end stops at the scene end, as its visuals do. The spec formula `(endFrame − startFrame) / fps` is used with `endFrame` clamped to `durationFrames`.
 - **Audio ends with the video (found during B8).** The spec's graph ends in a bare `apad` and relies on `-shortest`. With frames arriving at render pace, FFmpeg 8.1 then let the audio run 0.5 s past the video (5.546 s against 5.000 s; 4.48 s against 3 s in a paced Rust test). The graph now ends in `apad=whole_dur=D,atrim=end=D` with D = total frames / fps, so `build_audio_filter` and `build_ffmpeg_args`/`spawn_ffmpeg` take the output length. `-shortest` stays as a guard.
+- **PNG export needed a write permission (found during C7).** `src-tauri/capabilities/default.json` granted fs reads and `mkdir` but not `write_file`, so every PNG-sequence export failed with "fs.write_file not allowed" (on `main` too). F1 adds `fs:allow-write-file`; writes stay limited to the runtime scope (dialog-picked folders, opened projects). `write_text_file` (project Save) is still not granted — left for a follow-up.
 - **FFmpeg stderr.** FFmpeg now runs with `-hide_banner -nostats -loglevel error`, and a thread drains stderr. That surfaces errors (R2.5) and removes a latent hang: stderr was piped but never read.
 - **Video cover clips to the box.** `drawVideoLayer` keeps the cover maths (R1.6) but clips to the layer box like image layers do, instead of spilling past it.
 - **Frame cache changes from OpenCut.** Exact lookup (OpenCut accepts a frame up to 50 ms early), clamping to the track, `undefined` for superseded requests, remembered failures, an injectable sink for tests, and `dispose()` that leaves the cache reusable (React StrictMode remounts).
@@ -4702,3 +4703,26 @@ PASS  A2.3 music still audible
 PASS  A2.3 silent video file still exports  
 all 9 checks passed
 ```
+
+### Part C — F1 (2026-10-10, branch `claude/f1-video-frames`)
+
+- Unit tests: `video-time` 9, `draw-video` 4, `video-frames` (fake decoder) 12, `video-support` 3. Full suite 199 passed, 1 skipped.
+- Chromium (browser preview) sanity check before the real app: preview drew source frames 15, 16, 25, 14, 0, 17 at frames 10, 11, 20, 39, 25, 12 (including backward seeks); the ProRes warning rendered.
+- First real-app run failed every PNG export: "fs.write_file not allowed" (capability gap, see Decisions). Fixed in `593f5cb`.
+- `node scripts/e2e/f1-video.mjs` (real app, WKWebView), stable across two runs:
+
+```
+PASS  A1.1 rate 1  30 frames
+PASS  A1.1 rate 2  30 frames
+PASS  A1.2 two exports identical  45 frames, 0 differ 
+PASS  A1.3 preview matches export  [{"frame":10,"rgba":[122,122,122,255]},{"frame":20,"rgba":[204,204,204,255]},{"frame":39,"rgba":[114,114,114,255]}]
+PASS  A1.4 top layer  30 frames
+PASS  A1.4 bottom layer  30 frames
+PASS  A1.5 holds the last frame  50 frames
+PASS  A1.6 export succeeds and shows the poster  rgb 252,0,0
+PASS  A1.6 warning shown  1 video layer can't be decoded; convert it to H.264 MP4
+PASS  A1.7 export time ≤ ~2× image  video 4.0 s, image 2.2 s, ratio 1.80
+all 10 checks passed
+```
+
+- A1.7 times: 15 s, 1080×1920, 30 fps MP4 export — H.264 clip 4.0 s, still image 2.2 s (ratio 1.80). F2 export checks still 9/9 on this branch.
