@@ -1,3 +1,4 @@
+mod e2e;
 mod project_scope;
 mod render;
 
@@ -21,6 +22,8 @@ pub fn run() {
             render::commands::write_frame,
             render::commands::finish_render,
             render::commands::cancel_render,
+            e2e::e2e_script,
+            e2e::e2e_finish,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

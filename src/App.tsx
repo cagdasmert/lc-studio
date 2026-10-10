@@ -92,6 +92,13 @@ function App() {
     return () => clearInterval(timer);
   }, [markClean, setComposition]);
 
+  // Scripted acceptance runs: debug builds started with LCS_E2E (see scripts/e2e/).
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      import('./lib/e2e').then((m) => m.runE2eIfRequested()).catch(console.error);
+    }
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
