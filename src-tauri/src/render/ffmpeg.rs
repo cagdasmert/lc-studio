@@ -1,9 +1,16 @@
-use std::io::Write;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::collections::VecDeque;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStderr, ChildStdin, Command, Stdio};
+use std::thread::JoinHandle;
+
+/// Lines of FFmpeg's stderr kept for error messages.
+const STDERR_TAIL_LINES: usize = 20;
 
 pub struct FfmpegProcess {
     child: Child,
     stdin: Option<ChildStdin>,
+    /// Drains stderr and yields its last lines once FFmpeg closes it.
+    stderr: Option<JoinHandle<String>>,
 }
 
 /// One sound placed on the output timeline, built by `buildAudioTracks`
@@ -46,9 +53,14 @@ impl FfmpegProcess {
             .stdin
             .as_mut()
             .ok_or("FFmpeg stdin already closed")?;
-        stdin
-            .write_all(data)
-            .map_err(|e| format!("Failed to write frame to FFmpeg: {e}"))
+        if let Err(e) = stdin.write_all(data) {
+            // FFmpeg has usually exited already — a bad filter graph or an
+            // unreadable input — and its stderr says why.
+            drop(self.stdin.take());
+            let _ = self.child.wait();
+            return Err(with_stderr(format!("Failed to write frame to FFmpeg: {e}"), self.stderr_tail()));
+        }
+        Ok(())
     }
 
     pub fn finish(mut self) -> Result<(), String> {
@@ -59,11 +71,12 @@ impl FfmpegProcess {
             .child
             .wait()
             .map_err(|e| format!("Failed to wait for FFmpeg: {e}"))?;
+        let stderr = self.stderr_tail();
 
         if status.success() {
             Ok(())
         } else {
-            Err(format!("FFmpeg exited with status: {status}"))
+            Err(with_stderr(format!("FFmpeg exited with status: {status}"), stderr))
         }
     }
 
@@ -73,6 +86,31 @@ impl FfmpegProcess {
             .kill()
             .map_err(|e| format!("Failed to kill FFmpeg: {e}"))
     }
+
+    /// FFmpeg's last stderr lines. Call only after it has exited.
+    fn stderr_tail(&mut self) -> String {
+        self.stderr.take().and_then(|h| h.join().ok()).unwrap_or_default()
+    }
+}
+
+/// Read stderr on a thread so a chatty FFmpeg can never fill the pipe and
+/// stall, keeping only the last lines.
+fn read_stderr(stderr: ChildStderr) -> JoinHandle<String> {
+    std::thread::spawn(move || {
+        let mut tail: VecDeque<String> = VecDeque::new();
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            if tail.len() == STDERR_TAIL_LINES {
+                tail.pop_front();
+            }
+            tail.push_back(line);
+        }
+        Vec::from(tail).join("\n")
+    })
+}
+
+fn with_stderr(message: String, stderr: String) -> String {
+    let stderr = stderr.trim();
+    if stderr.is_empty() { message } else { format!("{message}\n{stderr}") }
 }
 
 pub fn check_ffmpeg() -> Result<String, String> {
@@ -296,8 +334,9 @@ pub fn spawn_ffmpeg(
         .map_err(|e| format!("Failed to spawn FFmpeg: {e}"))?;
 
     let stdin = child.stdin.take();
+    let stderr = child.stderr.take().map(read_stderr);
 
-    Ok(FfmpegProcess { child, stdin })
+    Ok(FfmpegProcess { child, stdin, stderr })
 }
 
 #[cfg(test)]
@@ -315,6 +354,84 @@ mod tests {
             fade_out_secs: 0.0,
             playback_rate: 1.0,
         }
+    }
+
+    use std::path::{Path, PathBuf};
+
+    /// These run FFmpeg itself and are skipped when it isn't on PATH.
+    fn ffmpeg_available() -> bool {
+        check_ffmpeg().is_ok()
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("lcs-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// (video, audio) stream durations in seconds.
+    fn durations(path: &Path) -> (f64, f64) {
+        let out = Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "csv=p=0"])
+            .arg(path)
+            .output()
+            .unwrap();
+        let (mut video, mut audio) = (0.0, 0.0);
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+            let mut parts = line.split(',');
+            match (parts.next(), parts.next().and_then(|d| d.parse().ok())) {
+                (Some("video"), Some(d)) => video = d,
+                (Some("audio"), Some(d)) => audio = d,
+                _ => {}
+            }
+        }
+        (video, audio)
+    }
+
+    #[test]
+    fn short_audio_does_not_cut_the_video() {
+        if !ffmpeg_available() {
+            return;
+        }
+        let dir = temp_dir("short-audio");
+        let tone = dir.join("tone.wav");
+        let made = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=880:duration=1"])
+            .arg(&tone)
+            .status()
+            .unwrap();
+        assert!(made.success());
+
+        let out = dir.join("out.mp4");
+        let mut t = track(tone.to_str().unwrap());
+        t.duration_secs = 3.0; // the layer outlasts its 1 s file
+        let mut ff = spawn_ffmpeg(64, 64, 30, out.to_str().unwrap(), &[t], "mp4", "low").unwrap();
+        let frame = vec![0u8; 64 * 64 * 4];
+        for _ in 0..90 {
+            ff.write_frame(&frame).unwrap();
+        }
+        ff.finish().unwrap();
+
+        let (video, audio) = durations(&out);
+        assert!((video - 3.0).abs() < 0.05, "video {video}");
+        assert!((audio - video).abs() < 1.0 / 30.0 + 0.03, "audio {audio} vs video {video}");
+    }
+
+    #[test]
+    fn ffmpeg_failures_carry_its_stderr() {
+        if !ffmpeg_available() {
+            return;
+        }
+        let dir = temp_dir("bad-input");
+        let missing = dir.join("missing.wav");
+        let out = dir.join("out.mp4");
+        let mut ff = spawn_ffmpeg(64, 64, 30, out.to_str().unwrap(), &[track(missing.to_str().unwrap())], "mp4", "low").unwrap();
+        let frame = vec![0u8; 64 * 64 * 4];
+        let err = (0..30)
+            .find_map(|_| ff.write_frame(&frame).err())
+            .map_or_else(|| ff.finish().unwrap_err(), |e| e);
+        assert!(err.contains("missing.wav"), "{err}");
     }
 
     const MIX_TAIL: &str = "duration=longest:normalize=0,alimiter=limit=0.95,apad[aout]";
