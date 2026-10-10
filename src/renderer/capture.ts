@@ -3,6 +3,8 @@ import { getTotalFrames, drawCompositionFrame } from './compositor';
 import { createMediaCache, preloadComposition, clearCache } from './media-cache';
 import { startRender, writeFrame, finishRender } from '../lib/tauri-bridge';
 import { buildAudioTracks } from '../lib/audio-tracks';
+import { MediaBlobCache } from '../lib/media-bytes';
+import { VideoFrameCache, prepareVideoFrames } from './video-frames';
 import { writeFile, mkdir } from '@tauri-apps/plugin-fs';
 
 function yieldToEventLoop(): Promise<void> {
@@ -23,23 +25,46 @@ function padFrame(n: number, total: number): string {
   return String(n).padStart(digits, '0');
 }
 
+/** What one export needs to draw frames, and to let go of afterwards. */
+async function createFrameRenderer(composition: Composition, projectDir: string | null) {
+  const { width, height } = composition.output;
+
+  const mediaCache = createMediaCache();
+  await preloadComposition(mediaCache, composition.scenes, projectDir);
+  const blobs = new MediaBlobCache(projectDir);
+  const videoFrames = new VideoFrameCache((src) => blobs.get(src));
+
+  // An offscreen canvas at the output resolution
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to create 2D context');
+
+  return {
+    canvas,
+    ctx,
+    /** Draw a frame, decoding its video frames first: export never draws a video layer without its exact frame. */
+    async draw(frame: number): Promise<void> {
+      await prepareVideoFrames(composition, frame, videoFrames);
+      drawCompositionFrame(ctx, composition, frame, mediaCache, videoFrames);
+    },
+    dispose(): void {
+      videoFrames.dispose();
+      blobs.clear();
+      clearCache(mediaCache);
+    },
+  };
+}
+
 async function renderPngSequence(
   composition: Composition,
   outputDir: string,
   onProgress?: (current: number, total: number) => void,
   projectDir?: string | null,
 ): Promise<void> {
-  const { width, height } = composition.output;
   const totalFrames = getTotalFrames(composition);
-
-  const mediaCache = createMediaCache();
-  await preloadComposition(mediaCache, composition.scenes, projectDir);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to create 2D context');
+  const renderer = await createFrameRenderer(composition, projectDir ?? null);
 
   // Ensure output directory exists
   try {
@@ -50,9 +75,9 @@ async function renderPngSequence(
 
   try {
     for (let frame = 0; frame < totalFrames; frame++) {
-      drawCompositionFrame(ctx, composition, frame, mediaCache);
+      await renderer.draw(frame);
 
-      const blob = await canvasToBlob(canvas, 'image/png');
+      const blob = await canvasToBlob(renderer.canvas, 'image/png');
       const buffer = new Uint8Array(await blob.arrayBuffer());
       const filePath = `${outputDir}/frame-${padFrame(frame, totalFrames)}.png`;
       await writeFile(filePath, buffer);
@@ -64,7 +89,7 @@ async function renderPngSequence(
       }
     }
   } finally {
-    clearCache(mediaCache);
+    renderer.dispose();
   }
 }
 
@@ -84,39 +109,46 @@ export async function renderComposition(
   const { width, height, fps } = composition.output;
   const totalFrames = getTotalFrames(composition);
 
-  // Preload all image assets
-  const mediaCache = createMediaCache();
-  await preloadComposition(mediaCache, composition.scenes, projectDir);
+  // Preload images and set up video decoding
+  const renderer = await createFrameRenderer(composition, projectDir ?? null);
 
-  // Create an offscreen canvas at the output resolution
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Failed to create 2D context');
+  try {
+    // GIF never carries sound, so skip reading the files.
+    const audioTracks = format === 'gif' ? [] : await buildAudioTracks(composition, projectDir ?? null);
 
-  // GIF never carries sound, so skip reading the files.
-  const audioTracks = format === 'gif' ? [] : await buildAudioTracks(composition, projectDir ?? null);
+    // Start the FFmpeg process on the Rust side
+    await startRender({
+      outputPath,
+      width,
+      height,
+      fps,
+      totalFrames,
+      audioTracks,
+      format,
+      quality,
+    });
 
-  // Start the FFmpeg process on the Rust side
-  await startRender({
-    outputPath,
-    width,
-    height,
-    fps,
-    totalFrames,
-    audioTracks,
-    format,
-    quality,
-  });
+    await pipeFrames(renderer, width, height, totalFrames, onProgress);
+  } finally {
+    renderer.dispose();
+  }
+}
 
+/** Draw every frame and send it to FFmpeg; cancel the render if anything fails. */
+async function pipeFrames(
+  renderer: Awaited<ReturnType<typeof createFrameRenderer>>,
+  width: number,
+  height: number,
+  totalFrames: number,
+  onProgress?: (current: number, total: number) => void,
+): Promise<void> {
   try {
     for (let frame = 0; frame < totalFrames; frame++) {
       // Draw the frame
-      drawCompositionFrame(ctx, composition, frame, mediaCache);
+      await renderer.draw(frame);
 
       // Extract raw RGBA pixels
-      const imageData = ctx.getImageData(0, 0, width, height);
+      const imageData = renderer.ctx.getImageData(0, 0, width, height);
       const pixels = new Uint8Array(imageData.data.buffer);
 
       // Send to Rust → FFmpeg stdin
@@ -141,7 +173,5 @@ export async function renderComposition(
       // ignore cleanup errors
     }
     throw err;
-  } finally {
-    clearCache(mediaCache);
   }
 }
