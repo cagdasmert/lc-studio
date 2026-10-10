@@ -318,6 +318,7 @@ Each script generates its test media into `test-media/` (gitignored), writes sma
 node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
 node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and preview
 node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
+node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundary
 ```
 
 ## Tauri IPC Protocol
@@ -342,10 +343,10 @@ The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-
 |--------|-----------|-------------|---------|
 | Opener | `tauri-plugin-opener` | (bundled) | Open URLs/files in system apps |
 | Dialog | `tauri-plugin-dialog` | `@tauri-apps/plugin-dialog` | Native save/open file dialogs |
-| FS | `tauri-plugin-fs` | `@tauri-apps/plugin-fs` | Read local files for media import |
+| FS | `tauri-plugin-fs` | `@tauri-apps/plugin-fs` | Read media; save projects, copy imported assets and fonts, write PNG frames |
 | HTTP | `tauri-plugin-http` | `@tauri-apps/plugin-http` | HTTP requests via Rust (CORS bypass for local AI services) |
 
-Permissions are declared in `src-tauri/capabilities/default.json`. The HTTP plugin is scoped to `http://localhost:*`, `http://127.0.0.1:*`, and `https://*`.
+Permissions are declared in `src-tauri/capabilities/default.json`. The FS plugin may read, `mkdir`, `write_file`, `write_text_file` and `copy_file`, but only inside its runtime scope: app directories, paths picked in a dialog, and project folders granted by `allow_project_dir` (`node scripts/e2e/project-io.mjs` checks that a write outside them is refused). Any new plugin-fs command the frontend calls needs its permission added there. The HTTP plugin is scoped to `http://localhost:*`, `http://127.0.0.1:*`, and `https://*`.
 
 ## FFmpeg Arguments
 
