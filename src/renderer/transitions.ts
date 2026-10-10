@@ -1,6 +1,6 @@
 import type { Scene, TransitionType } from '../types';
 import type { MediaCache } from './media-cache';
-import type { VideoCache } from './video-cache';
+import type { PreparedVideoFrames } from './draw-video';
 import { drawSceneLayers, drawSceneBackground } from './draw';
 
 export function drawTransition(
@@ -14,10 +14,10 @@ export function drawTransition(
   height: number,
   mediaCache: MediaCache,
   fps: number = 30,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   const draw = (scene: Scene, frame: number) =>
-    drawSceneLayers(ctx, scene, frame, width, height, mediaCache, fps, videoCache);
+    drawSceneLayers(ctx, scene, frame, width, height, mediaCache, fps, videoFrames);
 
   switch (type) {
     case 'fade':

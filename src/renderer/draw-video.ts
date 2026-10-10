@@ -1,37 +1,35 @@
 import type { VideoLayerData, ResolvedTransform } from '../types';
-import type { VideoCache } from './video-cache';
+import { fitRect } from './fit';
 
+/** A decoded video frame, ready to draw. */
+export type VideoFrameImage = HTMLCanvasElement | OffscreenCanvas;
+
+/** Video frames decoded ahead of a synchronous draw, by layer id. */
+export interface PreparedVideoFrames {
+  get(layerId: string): VideoFrameImage | undefined;
+}
+
+/**
+ * Draw the frame prepared for this layer, cover-fitted and clipped to the
+ * layer box as image layers are. With nothing prepared — the clip is still
+ * decoding (preview only; export always prepares first) or can't be decoded —
+ * the layer draws nothing, and whatever is underneath shows.
+ */
 export function drawVideoLayer(
   ctx: CanvasRenderingContext2D,
   layer: VideoLayerData,
   resolved: ResolvedTransform,
-  frameInLayer: number,
-  fps: number,
-  videoCache: VideoCache,
+  frames: PreparedVideoFrames,
 ): void {
-  const video = videoCache.get(layer.src);
-  if (!video || video.readyState < 2) return; // Not loaded yet
+  const frame = frames.get(layer.id);
+  if (!frame) return;
 
   const { width: dw, height: dh } = resolved;
+  if (frame.width === 0 || frame.height === 0 || dw <= 0 || dh <= 0) return;
 
-  // Calculate the time position in the source video
-  const layerTimeSecs = frameInLayer / fps;
-  const videoTimeSecs = layer.startTime + layerTimeSecs * layer.playbackRate;
-
-  // Seek synchronously for preview (best-effort, may show stale frame)
-  if (Math.abs(video.currentTime - videoTimeSecs) > 1 / fps) {
-    video.currentTime = videoTimeSecs;
-  }
-
-  // Draw the video frame scaled to fit the layer dimensions (cover mode)
-  const sw = video.videoWidth;
-  const sh = video.videoHeight;
-
-  if (sw === 0 || sh === 0) return;
-
-  const scale = Math.max(dw / sw, dh / sh);
-  const w = sw * scale;
-  const h = sh * scale;
-
-  ctx.drawImage(video, (dw - w) / 2, (dh - h) / 2, w, h);
+  const r = fitRect('cover', frame.width, frame.height, dw, dh);
+  ctx.beginPath();
+  ctx.rect(0, 0, dw, dh);
+  ctx.clip();
+  ctx.drawImage(frame, r.x, r.y, r.w, r.h);
 }

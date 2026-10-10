@@ -1,6 +1,6 @@
 import type { Composition, Scene } from '../types';
 import type { MediaCache } from './media-cache';
-import type { VideoCache } from './video-cache';
+import type { PreparedVideoFrames } from './draw-video';
 import { drawScene, drawSceneBackground } from './draw';
 import { drawTransition } from './transitions';
 import { applyShake, applyScenePostFx, hasShake } from './scene-fx';
@@ -57,7 +57,7 @@ export function drawCompositionFrame(
   composition: Composition,
   globalFrame: number,
   mediaCache: MediaCache,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   const { width, height, fps } = composition.output;
   const { sceneIndex, frameInScene } = resolveFrame(composition, globalFrame);
@@ -80,10 +80,10 @@ export function drawCompositionFrame(
 
     drawTransition(
       ctx, scene, transition.incoming, frameInScene, transition.progress,
-      scene.transition, width, height, mediaCache, fps, videoCache,
+      scene.transition, width, height, mediaCache, fps, videoFrames,
     );
   } else {
-    drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
+    drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
   }
 
   ctx.restore();

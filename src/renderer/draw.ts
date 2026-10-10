@@ -1,6 +1,6 @@
 import type { Scene, Layer, ClipPathDef, BoxShadow } from '../types';
 import type { MediaCache } from './media-cache';
-import type { VideoCache } from './video-cache';
+import type { PreparedVideoFrames } from './draw-video';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
 import {
@@ -26,7 +26,7 @@ export function drawSceneLayers(
   _height: number,
   mediaCache: MediaCache,
   fps: number = 30,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   // Sort by zIndex (lowest first = drawn first = behind)
   const sorted = [...scene.layers]
@@ -51,14 +51,14 @@ export function drawSceneLayers(
           const pastFrame = frameInScene - step * echo.frameGap;
           if (pastFrame < layer.startFrame) continue;
           drawLayerAtFrame(
-            ctx, layer, pastFrame, mediaCache, fps, videoCache,
+            ctx, layer, pastFrame, mediaCache, fps, videoFrames,
             Math.pow(echo.decay, step) * echoEnv,
           );
         }
       }
     }
 
-    drawLayerAtFrame(ctx, layer, frameInScene, mediaCache, fps, videoCache, 1);
+    drawLayerAtFrame(ctx, layer, frameInScene, mediaCache, fps, videoFrames, 1);
   }
 }
 
@@ -72,7 +72,7 @@ function drawLayerAtFrame(
   frameInScene: number,
   mediaCache: MediaCache,
   fps: number,
-  videoCache: VideoCache | undefined,
+  videoFrames: PreparedVideoFrames | undefined,
   alphaMultiplier: number,
 ): void {
   const frameInLayer = frameInScene - layer.startFrame;
@@ -170,7 +170,7 @@ function drawLayerAtFrame(
     const offCtx = offscreen.getContext('2d');
     if (offCtx) {
       offCtx.translate(fxPad, fxPad);
-      drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+      drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoFrames);
       layerCanvas = offscreen;
     }
   }
@@ -201,7 +201,7 @@ function drawLayerAtFrame(
     );
   } else {
     // Dispatch to type-specific drawer
-    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoFrames);
   }
 
   ctx.restore();
@@ -254,8 +254,8 @@ function drawLayer(
   resolved: import('../types').ResolvedTransform,
   frameInLayer: number,
   mediaCache: MediaCache,
-  fps: number,
-  videoCache?: VideoCache,
+  _fps: number,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   switch (layer.type) {
     case 'text':
@@ -268,9 +268,7 @@ function drawLayer(
       drawImageLayer(ctx, layer, resolved, frameInLayer, mediaCache);
       break;
     case 'video':
-      if (videoCache) {
-        drawVideoLayer(ctx, layer, resolved, frameInLayer, fps, videoCache);
-      }
+      if (videoFrames) drawVideoLayer(ctx, layer, resolved, videoFrames);
       break;
     case 'svg':
       drawSvgLayer(ctx, layer, resolved);
@@ -398,9 +396,9 @@ export function drawScene(
   height: number,
   mediaCache: MediaCache,
   fps: number = 30,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   drawSceneBackground(ctx, scene, width, height, mediaCache);
 
-  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
+  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
 }
