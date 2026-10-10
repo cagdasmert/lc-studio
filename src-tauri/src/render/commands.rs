@@ -42,7 +42,7 @@ pub fn start_render(
     let tracks = audio_tracks.unwrap_or_default();
     let fmt = format.as_deref().unwrap_or("mp4");
     let qual = quality.as_deref().unwrap_or("medium");
-    let process = ffmpeg::spawn_ffmpeg(width, height, fps, &output_path, &tracks, fmt, qual)?;
+    let process = ffmpeg::spawn_ffmpeg(width, height, fps, total_frames, &output_path, &tracks, fmt, qual)?;
 
     *guard = Some(RenderJob {
         ffmpeg: process,
