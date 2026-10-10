@@ -6,20 +6,22 @@
  * bundles never include it.
  */
 import { invoke } from '@tauri-apps/api/core';
-import { writeFile } from '@tauri-apps/plugin-fs';
+import { writeFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import type { ExportFormat, QualityPreset } from '../types';
 import { renderComposition } from '../renderer/capture';
 import { AudioEngine } from '../renderer/audio';
 import { getTotalFrames } from '../renderer/compositor';
 import { MediaBlobCache } from './media-bytes';
 import { useStore } from '../store';
-import { loadProjectFromPath, removeFromRecent } from './project-io';
+import { loadProjectFromPath, removeFromRecent, saveProject } from './project-io';
+import { copyAssetToProject } from './asset-manager';
 
 export type E2eJob =
   | { kind: 'render'; project: string; format: ExportFormat; output: string; quality?: QualityPreset }
   | { kind: 'preview'; project: string; frames: number[] }
   | { kind: 'preview-audio'; project: string; output: string }
-  | { kind: 'play'; project: string; seconds: number };
+  | { kind: 'play'; project: string; seconds: number }
+  | { kind: 'save'; project: string; importFrom: string; outsideScope: string };
 
 export interface E2eResult {
   job: E2eJob;
@@ -121,6 +123,33 @@ async function runJob(job: E2eJob): Promise<unknown> {
         pixels.push({ frame, rgba: await settledCenterPixel() });
       }
       return { pixels, warning: await renderWarning() };
+    }
+    case 'save': {
+      // Import a file as the Add Layer dialog does, then save the project
+      // (whose layer points at that file outside it, so Save must bundle it).
+      // Failures are reported, not thrown, so the script can see each one.
+      const { path, composition } = await openProject(job.project);
+      const out: { imported?: string; importError?: string; savedSrc?: string; saveError?: string; outsideError?: string } = {};
+      try {
+        out.imported = await copyAssetToProject(job.importFrom, path);
+      } catch (err) {
+        out.importError = String(err);
+      }
+      try {
+        const saved = await saveProject(path, { ...composition, name: 'saved by e2e' });
+        out.savedSrc = (saved.composition.scenes[0].layers[0] as { src?: string }).src;
+      } catch (err) {
+        out.saveError = String(err);
+      } finally {
+        removeFromRecent(path);
+      }
+      // The write permissions must not reach past the runtime scope.
+      try {
+        await writeTextFile(job.outsideScope, 'should not be written');
+      } catch (err) {
+        out.outsideError = String(err);
+      }
+      return out;
     }
     case 'play': {
       // Press play in the editor and record every sound the workspace's
