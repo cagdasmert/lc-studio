@@ -18,6 +18,7 @@ import { pickImageFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
 import { enableMorph, disableMorph } from '../../lib/morph-edit';
 import { isInLayer, toLayerFrame } from '../../lib/layer-frames';
+import { EASING_GROUPS } from '../../lib/easing-options';
 import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
@@ -942,6 +943,8 @@ function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: nu
         ],
         alignToPath: false,
         loop: false,
+        easing: 'linear',
+        timing: 'constant-speed',
       };
       updateLayer(sceneIndex, layer.id, { motionPath: def } as Partial<Layer>);
     }
@@ -969,6 +972,27 @@ function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: nu
           <label className="prop-checkbox">
             <input type="checkbox" checked={mp.loop ?? false} onChange={(e) => updateMP({ loop: e.target.checked })} />
             <span>Loop</span>
+          </label>
+          <label className="prop-field">
+            <span>Easing</span>
+            <select
+              value={mp.easing ?? 'linear'}
+              onChange={(e) => updateMP({ easing: e.target.value as EasingType })}
+            >
+              {EASING_GROUPS.map((group) => (
+                <optgroup key={group.group} label={group.group}>
+                  {group.values.map((v) => <option key={v} value={v}>{v}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={mp.timing === 'constant-speed'}
+              onChange={(e) => updateMP({ timing: e.target.checked ? 'constant-speed' : 'per-segment' })}
+            />
+            <span>Constant speed</span>
           </label>
           <p className="prop-hint">{mp.points.length} points defined</p>
         </>
