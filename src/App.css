@@ -384,6 +384,7 @@ body {
 .ffmpeg-status { font-size: 11px; }
 .ffmpeg-ok { color: #4caf50; }
 .ffmpeg-err { color: #f44336; }
+.render-warning { font-size: 11px; color: #ffb74d; margin: 4px 0 0; }
 
 .render-actions { display: flex; gap: 6px; align-items: center; }
 .render-actions button {

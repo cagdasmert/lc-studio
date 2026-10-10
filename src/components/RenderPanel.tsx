@@ -5,6 +5,7 @@ import type { RenderJob } from '../store/render-slice';
 import { checkFfmpeg, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
+import { countUndecodableVideoLayers, undecodableWarning, videoSourcesKey } from '../lib/video-support';
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   mp4: 'MP4 (H.264)',
@@ -45,6 +46,19 @@ export function RenderPanel() {
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
   const [qualityPreset, setQualityPreset] = useState<QualityPreset>('medium');
   const renderingRef = useRef(false);
+  const projectPath = useStore((s) => s.projectPath);
+  const [videoWarning, setVideoWarning] = useState<string | null>(null);
+  const videoKey = videoSourcesKey(composition);
+
+  // Probe the video files when the set of video layers changes (composition
+  // itself changes on every edit, and the key stands in for it).
+  useEffect(() => {
+    let cancelled = false;
+    countUndecodableVideoLayers(composition, projectPath).then((count) => {
+      if (!cancelled) setVideoWarning(undecodableWarning(count));
+    });
+    return () => { cancelled = true; };
+  }, [videoKey, projectPath]);
 
   useEffect(() => {
     checkFfmpeg()
@@ -198,6 +212,7 @@ export function RenderPanel() {
           )}
         </div>
       </div>
+      {videoWarning && <p className="render-warning">{videoWarning}</p>}
 
       {renderQueue.length > 0 && (
         <div className="render-queue">
