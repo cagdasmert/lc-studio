@@ -2,6 +2,7 @@ import type { Composition, ExportFormat, QualityPreset } from '../types';
 import { getTotalFrames, drawCompositionFrame } from './compositor';
 import { createMediaCache, preloadComposition, clearCache } from './media-cache';
 import { startRender, writeFrame, finishRender } from '../lib/tauri-bridge';
+import { buildAudioTracks } from '../lib/audio-tracks';
 import { writeFile, mkdir } from '@tauri-apps/plugin-fs';
 
 function yieldToEventLoop(): Promise<void> {
@@ -94,6 +95,9 @@ export async function renderComposition(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Failed to create 2D context');
 
+  // GIF never carries sound, so skip reading the files.
+  const audioTracks = format === 'gif' ? [] : await buildAudioTracks(composition, projectDir ?? null);
+
   // Start the FFmpeg process on the Rust side
   await startRender({
     outputPath,
@@ -101,6 +105,7 @@ export async function renderComposition(
     height,
     fps,
     totalFrames,
+    audioTracks,
     format,
     quality,
   });
