@@ -139,7 +139,7 @@ Each transition has a configurable duration in frames.
 - **Web Audio API** playback synchronized to the canvas frame loop
 - Per-audio-layer volume control with fade in/out
 - Automatic seek/sync when scrubbing the timeline
-- FFmpeg audio mixing during render: per-track volume, multi-track amix filter, AAC encoding at 192kbps
+- **Export audio** — MP4, WebM and MOV exports contain every visible audio layer and the sound of every unmuted video layer whose file has an audio stream. Each is placed at its time on the timeline, trimmed by `startTime`/`endTime` and cut at its scene's end, sped up or slowed down by a video layer's `playbackRate` (pitch preserved), and given its volume and fades. `buildAudioTracks()` (`src/lib/audio-tracks.ts`) computes the timing; `build_audio_filter()` (`src-tauri/src/render/ffmpeg.rs`) turns it into one filter graph: `atempo`, `volume`, `afade` and `adelay` per track, then `amix` without normalisation, a limiter, and `apad`/`atrim` to exactly the video's length, so the video sets the output length. GIF and PNG sequences stay silent.
 
 ### Render Pipeline
 
@@ -149,7 +149,7 @@ Custom Canvas + FFmpeg pipeline:
 3. Pixels sent to the Rust backend via Tauri IPC
 4. Rust pipes pixels to FFmpeg's stdin as `rawvideo`
 5. FFmpeg encodes to H.264 (libx264) in MP4 container with `yuv420p`, CRF 23, `faststart`
-6. Audio tracks are mixed in if present
+6. Audio tracks are placed, faded and mixed in by one FFmpeg filter graph; FFmpeg's own error output is shown if it fails
 
 **Deterministic output** — same composition + assets = same render every time.
 

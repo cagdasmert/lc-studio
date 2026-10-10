@@ -256,11 +256,12 @@ Projects are saved as `.lcs.json` files (versioned JSON with full composition). 
 
 ```
 lib.rs          — App builder, plugin registration, command handlers
+e2e.rs          — Debug-only LCS_E2E hook for scripts/e2e/
 render/
   mod.rs        — Module declarations
   job.rs        — RenderState with Mutex<Option<FfmpegProcess>>
   commands.rs   — 5 Tauri commands (check, start, write, finish, cancel)
-  ffmpeg.rs     — FfmpegProcess struct, spawn_ffmpeg(), check_ffmpeg()
+  ffmpeg.rs     — FfmpegProcess (stderr drained on a thread), build_ffmpeg_args(), build_audio_filter(), check_ffmpeg()
 ```
 
 ### Render Job Lifecycle

@@ -296,6 +296,20 @@ logic is split out of `layer-fx.ts`. The one exception is
 non-empty destination; that condition is what catches effects wrongly erasing
 the scene rather than their own bitmap.
 
+Rust tests cover the FFmpeg argument and audio-graph builders; two of them run FFmpeg itself when it is on PATH:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+### Acceptance scripts (`scripts/e2e/`)
+
+Each script generates its test media into `test-media/` (gitignored), writes small `.lcs` projects, and runs the debug app with `LCS_E2E=<script.json>`. On startup the frontend runs the script's jobs in the real webview (`src/lib/e2e.ts`), writes `script.result.json` and quits. The script then inspects the outputs with ffprobe, ffmpeg and node-canvas and prints PASS/FAIL per check. It builds the debug binary and starts Vite if nothing is on :1420; the app window opens while it runs.
+
+```bash
+node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
+```
+
 ## Tauri IPC Protocol
 
 Communication between frontend and Rust uses Tauri's `invoke` API:
@@ -307,6 +321,8 @@ Communication between frontend and Rust uses Tauri's `invoke` API:
 | `write_frame` | TS → Rust | `Uint8Array` (raw RGBA) | Pipe one frame to FFmpeg stdin |
 | `finish_render` | TS → Rust | — | Close stdin, wait for FFmpeg exit |
 | `cancel_render` | TS → Rust | — | Kill FFmpeg process |
+| `e2e_script` | TS → Rust → TS | — / String or null | Debug builds: the `LCS_E2E` script, if any |
+| `e2e_finish` | TS → Rust | result JSON | Debug builds: write the e2e results and quit |
 
 The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-copy transfer of frame data.
 
@@ -325,17 +341,22 @@ Permissions are declared in `src-tauri/capabilities/default.json`. The HTTP plug
 
 Video-only render:
 ```
-ffmpeg -y -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
+ffmpeg -y -hide_banner -nostats -loglevel error \
+  -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
   -c:v libx264 -pix_fmt yuv420p -preset medium -crf 23 -movflags +faststart \
-  -an -shortest output.mp4
+  -an output.mp4
 ```
 
-With audio tracks:
+With audio tracks (one `-ss/-t/-i` per track; `-t` is the output length × playback rate):
 ```
-ffmpeg -y -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
-  -ss {start} -t {duration} -i audio1.mp3 \
-  -ss {start} -t {duration} -i audio2.wav \
+ffmpeg -y -hide_banner -nostats -loglevel error \
+  -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
+  -ss 10 -t 2 -i music.wav \
+  -ss 0 -t 2.5 -i tone.wav \
   -c:v libx264 -pix_fmt yuv420p -preset medium -crf 23 -movflags +faststart \
-  -filter_complex "[1]volume=0.80[a0];[2]volume=1.00[a1];[a0][a1]amix=inputs=2:duration=shortest" \
-  -c:a aac -b:a 192k -shortest output.mp4
+  -filter_complex "[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=1,adelay=delays=0:all=1[a0];\
+[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=1,afade=t=in:st=0:d=0.5,adelay=delays=2500:all=1[a1];\
+[a0][a1]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,apad=whole_dur=5,atrim=end=5[aout]" \
+  -map 0:v -map "[aout]" -c:a aac -b:a 192k -shortest output.mp4
 ```
+`apad=whole_dur` and `atrim` make the mix exactly as long as the video (here 5 s = total frames / fps). An endless `apad` with only `-shortest` let the audio run up to half a second past the video when frames arrived at render pace.

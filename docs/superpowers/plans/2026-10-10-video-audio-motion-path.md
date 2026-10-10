@@ -38,6 +38,7 @@
 - **Overshoot.** Non-looping paths extrapolate along the end tangent (R3.2's preferred option) in both timing modes.
 - **Easing menu.** The keyframe editor's grouped list moves to `src/lib/easing-options.ts` and both menus import it (R3.5 "same options").
 - **Audio clipped to its scene.** A layer whose `endFrame` runs past its scene's end stops at the scene end, as its visuals do. The spec formula `(endFrame − startFrame) / fps` is used with `endFrame` clamped to `durationFrames`.
+- **Audio ends with the video (found during B8).** The spec's graph ends in a bare `apad` and relies on `-shortest`. With frames arriving at render pace, FFmpeg 8.1 then let the audio run 0.5 s past the video (5.546 s against 5.000 s; 4.48 s against 3 s in a paced Rust test). The graph now ends in `apad=whole_dur=D,atrim=end=D` with D = total frames / fps, so `build_audio_filter` and `build_ffmpeg_args`/`spawn_ffmpeg` take the output length. `-shortest` stays as a guard.
 - **FFmpeg stderr.** FFmpeg now runs with `-hide_banner -nostats -loglevel error`, and a thread drains stderr. That surfaces errors (R2.5) and removes a latent hang: stderr was piped but never read.
 - **Video cover clips to the box.** `drawVideoLayer` keeps the cover maths (R1.6) but clips to the layer box like image layers do, instead of spilling past it.
 - **Frame cache changes from OpenCut.** Exact lookup (OpenCut accepts a frame up to 50 ms early), clamping to the track, `undefined` for superseded requests, remembered failures, an injectable sink for tests, and `dispose()` that leaves the cache reusable (React StrictMode remounts).
@@ -4682,3 +4683,22 @@ Filled in as each part's gate passes.
 
 - R3.6 (a)–(e) plus overshoot, tangent and even-pace tests: 19/19 PASS (`src/renderer/motion-path.test.ts`). Full suite 155 passed, 1 skipped; `tsc` and `npm run build` clean.
 - UI (browser preview, `studio-dev`): Motion Path toggle creates `easing: 'linear'`, `timing: 'constant-speed'`; Easing select shows the nine groups. With ease-in-out on a 200 px path over 90 frames, the rendered title's centre measured 584 / 640 / 696 px at frames 30 / 45 / 60 (expected 584.4 / 640 / 695.6).
+
+### Part B — F2 export (2026-10-10, branch `claude/f2-export-audio`)
+
+- A2.4: `cargo test` 22 passed — `build_audio_filter` with 0, 1 and 3 tracks, fades, rates 0.25 (chained) and 3.0, millisecond rounding, older payloads; FFmpeg runs for short audio, paced frames and stderr on failure.
+- Bug found and fixed during this gate: with frames at render pace the spec's bare `apad` + `-shortest` let audio overrun the video by ~0.5 s (A2.2 export: audio 5.546 s vs video 5.000 s). Fixed by padding/trimming the mix to the video length; A2.2 now also checks the audio length.
+- `node scripts/e2e/f2-export.mjs` (real app, WKWebView, FFmpeg 8.1.1):
+
+```
+PASS  A2.1 one AAC stream, video length  [{"codec_name":"h264","codec_type":"video","duration":5},{"codec_name":"aac","codec_type":"audio","duration":5}]
+PASS  A2.1 tone starts at 2.5 s  [{"start":2.004979,"end":2.522292}]
+PASS  A2.1 music only 0–2 s  [{"start":2.026187,"end":5.013333}]
+PASS  A2.2 short audio keeps the 5 s video, padded to match  [{"codec_name":"h264","codec_type":"video","duration":5},{"codec_name":"aac","codec_type":"audio","duration":5}]
+PASS  A2.3 video sound audible  
+PASS  A2.3 music audible with it  
+PASS  A2.3 muted video silent  
+PASS  A2.3 music still audible  
+PASS  A2.3 silent video file still exports  
+all 9 checks passed
+```
