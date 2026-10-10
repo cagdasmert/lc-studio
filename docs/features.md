@@ -136,9 +136,8 @@ Each transition has a configurable duration in frames.
 
 ### Audio System
 
-- **Web Audio API** playback synchronized to the canvas frame loop
-- Per-audio-layer volume control with fade in/out
-- Automatic seek/sync when scrubbing the timeline
+- **Preview playback** — Web Audio plays audio layers and unmuted video layers' sound in sync with the canvas: started with playback, restarted when it loops, stopped on pause. `AudioEngine` (`src/renderer/audio.ts`) takes its timing from `collectAudibleLayers()`, the helper the export uses, so preview places, trims and fades every sound where the render does. Sped-up video sound is higher-pitched in preview; the export keeps its pitch.
+- Per-audio-layer volume with fade in/out, in preview and export alike
 - **Export audio** — MP4, WebM and MOV exports contain every visible audio layer and the sound of every unmuted video layer whose file has an audio stream. Each is placed at its time on the timeline, trimmed by `startTime`/`endTime` and cut at its scene's end, sped up or slowed down by a video layer's `playbackRate` (pitch preserved), and given its volume and fades. `buildAudioTracks()` (`src/lib/audio-tracks.ts`) computes the timing; `build_audio_filter()` (`src-tauri/src/render/ffmpeg.rs`) turns it into one filter graph: `atempo`, `volume`, `afade` and `adelay` per track, then `amix` without normalisation, a limiter, and `apad`/`atrim` to exactly the video's length, so the video sets the output length. GIF and PNG sequences stay silent.
 
 ### Render Pipeline

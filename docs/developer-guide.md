@@ -72,8 +72,10 @@ src/                              # React frontend
     draw-text.ts                  # Text rendering (word wrap, stroke, shadow)
     draw-shape.ts                 # Shape rendering (rect, circle, ellipse, line)
     draw-image.ts                 # Image rendering (fit modes, border radius)
-    draw-video.ts                 # Video layer rendering (frame-accurate seek)
-    video-cache.ts                # HTMLVideoElement management + seek cache
+    draw-video.ts                 # Draws the prepared video frame (cover, clipped)
+    video-time.ts                 # sourceTimeFor, collectVideoDraws
+    video-frames.ts               # VideoFrameCache (WebCodecs via mediabunny), prepareVideoFrames
+    motion-path.ts                # Motion paths: easing, per-segment / constant-speed timing
     effects.ts                    # CSS filter string builder
     layer-fx.ts                   # Layer FX: reveal phase + decoration compositing
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
@@ -84,7 +86,7 @@ src/                              # React frontend
     compositor.ts                 # Frame resolver + composition drawer
     capture.ts                    # Render pipeline (canvas → pixels → FFmpeg)
     media-cache.ts                # Image preloading and caching (ImageBitmap)
-    audio.ts                      # AudioEngine (Web Audio API)
+    audio.ts                      # AudioEngine: preview playback on the export's timing
   components/
     RenderPanel.tsx               # FFmpeg status, render button, progress bar
     storyboard/
@@ -105,6 +107,11 @@ src/                              # React frontend
     useKeyboardShortcuts.ts       # Global keyboard shortcut handler
   lib/
     tauri-bridge.ts               # Tauri invoke wrappers for render commands
+    media-bytes.ts                # Reads media files (plugin-fs) into Blobs, cached per source
+    audio-tracks.ts               # Audio timing shared by export and preview; buildAudioTracks
+    video-support.ts              # Can this webview decode a video? (Render panel warning)
+    easing-options.ts             # Grouped easing list for menus
+    e2e.ts                        # Debug-only scripted acceptance runs (LCS_E2E)
     dialog.ts                     # Save file dialog wrapper
     file-utils.ts                 # File picker + blob URL conversion
     project-io.ts                 # Project save/load (.lcs.json format)
@@ -133,11 +140,12 @@ src-tauri/                        # Rust backend
   src/
     main.rs                       # Desktop entry point
     lib.rs                        # Tauri app builder + plugin registration
+    e2e.rs                        # Debug-only LCS_E2E hook for scripts/e2e/
     render/
       mod.rs                      # Module declaration
       job.rs                      # RenderState (Mutex<Option<FfmpegProcess>>)
       commands.rs                 # Tauri commands (check, start, write, finish, cancel)
-      ffmpeg.rs                   # FFmpeg process spawning + audio mixing
+      ffmpeg.rs                   # FFmpeg args, audio filter graph, process + stderr
   tauri.conf.json                 # Tauri config (window, build, bundle)
   capabilities/default.json       # Permissions (core, opener, dialog, fs, http)
   Cargo.toml                      # Rust dependencies
@@ -309,6 +317,7 @@ Each script generates its test media into `test-media/` (gitignored), writes sma
 ```bash
 node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
 node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and preview
+node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
 ```
 
 ## Tauri IPC Protocol

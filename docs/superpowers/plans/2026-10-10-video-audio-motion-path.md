@@ -40,6 +40,7 @@
 - **Audio clipped to its scene.** A layer whose `endFrame` runs past its scene's end stops at the scene end, as its visuals do. The spec formula `(endFrame − startFrame) / fps` is used with `endFrame` clamped to `durationFrames`.
 - **Audio ends with the video (found during B8).** The spec's graph ends in a bare `apad` and relies on `-shortest`. With frames arriving at render pace, FFmpeg 8.1 then let the audio run 0.5 s past the video (5.546 s against 5.000 s; 4.48 s against 3 s in a paced Rust test). The graph now ends in `apad=whole_dur=D,atrim=end=D` with D = total frames / fps, so `build_audio_filter` and `build_ffmpeg_args`/`spawn_ffmpeg` take the output length. `-shortest` stays as a guard.
 - **PNG export needed a write permission (found during C7).** `src-tauri/capabilities/default.json` granted fs reads and `mkdir` but not `write_file`, so every PNG-sequence export failed with "fs.write_file not allowed" (on `main` too). F1 adds `fs:allow-write-file`; writes stay limited to the runtime scope (dialog-picked folders, opened projects). `write_text_file` (project Save) is still not granted — left for a follow-up.
+- **Live playback check is scripted (D3).** Instead of clicking through the GUI, a `play` e2e job presses play in the real workspace and records every `AudioBufferSourceNode.start()` call with the context state.
 - **FFmpeg stderr.** FFmpeg now runs with `-hide_banner -nostats -loglevel error`, and a thread drains stderr. That surfaces errors (R2.5) and removes a latent hang: stderr was piped but never read.
 - **Video cover clips to the box.** `drawVideoLayer` keeps the cover maths (R1.6) but clips to the layer box like image layers do, instead of spilling past it.
 - **Frame cache changes from OpenCut.** Exact lookup (OpenCut accepts a frame up to 50 ms early), clamping to the track, `undefined` for superseded requests, remembered failures, an injectable sink for tests, and `dispose()` that leaves the cache reusable (React StrictMode remounts).
@@ -4726,3 +4727,21 @@ all 10 checks passed
 ```
 
 - A1.7 times: 15 s, 1080×1920, 30 fps MP4 export — H.264 clip 4.0 s, still image 2.2 s (ratio 1.80). F2 export checks still 9/9 on this branch.
+
+### Part D — F2 preview (2026-10-10, branch `claude/f2-preview-audio`)
+
+- Unit tests: `audio.test.ts` 7 (fake AudioContext: timing from the start, mid-sound, at 2× speed, undecodable files, decode-once, seek/stop).
+- WKWebView's `decodeAudioData` decoded the MP4 video's AAC track, so the mediabunny fallback in D3 Step 3 was not needed.
+- `node scripts/e2e/f2-preview.mjs` (real app): the preview's scheduling rendered offline matches the export band by band, and pressing play in the workspace starts the three expected sounds with the context running:
+
+```
+PASS  A2.5 all silences match  export [{"start":2.004979,"end":2.522292}] preview [{"start":2,"end":2.512771}]
+PASS  A2.5 440 Hz silences match  export [{"start":2.026187,"end":5}] preview [{"start":2.023479,"end":5}]
+PASS  A2.5 660 Hz silences match  export [{"start":0,"end":3.006792}] preview [{"start":0,"end":3.001271}]
+PASS  A2.5 880 Hz silences match  export [{"start":0,"end":2.564917}] preview [{"start":0,"end":2.546292}]
+PASS  A2.5 live playback schedules every sound  [{"in":0,"offset":10,"duration":2,"state":"running"},{"in":2.5,"offset":0,"duration":2.5,"state":"running"},{"in":3,"offset":0.5,"duration":2,"state":"running"}]
+all 5 checks passed
+```
+
+- Final gate on this branch: Vitest 206 passed, 1 skipped (`draw-morph.perf.test.ts`, skipped on `main` too); `tsc`, `npm run build` clean; `cargo test` 22 passed; e2e f2-export 9/9, f1-video 10/10 (A1.7 ratio 1.82), f2-preview 5/5.
+- Not verified by machine: how preview playback *sounds* (A2.5 is a listening check). Project to listen to: `test-media/e2e/f2-preview/a25.lcs`.
