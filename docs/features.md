@@ -101,6 +101,13 @@ These properties can be animated with keyframes:
 - **Hold behavior:** Values hold at the first keyframe before the track starts and at the last keyframe after it ends
 - **Per-keyframe easing:** Each keyframe specifies its own easing curve
 
+### Motion Paths
+
+A layer can follow a path of points (lines, or cubic curves where a point has a control point) instead of its x/y keyframes, optionally rotating to follow the path and looping.
+
+- **Easing** — any easing from the table below shapes progress along the path. Overshooting easings (back, elastic, spring) carry the layer past the ends, along the path's direction there.
+- **Timing** — *per segment* gives every segment the same share of time, so the layer is slow on short segments and fast on long ones; *constant speed* (the default for new paths) moves at one speed over the whole length.
+
 ### 28+ Easing Functions
 
 | Category | Available |

@@ -4677,3 +4677,8 @@ Use superpowers:finishing-a-development-branch to report on the four stacked bra
 ## Acceptance log
 
 Filled in as each part's gate passes.
+
+### Part A — F3 (2026-10-10, branch `claude/f3-motion-path-easing`)
+
+- R3.6 (a)–(e) plus overshoot, tangent and even-pace tests: 19/19 PASS (`src/renderer/motion-path.test.ts`). Full suite 155 passed, 1 skipped; `tsc` and `npm run build` clean.
+- UI (browser preview, `studio-dev`): Motion Path toggle creates `easing: 'linear'`, `timing: 'constant-speed'`; Easing select shows the nine groups. With ease-in-out on a 200 px path over 90 frames, the rendered title's centre measured 584 / 640 / 696 px at frames 30 / 45 / 60 (expected 584.4 / 640 / 695.6).

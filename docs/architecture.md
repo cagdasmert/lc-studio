@@ -93,7 +93,7 @@ drawCompositionFrame(ctx, composition, globalFrame, mediaCache, videoCache?)
                     ├── [Echo FX] re-draw the layer at earlier frames, fading
                     └── drawLayerAtFrame()
                           ├── resolveLayerTransform() → interpolate keyframes
-                          ├── Motion path override (x/y, optional rotation)
+                          ├── Motion path override: motionPathAt() → eased progress → position (+ rotation)
                           ├── [Zoom reveal] multiply resolved scale, fold alpha
                           ├── ctx.save()
                           ├── Apply opacity, blend mode, 2D transform, clip path
