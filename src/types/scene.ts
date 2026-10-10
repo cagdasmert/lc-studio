@@ -529,11 +529,16 @@ export interface RenderProgress {
 
 // ── Audio track spec (for FFmpeg) ──────────────────────
 
+/** One sound placed on the output timeline; built by buildAudioTracks (src/lib/audio-tracks.ts). */
 export interface AudioTrackSpec {
-  path: string;
-  startTimeSecs: number;
-  durationSecs: number;
+  path: string;               // absolute filesystem path (or URL) of the source
+  startTimeSecs: number;      // where to start reading in the source
+  durationSecs: number;       // how long it lasts in the output, after the speed change
   volume: number;
+  timelineOffsetSecs: number; // where it starts in the output
+  fadeInSecs: number;
+  fadeOutSecs: number;
+  playbackRate: number;
 }
 
 // ── Resolved transform (output of interpolation) ──────

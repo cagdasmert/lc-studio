@@ -28,7 +28,10 @@ describe('startRender', () => {
       fps: 30,
       totalFrames: 90,
       audioTracks: [
-        { path: '/tmp/a.mp3', startTimeSecs: 0, durationSecs: 3, volume: 1 },
+        {
+          path: '/tmp/a.mp3', startTimeSecs: 0, durationSecs: 3, volume: 1,
+          timelineOffsetSecs: 2.5, fadeInSecs: 0.5, fadeOutSecs: 0, playbackRate: 1,
+        },
       ],
       format: 'mp4',
       quality: 'medium',
@@ -49,7 +52,10 @@ describe('startRender', () => {
 
     // Nested struct fields are deserialized by serde, which keeps them snake_case.
     expect(args.audioTracks).toEqual([
-      { path: '/tmp/a.mp3', start_time_secs: 0, duration_secs: 3, volume: 1 },
+      {
+        path: '/tmp/a.mp3', start_time_secs: 0, duration_secs: 3, volume: 1,
+        timeline_offset_secs: 2.5, fade_in_secs: 0.5, fade_out_secs: 0, playback_rate: 1,
+      },
     ]);
   });
 });
