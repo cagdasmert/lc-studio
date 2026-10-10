@@ -1,4 +1,4 @@
-import type { Composition } from '../types';
+import type { Composition, Scene } from '../types';
 import type { MediaCache } from './media-cache';
 import type { VideoCache } from './video-cache';
 import { drawScene, drawSceneBackground } from './draw';
@@ -32,6 +32,26 @@ export function resolveFrame(
   };
 }
 
+/**
+ * The transition playing at this frame of a scene, if any. Transitions run
+ * over the outgoing scene's last frames and show the incoming scene frozen
+ * at its frame 0.
+ */
+export function transitionAt(
+  composition: Composition,
+  sceneIndex: number,
+  frameInScene: number,
+): { incoming: Scene; progress: number } | null {
+  const scene = composition.scenes[sceneIndex];
+  const incoming = composition.scenes[sceneIndex + 1];
+  const duration = scene.transitionDurationFrames || 0;
+  const start = scene.durationFrames - duration;
+  if (!incoming || scene.transition === 'none' || scene.transition === 'cut' || duration <= 0 || frameInScene < start) {
+    return null;
+  }
+  return { incoming, progress: (frameInScene - start) / duration };
+}
+
 export function drawCompositionFrame(
   ctx: CanvasRenderingContext2D,
   composition: Composition,
@@ -47,17 +67,7 @@ export function drawCompositionFrame(
   }
   const scene = composition.scenes[sceneIndex];
 
-  // Check if we're in a transition zone at the end of this scene
-  const nextScene = composition.scenes[sceneIndex + 1];
-  const transitionDuration = scene.transitionDurationFrames || 0;
-  const transitionStart = scene.durationFrames - transitionDuration;
-
-  const isInTransition =
-    nextScene &&
-    scene.transition !== 'none' &&
-    scene.transition !== 'cut' &&
-    transitionDuration > 0 &&
-    frameInScene >= transitionStart;
+  const transition = transitionAt(composition, sceneIndex, frameInScene);
 
   // Camera shake displaces everything, so it wraps the whole scene draw —
   // including transitions — while the overlay FX go on top afterwards.
@@ -65,13 +75,11 @@ export function drawCompositionFrame(
   ctx.save();
   if (shake) applyShake(ctx, shake, frameInScene, fps, width, height);
 
-  if (isInTransition) {
-    const progress = (frameInScene - transitionStart) / transitionDuration;
-
-    drawSceneBackground(ctx, nextScene, width, height, mediaCache);
+  if (transition) {
+    drawSceneBackground(ctx, transition.incoming, width, height, mediaCache);
 
     drawTransition(
-      ctx, scene, nextScene, frameInScene, progress,
+      ctx, scene, transition.incoming, frameInScene, transition.progress,
       scene.transition, width, height, mediaCache, fps, videoCache,
     );
   } else {
