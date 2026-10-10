@@ -7,7 +7,7 @@ import {
   getFx, fxEnv, hasBitmapFx, fxPadding, applyReveals, compositeLayerFx,
 } from './layer-fx';
 import { createCanvasGradient } from './gradient';
-import { evaluateMotionPath } from './motion-path';
+import { motionPathAt } from './motion-path';
 import { drawTextLayer } from './draw-text';
 import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
@@ -81,8 +81,7 @@ function drawLayerAtFrame(
 
   // Motion path override — replaces x/y (and optionally rotation)
   if (layer.motionPath && layer.motionPath.points.length >= 2) {
-    const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
-    const pos = evaluateMotionPath(layer.motionPath, t);
+    const pos = motionPathAt(layer.motionPath, frameInLayer, layerDuration);
     resolved.x = pos.x;
     resolved.y = pos.y;
     if (layer.motionPath.alignToPath) {

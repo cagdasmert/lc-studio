@@ -87,10 +87,20 @@ export interface MotionPathPoint {
   cpY?: number;
 }
 
+/**
+ * How progress spreads over the path: 'per-segment' gives every segment the
+ * same share of time (so short segments are slow), 'constant-speed' moves at
+ * one speed over the whole length.
+ */
+export type MotionPathTiming = 'per-segment' | 'constant-speed';
+
 export interface MotionPathDef {
   points: MotionPathPoint[];
   alignToPath?: boolean;  // rotate layer to follow path tangent
   loop?: boolean;
+  easing?: EasingType;           // absent = linear
+  easingParams?: EasingParams;
+  timing?: MotionPathTiming;     // absent = per-segment
 }
 
 // ── Per-character text animation ─────────────────────

@@ -18,6 +18,7 @@ export type {
   ClipPathDef,
   MotionPathPoint,
   MotionPathDef,
+  MotionPathTiming,
   CharAnimationType,
   CharAnimationDef,
   BlendMode,
