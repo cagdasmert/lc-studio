@@ -130,14 +130,14 @@ Hover over a scene and click **x**. You must have at least one scene.
 ### Scene Transitions
 
 Select a scene in the timeline, then in the Property Inspector change the **Transition** dropdown. Options:
-- **none / cut** — Instant switch to next scene
-- **fade** — Crossfade
-- **slide-left/right/up/down** — The current scene slides out, revealing the next
-- **wipe-horizontal/vertical** — A wipe reveals the next scene
-- **zoom-in/out** — Zoom transition
-- **dissolve** — Pixel-level dissolve
+- **None / Cut** — Instant switch to next scene
+- **Fade** — Crossfade
+- **Slide left/right/up/down** — The current scene slides out as the next slides in
+- **Wipe horizontal/vertical** — A wipe reveals the next scene
+- **Zoom in/out** — Zoom transition
+- **Dissolve** — The next scene replaces the current one in small blocks, in scattered order
 
-Set the **Transition Frames** to control how long the transition lasts (in frames).
+Set the **Transition Frames** to control how long the transition lasts (in frames). Each scene keeps its own background throughout the transition. In the preview, a transition other than zoom is drawn at the output resolution and scaled, so it looks slightly soft when you zoom the canvas in past 100%; the export is unaffected.
 
 ## Working with Layers
 

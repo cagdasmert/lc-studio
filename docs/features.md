@@ -126,13 +126,17 @@ A layer can follow a path of points (lines, or cubic curves where a point has a 
 
 12 transition types between scenes:
 - **none** / **cut** — Instant switch
-- **fade** — Crossfade with opacity
+- **fade** — Crossfade: the incoming scene fades in over the outgoing one
 - **slide** — Slide left, right, up, down
 - **wipe** — Horizontal and vertical wipes
 - **zoom** — Zoom in, zoom out
-- **dissolve** — Pixel-level dissolve
+- **dissolve** — The incoming scene replaces the outgoing one block by block, in a scattered order (8 px blocks at 1080 wide, never under 4 px)
 
-Each transition has a configurable duration in frames.
+Each transition has a configurable duration in frames. The outgoing scene plays on, and the incoming scene is shown frozen at its frame 0.
+
+Fade, slide, wipe and dissolve draw each scene whole, background included, into its own composition-sized surface (`src/renderer/scene-surface.ts`) and composite the two. Before the FX pack, these transitions dropped the outgoing scene's background from the first transition frame (a wipe showed the incoming background on the not-yet-wiped side, too), dissolve was the same crossfade as fade, and a fade dimmed the layers of both scenes where they overlapped. Projects whose transitions run between scenes with different backgrounds, or whose fading layers overlap, look different now. Zoom already drew both backgrounds and is unchanged.
+
+The list of transitions, with their labels, lives in `src/lib/transition-options.ts`.
 
 ### Audio System
 
@@ -205,6 +209,7 @@ AI-assisted content generation with 3 provider backends and 4 generation modes. 
 
 **Key implementation details:**
 - Structured JSON output -- the LLM is prompted to return raw JSON arrays/objects matching the scene and layer schemas
+- FX and transitions -- the system prompt lists every layer FX and scene FX (generated from `fx-schema.ts`: type, hint, kind, and each field's range or options), explains reveal windows, and lists every transition. The parser keeps a generated `layerFx` or `sceneFx` entry only if its type is known; each field is taken only if valid (finite numbers clamped to the field's range, select values from its options, hex colours), otherwise the effect's default is used, and an invalid `window` falls back to the default one. An unknown `transition` becomes `fade`
 - Brand-kit-aware prompts -- when a brand kit is active, its colors, fonts, and naming are injected into the system prompt so generated content stays on-brand
 - CORS-free local requests via the Tauri HTTP plugin (`http.ts` wraps `@tauri-apps/plugin-http`), falling back to browser fetch outside Tauri
 - Store state tracked in AISlice: provider config, availability check, generation mode, loading flag, last error

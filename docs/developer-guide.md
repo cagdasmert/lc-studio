@@ -83,6 +83,7 @@ src/                              # React frontend
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
     noise.ts                      # Deterministic hash/noise — never Math.random()
     transitions.ts                # 12 scene transition implementations
+    scene-surface.ts              # Scene surfaces and the full-frame canvas pool
     compositor.ts                 # Frame resolver + composition drawer
     capture.ts                    # Render pipeline (canvas → pixels → FFmpeg)
     media-cache.ts                # Image preloading and caching (ImageBitmap)
@@ -179,13 +180,23 @@ User interaction → Zustand store → React re-render → Canvas draw
 4. Calls `startRender()` → Rust spawns FFmpeg with rawvideo input on stdin
 5. For each frame:
    - `drawCompositionFrame()` resolves the current scene and frame
-   - Checks for transition zones between scenes
+   - Checks for transition zones between scenes; a transition draws both scenes itself (see Scene Surfaces)
    - `drawSceneLayers()` iterates layers sorted by z-index
    - Each layer: resolve keyframe interpolation → apply transform matrix → draw
    - `ctx.getImageData()` extracts RGBA pixels
    - `writeFrame()` sends `Uint8Array` to Rust via Tauri IPC
    - Rust writes bytes to FFmpeg's stdin pipe
 6. `finishRender()` closes stdin, FFmpeg finalizes the MP4
+
+### Scene Surfaces
+
+`renderSceneSurface()` (`src/renderer/scene-surface.ts`) draws a whole scene, background and layers, into its own composition-sized canvas with an identity transform. Transitions render the outgoing scene (at its current frame) and the incoming one (at frame 0) into two surfaces and composite them, so each keeps its own background. The result is drawn onto the target under whatever transform it has: the camera shake, and in the preview the workspace's pan/zoom. That means a transition in the preview is rendered at composition resolution and then scaled, so it is slightly soft above 100% zoom.
+
+Zoom transitions are the exception: they draw both scenes straight onto the target, as they always have, because scaling a pre-rendered surface would resample it and change their output. They switch to surfaces only when a scene needs one.
+
+`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it. It is false for every feature today.
+
+Surfaces are full-frame, so never allocate one per frame: take canvases from the pool with `acquire(w, h)` and hand them back with `release(canvas)`. `renderSceneSurface` acquires; its caller releases.
 
 ### Layer Transform Order
 
@@ -240,9 +251,9 @@ The `zundo` temporal middleware wraps the store to provide undo/redo, tracking o
 
 ### Adding a New Transition
 
-1. Add the name to `TransitionType` union in `src/types/scene.ts`
-2. Implement the transition in `src/renderer/transitions.ts` inside `drawTransition()`
-3. Add it to the `TRANSITIONS` array in `PropertyInspector.tsx`
+1. Add the name to the `TransitionType` union in `src/types/scene.ts`
+2. Add it, with its label, to `TRANSITION_LABELS` in `src/lib/transition-options.ts`. The inspector, the AI prompt and the AI parser all read that list, so nothing else needs to know about it
+3. Implement it in `src/renderer/transitions.ts`, in `compositeSurfaces()`: it gets the outgoing and incoming scene surfaces and the progress (0–1). Add a node-canvas test to `transitions.test.ts`
 
 ### Adding a New Layer FX
 
@@ -319,7 +330,10 @@ node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
 node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and preview
 node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
 node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundary
+node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pixel for pixel
 ```
+
+`fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.
 
 ## Tauri IPC Protocol
 
