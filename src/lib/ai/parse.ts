@@ -1,4 +1,8 @@
 import type { GeneratedScene, GeneratedLayer, GeneratedContent, GenerationMode } from '../../types/ai';
+import type { EasingType, FxWindow, LayerFxDef, SceneFxDef } from '../../types';
+import { LAYER_FX_SPECS, SCENE_FX_SPECS, type FxSpec } from '../fx-schema';
+import { EASING_GROUPS } from '../easing-options';
+import { isTransitionType } from '../transition-options';
 
 /** Why JSON extraction failed — used to build an actionable error message. */
 export type ExtractionFailure = 'empty' | 'reasoning-only' | 'no-json' | 'truncated' | 'invalid';
@@ -232,6 +236,60 @@ export function extractJSON(raw: string): unknown {
   );
 }
 
+const EASINGS = new Set<string>(EASING_GROUPS.flatMap((g) => g.values));
+const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const frames = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+
+function validateWindow(raw: unknown): FxWindow | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const w = raw as Record<string, unknown>;
+  if (!frames(w.inDelay) || !frames(w.inFrames) || !frames(w.outFrames)) return null;
+  if (typeof w.easing !== 'string' || !EASINGS.has(w.easing)) return null;
+  return { inDelay: w.inDelay, inFrames: w.inFrames, outFrames: w.outFrames, easing: w.easing as EasingType };
+}
+
+/**
+ * Keep only the FX entries the app knows, built on the spec's defaults: a
+ * number counts only if finite (and is clamped to the field's range), a
+ * select only if it's one of the options, a colour only if it's hex. An
+ * invalid window falls back to the default's.
+ */
+function validateFxList<T extends { type: string; window?: FxWindow }>(
+  raw: unknown,
+  specs: Record<string, FxSpec<T>>,
+): T[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: T[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const obj = entry as Record<string, unknown>;
+    const spec = typeof obj.type === 'string' && Object.prototype.hasOwnProperty.call(specs, obj.type)
+      ? specs[obj.type] : null;
+    if (!spec) continue;
+
+    const fx: Record<string, unknown> = { ...spec.defaults };
+    if (spec.defaults.window) fx.window = { ...spec.defaults.window };
+    for (const field of spec.fields) {
+      const v = obj[field.key];
+      if (field.kind === 'number') {
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          fx[field.key] = Math.min(field.max ?? Infinity, Math.max(field.min ?? -Infinity, v));
+        }
+      } else if (field.kind === 'select') {
+        if (field.options?.some((o) => o.value === v)) fx[field.key] = v;
+      } else if (typeof v === 'string' && HEX.test(v)) {
+        fx[field.key] = v;
+      }
+    }
+    if ('window' in obj) {
+      const window = validateWindow(obj.window);
+      if (window) fx.window = window;
+    }
+    out.push(fx as T);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function validateLayer(raw: unknown): GeneratedLayer | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
@@ -267,6 +325,7 @@ function validateLayer(raw: unknown): GeneratedLayer | null {
           easing: String(a.easing ?? 'ease-out'),
         }))
       : undefined,
+    layerFx: validateFxList<LayerFxDef>(obj.layerFx, LAYER_FX_SPECS),
   };
 }
 
@@ -285,7 +344,8 @@ function validateScene(raw: unknown): GeneratedScene | null {
     durationSeconds: typeof obj.durationSeconds === 'number' ? obj.durationSeconds : 3,
     backgroundColor: typeof obj.backgroundColor === 'string' ? obj.backgroundColor : '#1a1a2e',
     layers,
-    transition: typeof obj.transition === 'string' ? obj.transition : 'fade',
+    sceneFx: validateFxList<SceneFxDef>(obj.sceneFx, SCENE_FX_SPECS),
+    transition: isTransitionType(obj.transition) ? obj.transition : 'fade',
   };
 }
 

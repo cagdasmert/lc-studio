@@ -1,3 +1,5 @@
+import type { LayerFxDef, SceneFxDef, TransitionType } from './scene';
+
 export type AIProviderType = 'ollama' | 'lmstudio' | 'openai-compatible';
 
 export interface OllamaConfig {
@@ -50,7 +52,8 @@ export interface GeneratedScene {
   durationSeconds: number;
   backgroundColor: string;
   layers: GeneratedLayer[];
-  transition: string;
+  sceneFx?: SceneFxDef[];
+  transition: TransitionType;   // validated against src/lib/transition-options.ts
 }
 
 export interface GeneratedLayer {
@@ -76,4 +79,5 @@ export interface GeneratedLayer {
     endFrame: number;
     easing: string;
   }[];
+  layerFx?: LayerFxDef[];       // validated against LAYER_FX_SPECS
 }

@@ -3,6 +3,8 @@ import type { Template } from '../../types/template';
 import type { OutputPreset } from '../../types';
 import type { GenerationMode } from '../../types/ai';
 import type { ChatMessage } from './provider';
+import { LAYER_FX_SPECS, SCENE_FX_SPECS, type FxField, type FxSpec } from '../fx-schema';
+import { TRANSITION_TYPES } from '../transition-options';
 
 const SCENE_SCHEMA = `{
   "label": "Scene name",
@@ -21,6 +23,10 @@ const SCENE_SCHEMA = `{
       "align": "center",
       "animation": [
         { "property": "opacity", "from": 0, "to": 1, "startFrame": 0, "endFrame": 15, "easing": "ease-out" }
+      ],
+      "layerFx": [
+        { "type": "wipe", "shape": "linear", "angle": 0, "softness": 40,
+          "window": { "inDelay": 0, "inFrames": 12, "outFrames": 0, "easing": "ease-out-cubic" } }
       ]
     },
     {
@@ -33,8 +39,37 @@ const SCENE_SCHEMA = `{
       "cornerRadius": 2
     }
   ],
+  "sceneFx": [{ "type": "vignette", "amount": 0.5, "radius": 0.45 }],
   "transition": "fade"
 }`;
+
+/** One field as the prompt shows it: `name 0–60`, `shape linear|iris|barn`, `color hex`. */
+function describeField(f: FxField): string {
+  if (f.kind === 'color') return `${f.key} hex`;
+  if (f.kind === 'select') return `${f.key} ${(f.options ?? []).map((o) => o.value).join('|')}`;
+  return `${f.key} ${f.min}–${f.max}`;
+}
+
+function describeFx<T>(specs: Record<string, FxSpec<T>>): string {
+  return Object.entries(specs)
+    .map(([type, spec]) => `- ${type} (${spec.kind}): ${spec.hint} Fields: ${spec.fields.map(describeField).join(', ')}.`)
+    .join('\n');
+}
+
+/**
+ * The FX and transitions section, generated from the FX schema and the
+ * transition list so it never drifts from what the app accepts. Kept terse:
+ * small local models read this prompt.
+ */
+export function buildFxSection(): string {
+  return `Layer FX: a layer may have a "layerFx" array of { "type", ...fields }. Reveal FX animate the layer in (and out) over a "window": { "inDelay": frames after the layer starts, "inFrames": entrance length, "outFrames": exit length at the layer's end (0 = none), "easing" }. Continuous FX run the whole time; a window only fades them in and out.
+${describeFx(LAYER_FX_SPECS)}
+
+Scene FX: a scene may have a "sceneFx" array, applied to the whole frame.
+${describeFx(SCENE_FX_SPECS)}
+
+Transitions between scenes ("transition"): ${TRANSITION_TYPES.filter((t) => t !== 'none').map((t) => `"${t}"`).join(', ')}.`;
+}
 
 function buildSystemPrompt(
   mode: GenerationMode,
@@ -52,7 +87,7 @@ Layer types available: "text" and "shape".
 
 Animations: each layer can have an animation array. Each animation targets a property (opacity, x, y, scaleX, scaleY, rotation, width, height) with from/to values, startFrame/endFrame, and easing (linear, ease-in, ease-out, ease-in-out, ease-out-back, ease-in-out-cubic).
 
-Transitions between scenes: "cut", "fade", "slide-left", "slide-right", "slide-up", "slide-down", "dissolve", "zoom-in", "zoom-out".`;
+${buildFxSection()}`;
 
   if (brandKit) {
     prompt += `\n\nActive brand kit "${brandKit.name}":

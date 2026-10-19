@@ -19,6 +19,7 @@ import { copyAssetToProject } from '../../lib/asset-manager';
 import { enableMorph, disableMorph } from '../../lib/morph-edit';
 import { isInLayer, toLayerFrame } from '../../lib/layer-frames';
 import { EASING_GROUPS } from '../../lib/easing-options';
+import { TRANSITION_LABELS, TRANSITION_TYPES } from '../../lib/transition-options';
 import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
@@ -27,7 +28,6 @@ const BLEND_MODES: BlendMode[] = [
   'hard-light', 'soft-light', 'difference', 'exclusion',
   'hue', 'saturation', 'color', 'luminosity',
 ];
-const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
 const FONT_WEIGHTS: FontWeight[] = ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
 const EASING_OPTIONS: EasingType[] = [
   'linear',
@@ -1215,7 +1215,7 @@ function SceneSection({ scene, sceneIndex, fps }: { scene: Scene; sceneIndex: nu
           value={scene.transition}
           onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType })}
         >
-          {TRANSITIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          {TRANSITION_TYPES.map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]}</option>)}
         </select>
       </label>
       {scene.transition !== 'none' && scene.transition !== 'cut' && (

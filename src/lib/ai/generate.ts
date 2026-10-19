@@ -8,12 +8,13 @@ import type {
 import type { Composition, Scene, Layer, TextLayerData, ShapeLayerData, OutputPreset } from '../../types';
 import type { BrandKit } from '../../types/brand';
 import type { Template } from '../../types/template';
-import type { EasingType, TransitionType } from '../../types';
+import type { EasingType } from '../../types';
 import { createProvider, MAX_RESPONSE_TOKENS } from './provider';
 import type { LLMResponse } from './provider';
 import { buildMessages } from './prompts';
 import { parseGenerationResponse, JSONExtractionError } from './parse';
 import { instantiateTemplate } from '../template-utils';
+import { isTransitionType } from '../transition-options';
 
 /**
  * Turn a parse failure into a message that says what the model actually did
@@ -165,6 +166,7 @@ export function convertGeneratedScenes(
           maxWidth: 0,
           textStroke: null,
           textShadow: null,
+          ...(gl.layerFx ? { layerFx: gl.layerFx } : {}),
         };
         return layer;
       } else {
@@ -195,16 +197,13 @@ export function convertGeneratedScenes(
           stroke: '',
           strokeWidth: 0,
           cornerRadius: gl.cornerRadius ?? 0,
+          ...(gl.layerFx ? { layerFx: gl.layerFx } : {}),
         };
         return layer;
       }
     });
 
-    const transition = gs.transition as TransitionType;
-    const validTransitions: TransitionType[] = [
-      'none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down',
-      'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve',
-    ];
+    const transition = isTransitionType(gs.transition) ? gs.transition : 'fade';
 
     return {
       id: `scene-ai-${Date.now()}-${i}`,
@@ -212,7 +211,8 @@ export function convertGeneratedScenes(
       durationFrames,
       backgroundColor: gs.backgroundColor,
       layers,
-      transition: validTransitions.includes(transition) ? transition : 'fade',
+      ...(gs.sceneFx ? { sceneFx: gs.sceneFx } : {}),
+      transition,
       transitionDurationFrames: transition !== 'cut' && transition !== 'none' ? Math.min(15, Math.floor(durationFrames / 4)) : 0,
     };
   });
