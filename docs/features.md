@@ -113,6 +113,8 @@ product, or an ASCII circle passing over a logo.
 | Pixelate | Coarse blocks of `block × intensity` px |
 | Dither | Ordered 4×4 Bayer dither with `ditherLevels` levels per channel, or two colours (`ink` on `paper`) when `ink` is set |
 | ASCII | `cell`-px cells of density glyphs picked by brightness, in the source colours (or `ink`) on the source darkened to 25% (or `paper`) |
+| Glass (`refract`, WebGL2) | A glass dome: each pixel is sampled along the dome's normal, towards the centre, by `strength × intensity × ρ / R` px (ρ the distance from the centre, R the radius), so the middle magnifies; `dispersion` splits red and blue, `highlight` adds a specular spot |
+| Ripple (`ripple`, WebGL2) | Rings spreading from `impulses` (a layer frame and an x, y in the lens box) at `speed` px per frame, fading with `decay`; each ring's height is a sine of `wavelength` within two wavelengths behind its front, and pixels move by its slope × `refraction`. `ambientEvery` adds impulses at hashed positions. At most the 16 newest live impulses draw |
 
 Every lens has a `feather` (soft edge, px), an `intensity` (0–1, keyframable;
 0 = no effect, and dither and ASCII mix with the original by it) and an
@@ -121,7 +123,8 @@ mode and clip path, and never echo. The dither pattern is keyed on frame
 pixels, so it doesn't crawl as the lens moves; the ASCII grid is centred on the
 lens, so its cells move with it.
 
-A scene with a visible lens is drawn into a scene surface, so the lens can read
+Without WebGL2, Glass and Ripple lenses show the picture unchanged, and the
+Render panel names them. A scene with a visible lens is drawn into a scene surface, so the lens can read
 back what is under it (`src/renderer/lens.ts`). In the preview that scene is
 rendered at output resolution and then scaled, so it is slightly soft above
 100% zoom; the export is unaffected. Four 420-px lenses at 1080×1920 export at
@@ -145,7 +148,8 @@ scene's own surface, so it shakes with the picture under camera shake, grain,
 scanlines and vignette stay on top of it, and in a transition each scene keeps
 its own look. With every amount at 0 and saturation at 1 it changes nothing,
 and the scene isn't routed through a surface for it. `barrel` (tube curvature)
-is stored and shown but not drawn yet: it needs the WebGL pass. VHS costs about
+is a WebGL2 pass after the rest (`scene-vhs-gl.ts`): the picture bulges like a
+CRT face, black outside the tube; without WebGL2 it is skipped. VHS costs about
 15 ms per frame at 1080×1920 in WKWebView (34 vs 19 ms). In the preview a VHS
 scene, like a lens scene, is rendered at output resolution and then scaled.
 
@@ -213,13 +217,20 @@ A layer can follow a path of points (lines, or cubic curves where a point has a 
 
 ### Scene Transitions
 
-12 transition types between scenes:
+21 transition types between scenes. Twelve are drawn with Canvas 2D:
 - **none** / **cut** — Instant switch
 - **fade** — Crossfade: the incoming scene fades in over the outgoing one
 - **slide** — Slide left, right, up, down
 - **wipe** — Horizontal and vertical wipes
 - **zoom** — Zoom in, zoom out
 - **dissolve** — The incoming scene replaces the outgoing one block by block, in a scattered order (8 px blocks at 1080 wide, never under 4 px)
+
+Nine are WebGL2 shaders (marked GPU in the inspector), drawn from the same two scene surfaces:
+
+- **cube**, **doorway**, **grid-flip**, **water-drop**, **crosswarp**, **glitch-displace**, **film-burn** and **page-curl** — shaders from [gl-transitions](https://github.com/gl-transitions/gl-transitions) at `e1e4bde` (`page-curl` is its `InvertedPageCurl`), copied into `src/renderer/gl/transitions/` with their licences (see `THIRD_PARTY_NOTICES.md`). Their float parameters (perspective, reflection, ripples, …) appear in the inspector under the transition and are saved in `Scene.transitionParams`; absent, each takes its shader's default
+- **ascii-sweep** — lc-studio's own: a soft band sweeps left to right, outgoing ahead of it and incoming behind, with cells of density glyphs (the same 5×5 bitmaps as decrypt) and a bright surge at its centre. Cell size, band width and surge are its parameters
+
+Without WebGL2 a GPU transition renders as a fade, and the Render panel says which scenes it affects. Page-curl starts slightly earlier than gl-transitions' own progress 0, at which its corner is already curled onto the page, so its first frame is the outgoing scene. The shaders' own `sin()`-based noise (film-burn, glitch-displace, grid-flip) repeats exactly on one machine but may differ in the last bits between GPUs. A GL transition frame costs about 5 ms more than a fade at 1080×1920 in WKWebView, nearly all of it uploading the outgoing scene to the GPU; the incoming scene is frozen, so its texture is uploaded once per transition. A 15-second, five-scene export with four GL transitions took 1.28× as long as the same with fades.
 
 Each transition has a configurable duration in frames. The outgoing scene plays on, and the incoming scene is shown frozen at its frame 0.
 

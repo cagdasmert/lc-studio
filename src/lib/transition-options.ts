@@ -18,7 +18,23 @@ export const TRANSITION_LABELS: Record<TransitionType, string> = {
   'zoom-in': 'Zoom in',
   'zoom-out': 'Zoom out',
   dissolve: 'Dissolve',
+  cube: 'Cube',
+  doorway: 'Doorway',
+  'grid-flip': 'Grid flip',
+  'water-drop': 'Water drop',
+  crosswarp: 'Cross warp',
+  'glitch-displace': 'Glitch displace',
+  'film-burn': 'Film burn',
+  'page-curl': 'Page curl',
+  'ascii-sweep': 'ASCII sweep',
 };
+
+/** Transitions drawn by a WebGL2 shader; without WebGL they render as a fade. */
+export const GPU_TRANSITIONS: TransitionType[] = [
+  'cube', 'doorway', 'grid-flip', 'water-drop', 'crosswarp', 'glitch-displace', 'film-burn', 'page-curl', 'ascii-sweep',
+];
+
+export const needsGpu = (type: TransitionType) => GPU_TRANSITIONS.includes(type);
 
 export const TRANSITION_TYPES = Object.keys(TRANSITION_LABELS) as TransitionType[];
 

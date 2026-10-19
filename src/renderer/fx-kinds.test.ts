@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LAYER_FX_SPECS, LENS_SPECS } from '../lib/fx-schema';
+import { LAYER_FX_SPECS, LENS_SPECS, TRANSITION_SPECS } from '../lib/fx-schema';
+import { GPU_TRANSITIONS } from '../lib/transition-options';
+import { GL_TRANSITION_TYPES, transitionDefaults } from './gl/transitions';
 import { BITMAP_FX, REVEAL_FX } from './layer-fx';
 import { LENS_MODES } from './lens';
 import type { LayerFxType } from '../types';
@@ -51,5 +53,21 @@ describe('BITMAP_FX', () => {
 describe('LENS_MODES', () => {
   it('matches LENS_SPECS in fx-schema, which the renderer cannot import', () => {
     expect([...LENS_MODES].sort()).toEqual(Object.keys(LENS_SPECS).sort());
+  });
+});
+
+describe('GPU transitions', () => {
+  it('GL_TRANSITION_TYPES matches GPU_TRANSITIONS in transition-options', () => {
+    expect([...GL_TRANSITION_TYPES].sort()).toEqual([...GPU_TRANSITIONS].sort());
+  });
+
+  it('TRANSITION_SPECS has an entry per GPU transition, with the shader’s float defaults', () => {
+    expect(Object.keys(TRANSITION_SPECS).sort()).toEqual([...GL_TRANSITION_TYPES].sort());
+    for (const type of GL_TRANSITION_TYPES) {
+      const floats = Object.fromEntries(Object.entries(transitionDefaults(type))
+        .filter(([, u]) => u.type === 'float').map(([k, u]) => [k, u.value]));
+      expect(TRANSITION_SPECS[type]!.defaults).toEqual(floats);
+      expect(TRANSITION_SPECS[type]!.fields.map((f) => f.key).sort()).toEqual(Object.keys(floats).sort());
+    }
   });
 });

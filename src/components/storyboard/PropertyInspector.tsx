@@ -10,7 +10,7 @@ import type {
 } from '../../types';
 import {
   LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES, DEFAULT_FX_WINDOW,
-  LENS_SPECS, LENS_MODES,
+  LENS_SPECS, LENS_MODES, GPU_LENS_MODES, TRANSITION_SPECS,
   type FxField,
 } from '../../lib/fx-schema';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
@@ -20,7 +20,7 @@ import { copyAssetToProject } from '../../lib/asset-manager';
 import { enableMorph, disableMorph } from '../../lib/morph-edit';
 import { isInLayer, toLayerFrame } from '../../lib/layer-frames';
 import { EASING_GROUPS } from '../../lib/easing-options';
-import { TRANSITION_LABELS, TRANSITION_TYPES } from '../../lib/transition-options';
+import { TRANSITION_LABELS, TRANSITION_TYPES, needsGpu } from '../../lib/transition-options';
 import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
@@ -1114,7 +1114,7 @@ function LensSection({ layer, sceneIndex, frameInLayer }: { layer: LensLayerData
             update({ ...LENS_SPECS[mode].defaults, mode });
           }}
         >
-          {LENS_MODES.map((m) => <option key={m} value={m}>{LENS_SPECS[m].label}</option>)}
+          {LENS_MODES.map((m) => <option key={m} value={m}>{LENS_SPECS[m].label}{GPU_LENS_MODES.includes(m) ? ' · GPU' : ''}</option>)}
         </select>
       </label>
       <p className="fx-card-hint">{spec.hint}</p>
@@ -1145,6 +1145,38 @@ function LensSection({ layer, sceneIndex, frameInLayer }: { layer: LensLayerData
           max={field.max}
           step={field.step}
         />
+      ))}
+      {layer.mode === 'ripple' && <ImpulseList layer={layer} frameInLayer={frameInLayer} update={update} />}
+    </div>
+  );
+}
+
+/** A ripple lens's impulses: each starts rings at a layer frame, at x, y (0–1) in the lens box. */
+function ImpulseList({ layer, frameInLayer, update }: {
+  layer: LensLayerData; frameInLayer: number; update: (patch: Partial<LensLayerData>) => void;
+}) {
+  const impulses = layer.impulses ?? [];
+  const set = (next: typeof impulses) => update({ impulses: [...next].sort((a, b) => a.frame - b.frame) });
+  return (
+    <div className="impulse-list">
+      <div className="prop-row">
+        <span className="prop-label">Impulses</span>
+        <button
+          className="prop-add-btn"
+          onClick={() => set([...impulses, { frame: Math.max(0, Math.round(frameInLayer)), x: 0.5, y: 0.5 }])}
+          title="Start a ripple at the lens centre on the current frame"
+        >
+          Add at current frame
+        </button>
+      </div>
+      {impulses.length === 0 && <p className="fx-card-hint">No impulses: add one, or set Automatic every.</p>}
+      {impulses.map((imp, i) => (
+        <div key={i} className="prop-row">
+          <NumericField label="Frame" value={imp.frame} min={0} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, frame: Math.max(0, Math.round(v)) } : p)))} />
+          <NumericField label="X" value={imp.x} min={0} max={1} step={0.05} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, x: Math.min(1, Math.max(0, v)) } : p)))} />
+          <NumericField label="Y" value={imp.y} min={0} max={1} step={0.05} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, y: Math.min(1, Math.max(0, v)) } : p)))} />
+          <button className="effect-remove-btn" onClick={() => set(impulses.filter((_, j) => j !== i))} title="Remove">x</button>
+        </div>
       ))}
     </div>
   );
@@ -1307,11 +1339,33 @@ function SceneSection({ scene, sceneIndex, fps }: { scene: Scene; sceneIndex: nu
         <span>Transition</span>
         <select
           value={scene.transition}
-          onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType })}
+          // Parameters belong to one shader; switching transitions starts from its defaults.
+          onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType, transitionParams: undefined })}
         >
-          {TRANSITION_TYPES.map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]}</option>)}
+          <optgroup label="Canvas">
+            {TRANSITION_TYPES.filter((t) => !needsGpu(t)).map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]}</option>)}
+          </optgroup>
+          <optgroup label="GPU (WebGL2; a fade without it)">
+            {TRANSITION_TYPES.filter(needsGpu).map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]} · GPU</option>)}
+          </optgroup>
         </select>
       </label>
+      {(TRANSITION_SPECS[scene.transition]?.fields ?? []).map((field) => (
+        <label key={field.key} className="prop-field fx-slider-field">
+          <span>{field.label}</span>
+          <input
+            type="range"
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            value={scene.transitionParams?.[field.key] ?? TRANSITION_SPECS[scene.transition]!.defaults[field.key]}
+            onChange={(e) => updateScene(sceneIndex, {
+              transitionParams: { ...scene.transitionParams, [field.key]: Number(e.target.value) },
+            })}
+          />
+          <span className="fx-value">{scene.transitionParams?.[field.key] ?? TRANSITION_SPECS[scene.transition]!.defaults[field.key]}</span>
+        </label>
+      ))}
       {scene.transition !== 'none' && scene.transition !== 'cut' && (
         <NumericField
           label="Trans. Frames"

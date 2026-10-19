@@ -4,6 +4,9 @@ import type { PreparedVideoFrames } from './draw-video';
 import { drawSceneLayers, drawSceneBackground } from './draw';
 import { hash } from './noise';
 import { acquire, release, renderSceneSurface, sceneNeedsSurface } from './scene-surface';
+import { runPassInto, textureHolds } from './gl/pass';
+import { withOverrides } from './gl/uniforms';
+import { frameUniforms, isGlTransition, transitionDefaults, transitionProgram } from './gl/transitions';
 
 /**
  * Draw a transition frame: the outgoing scene at `outgoingFrame`, the
@@ -24,6 +27,8 @@ export function drawTransition(
   mediaCache: MediaCache,
   fps: number = 30,
   videoFrames?: PreparedVideoFrames,
+  /** Shader parameters for a GPU transition (Scene.transitionParams). */
+  params?: Record<string, number>,
 ): void {
   // Zoom has always drawn both backgrounds straight onto the target. Going
   // through a surface would resample it when scaled and change its output,
@@ -35,13 +40,32 @@ export function drawTransition(
   }
 
   const from = renderSceneSurface(outgoing, outgoingFrame, width, height, mediaCache, fps, videoFrames);
-  const to = renderSceneSurface(incoming, 0, width, height, mediaCache, fps, videoFrames);
+  const renderIncoming = () => renderSceneSurface(incoming, 0, width, height, mediaCache, fps, videoFrames);
+  let to: HTMLCanvasElement | null = null;
   try {
+    // A shader transition whose GPU texture already holds the frozen incoming
+    // scene needs neither its surface nor its upload.
+    if (isGlTransition(type)) {
+      const key = frozenSceneKey(incoming, width, height, mediaCache);
+      if (drawGlTransition(ctx, from, textureHolds(1, key, width, height) ? null : (to = renderIncoming()), key, progress, type, width, height, params)) return;
+      type = 'fade';
+    }
+    to ??= renderIncoming();
     compositeSurfaces(ctx, from, to, progress, type, width, height);
   } finally {
     release(from);
-    release(to);
+    if (to) release(to);
   }
+}
+
+/** Draw a shader transition; false when WebGL can't, and the caller fades instead. */
+function drawGlTransition(
+  ctx: CanvasRenderingContext2D, from: HTMLCanvasElement, to: HTMLCanvasElement | null, incomingKey: string | null,
+  progress: number, type: TransitionType, width: number, height: number, params?: Record<string, number>,
+): boolean {
+  if (!isGlTransition(type)) return false;
+  const uniforms = { ...withOverrides(transitionDefaults(type), params), ...frameUniforms(type, progress, width, height) };
+  return runPassInto(ctx, 0, 0, width, height, transitionProgram(type), [from, to], uniforms, [null, incomingKey]);
 }
 
 function compositeSurfaces(
@@ -98,6 +122,26 @@ function compositeSurfaces(
       return;
     }
   }
+}
+
+const sceneIds = new WeakMap<Scene, number>();
+let nextSceneId = 1;
+
+/**
+ * A key for the incoming scene's frozen frame-0 surface, so the GL pass can
+ * keep its texture across a transition instead of re-uploading it each frame.
+ * Scenes are replaced, not mutated, when edited, so the object identifies the
+ * content; the media cache's size changes when an image finishes loading. A
+ * scene with video layers is never keyed, since its frames come per render.
+ */
+function frozenSceneKey(scene: Scene, width: number, height: number, mediaCache: MediaCache): string | null {
+  if (scene.layers.some((l) => l.type === 'video')) return null;
+  let id = sceneIds.get(scene);
+  if (!id) {
+    id = nextSceneId++;
+    sceneIds.set(scene, id);
+  }
+  return `scene${id}@0:${width}x${height}:${mediaCache.size}`;
 }
 
 function drawSlide(

@@ -2,6 +2,7 @@ import type { LensLayerData, LensMode, ResolvedTransform } from '../types';
 import { resolveNumericProperty } from './interpolation';
 import { acquire, release } from './scene-surface';
 import { RAMP, drawGlyph, packRgba } from './glyphs';
+import { runGlLens } from './lens-gl';
 
 /**
  * Lens layers change whatever has been drawn under them. They are drawn by
@@ -17,7 +18,7 @@ import { RAMP, drawGlyph, packRgba } from './glyphs';
 
 /** The modes the renderer draws. Mirrors LENS_SPECS in fx-schema.ts, which
  *  the renderer must not import; fx-kinds.test.ts keeps the two in sync. */
-export const LENS_MODES: LensMode[] = ['magnify', 'pixelate', 'dither', 'ascii'];
+export const LENS_MODES: LensMode[] = ['magnify', 'pixelate', 'dither', 'ascii', 'refract', 'ripple'];
 
 /** A 2D affine transform, as in ctx.setTransform(a, b, c, d, e, f). */
 export interface Matrix { a: number; b: number; c: number; d: number; e: number; f: number }
@@ -92,7 +93,14 @@ export function drawLensLayer(
       try {
         snapshot.getContext('2d')!.drawImage(surface, bx, by, bw, bh, 0, 0, bw, bh);
         const [cx, cy] = apply(m, w / 2, h / 2);
-        runMode(lens, intensity, snapshot, result, cx - bx, cy - by, bx, by);
+        if (lens.mode === 'refract' || lens.mode === 'ripple') {
+          // WebGL2 modes; without it the backdrop passes through unchanged.
+          if (!runGlLens(lens, intensity, frameInLayer, snapshot, result, m, bx, by, w, h)) {
+            result.getContext('2d')!.drawImage(snapshot, 0, 0);
+          }
+        } else {
+          runMode(lens, intensity, snapshot, result, cx - bx, cy - by, bx, by);
+        }
         buildMask(mask, lens, m, w, h, feather, scale, bx, by);
         const rctx = result.getContext('2d')!;
         rctx.globalCompositeOperation = 'destination-in';
@@ -228,6 +236,9 @@ function runMode(
       rctx.putImageData(out, 0, 0);
       return;
     }
+    case 'refract':
+    case 'ripple':
+      return; // drawn by runGlLens
   }
 }
 

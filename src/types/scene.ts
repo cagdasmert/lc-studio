@@ -346,7 +346,7 @@ export interface VhsFx {
   switchingHeight: number; // 0–0.2, band height as a fraction of the frame
   crease: number;          // 0–1, a travelling tape-crease band
   saturation: number;      // 0–2
-  barrel: number;          // 0–1 tube curvature; drawn only by the WebGL pass (not yet)
+  barrel: number;          // 0–1 tube curvature; WebGL2 only, skipped without it
 }
 
 export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx | VhsFx;
@@ -505,8 +505,8 @@ export interface SvgLayerData extends LayerBase {
   strokeColor?: string;
 }
 
-/** What a lens does to the pixels under it. (P5 adds 'refract' and 'ripple'.) */
-export type LensMode = 'magnify' | 'pixelate' | 'dither' | 'ascii';
+/** What a lens does to the pixels under it. 'refract' and 'ripple' need WebGL2. */
+export type LensMode = 'magnify' | 'pixelate' | 'dither' | 'ascii' | 'refract' | 'ripple';
 
 /**
  * A lens changes whatever is drawn *under* it (lower zIndex) inside its
@@ -527,6 +527,19 @@ export interface LensLayerData extends LayerBase {
   ink?: string;             // 'dither'/'ascii' foreground; unset = keep the source colours
   paper?: string;           // 'dither'/'ascii' background; unset = source darkened to 25%
   cell: number;             // px, 'ascii'
+  // 'refract' (WebGL2): a glass dome. Absent fields take REFRACT_DEFAULTS.
+  strength?: number;        // px the sample moves along the dome's normal at the rim, × intensity
+  dispersion?: number;      // 0–1, splits the red and blue offsets
+  highlight?: number;       // 0–1, a soft specular highlight
+  // 'ripple' (WebGL2): rings from impulses. Absent fields take RIPPLE_DEFAULTS.
+  impulses?: { frame: number; x: number; y: number }[];  // layer frame; x, y 0–1 in the lens box
+  amplitude?: number;       // px of ring height, × intensity
+  wavelength?: number;      // px
+  speed?: number;           // px per frame the ring front travels
+  decay?: number;           // per frame, exponential fade with age
+  refraction?: number;      // px of displacement per unit of slope
+  life?: number;            // frames an impulse lasts
+  ambientEvery?: number;    // frames between automatic impulses at hashed positions; 0 = off
 }
 
 export type Layer =
@@ -545,7 +558,10 @@ export type TransitionType =
   | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down'
   | 'wipe-horizontal' | 'wipe-vertical'
   | 'zoom-in' | 'zoom-out'
-  | 'dissolve';
+  | 'dissolve'
+  // Drawn by a WebGL2 shader; fall back to 'fade' without WebGL.
+  | 'cube' | 'doorway' | 'grid-flip' | 'water-drop' | 'crosswarp'
+  | 'glitch-displace' | 'film-burn' | 'page-curl' | 'ascii-sweep';
 
 export type BackgroundType = 'solid' | 'linear-gradient' | 'radial-gradient' | 'image';
 
@@ -562,6 +578,8 @@ export interface Scene {
   sceneFx?: SceneFxDef[];
   transition: TransitionType;
   transitionDurationFrames: number;
+  /** Shader parameters for a GPU transition (TRANSITION_SPECS); absent = its defaults. */
+  transitionParams?: Record<string, number>;
 }
 
 export interface OutputPreset {

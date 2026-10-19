@@ -80,7 +80,7 @@ export function drawCompositionFrame(
     // Draws both scenes, backgrounds included.
     drawTransition(
       ctx, scene, transition.incoming, frameInScene, transition.progress,
-      scene.transition, width, height, mediaCache, fps, videoFrames,
+      scene.transition, width, height, mediaCache, fps, videoFrames, scene.transitionParams,
     );
   } else if (sceneNeedsSurface(scene)) {
     // Drawn whole into a surface, then onto the target, so the shake and the

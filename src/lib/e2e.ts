@@ -15,10 +15,15 @@ import { MediaBlobCache } from './media-bytes';
 import { useStore } from '../store';
 import { loadProjectFromPath, removeFromRecent, saveProject } from './project-io';
 import { copyAssetToProject } from './asset-manager';
+import { getGl, setGlDisabled } from '../renderer/gl/context';
+import { runPassInto, type ProgramDef } from '../renderer/gl/pass';
+import { HASH_GLSL } from '../renderer/gl/hash.glsl';
+import { hash } from '../renderer/noise';
 
 export type E2eJob =
-  | { kind: 'render'; project: string; format: ExportFormat; output: string; quality?: QualityPreset }
-  | { kind: 'preview'; project: string; frames: number[] }
+  | { kind: 'render'; project: string; format: ExportFormat; output: string; quality?: QualityPreset; disableGl?: boolean }
+  | { kind: 'preview'; project: string; frames: number[]; disableGl?: boolean }
+  | { kind: 'gl' }
   | { kind: 'preview-audio'; project: string; output: string }
   | { kind: 'play'; project: string; seconds: number }
   | { kind: 'save'; project: string; importFrom: string; outsideScope: string };
@@ -57,14 +62,76 @@ async function settledCenterPixel(): Promise<number[]> {
   throw new Error('the workspace canvas never settled');
 }
 
-/** The Render panel's video warning, once its probe has had time to finish. */
+/** The Render panel's warnings (joined), once the video probe has had time to finish. */
 async function renderWarning(): Promise<string | null> {
+  let text = '';
   for (let i = 0; i < 20; i++) {
-    const text = document.querySelector('.render-warning')?.textContent;
-    if (text) return text;
+    text = [...document.querySelectorAll('.render-warning')].map((e) => e.textContent ?? '').join('\n');
+    if (text && i >= 4) return text;
     await sleep(250);
   }
-  return null;
+  return text || null;
+}
+
+const IDENTITY: ProgramDef = {
+  name: 'e2e:identity', version: '300 es', samplers: ['u_src'],
+  fragment: `#version 300 es
+precision highp float;
+uniform sampler2D u_src;
+in vec2 v_uv;
+out vec4 o_color;
+void main() { o_color = texture(u_src, v_uv); }`,
+};
+
+const HASH_GRID: ProgramDef = {
+  name: 'e2e:hash', version: '300 es', samplers: [],
+  fragment: `#version 300 es
+precision highp float;
+${HASH_GLSL}
+out vec4 o_color;
+void main() {
+  vec2 p = floor(gl_FragCoord.xy);
+  o_color = vec4(lcsHash3(p.x - 32.0, p.y * 7.0 - 100.0, 77.0), lcsHash2(p.x * 13.0, p.y), lcsHash4(p.x, p.y, 4111.0, -3.0), 1.0);
+}`,
+};
+
+/** A5.1 and A5.2: an identity pass round-trips a test image; the GPU hash matches the CPU one. */
+function glChecks() {
+  if (!getGl()) return { available: false };
+  const N = 64;
+  const src = document.createElement('canvas');
+  src.width = N; src.height = N;
+  const sctx = src.getContext('2d')!;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    sctx.fillStyle = `rgba(${x * 4},${y * 4},${(x * y) % 256},${y < 32 ? 1 : ((x * 4) % 256) / 255})`;
+    sctx.fillRect(x, y, 1, 1);
+  }
+  const want = sctx.getImageData(0, 0, N, N).data;
+  const out = document.createElement('canvas');
+  out.width = N; out.height = N;
+  const octx = out.getContext('2d')!;
+  runPassInto(octx, 0, 0, N, N, IDENTITY, [src], {});
+  const got = octx.getImageData(0, 0, N, N).data;
+  let opaque = 0; let translucent = 0;
+  for (let i = 0; i < got.length; i += 4) {
+    const err = Math.max(...[0, 1, 2, 3].map((k) => Math.abs(got[i + k] - want[i + k])));
+    if (want[i + 3] === 255) opaque = Math.max(opaque, err);
+    else if (want[i + 3] >= 32) translucent = Math.max(translucent, err);
+  }
+
+  const h = document.createElement('canvas');
+  h.width = N; h.height = N;
+  const hctx = h.getContext('2d')!;
+  runPassInto(hctx, 0, 0, N, N, HASH_GRID, [], {});
+  const hd = hctx.getImageData(0, 0, N, N).data;
+  let hashErr = 0;
+  for (let row = 0; row < N; row++) for (let x = 0; x < N; x++) {
+    const y = N - 1 - row; // GL's y runs up
+    const i = (row * N + x) * 4;
+    const want3 = [hash(x - 32, y * 7 - 100, 77), hash(x * 13, y), hash(x, y, 4111, -3)];
+    for (let k = 0; k < 3; k++) hashErr = Math.max(hashErr, Math.abs(hd[i + k] / 255 - want3[k]));
+  }
+  return { available: true, identity: { opaque, translucent }, hashMaxError: hashErr };
 }
 
 /** 16-bit PCM WAV of a rendered buffer. */
@@ -103,6 +170,8 @@ function encodeWav(buffer: AudioBuffer): Uint8Array {
 
 async function runJob(job: E2eJob): Promise<unknown> {
   switch (job.kind) {
+    case 'gl':
+      return glChecks();
     case 'render': {
       const { path, composition } = await openProject(job.project);
       await renderComposition(composition, job.output, undefined, job.format, job.quality ?? 'medium', path);
@@ -206,11 +275,15 @@ export async function runE2eIfRequested(): Promise<void> {
   const results: E2eResult[] = [];
   for (const job of jobs) {
     const start = performance.now();
+    // The debug-only switch that makes getGl() return null, for fallback runs.
+    setGlDisabled('disableGl' in job && !!job.disableGl);
     try {
       const data = await runJob(job);
       results.push({ job, ok: true, ms: performance.now() - start, data });
     } catch (err) {
       results.push({ job, ok: false, ms: performance.now() - start, error: String(err) });
+    } finally {
+      setGlDisabled(false);
     }
   }
   await invoke('e2e_finish', { result: JSON.stringify(results, null, 2) });

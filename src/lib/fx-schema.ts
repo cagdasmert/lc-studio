@@ -1,4 +1,4 @@
-import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow, LensLayerData, LensMode } from '../types';
+import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow, LensLayerData, LensMode, TransitionType } from '../types';
 
 /**
  * UI metadata for effects: label, default parameters, and the controls to
@@ -289,7 +289,7 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
   },
   vhs: {
     label: 'VHS',
-    hint: 'Worn tape: a wavy, jittery picture, colour bleed, a noisy head-switching band and a rolling crease. Tube curvature needs the WebGL pass and is not drawn yet.',
+    hint: 'Worn tape: a wavy, jittery picture, colour bleed, a noisy head-switching band and a rolling crease. Tube curvature needs WebGL2 and is skipped without it.',
     kind: 'continuous',
     defaults: {
       type: 'vhs', wave: 6, jitter: 1.5, bleed: 3, switching: 0.6, switchingHeight: 0.06,
@@ -384,6 +384,69 @@ export const LENS_SPECS: Record<LensMode, LensModeSpec> = {
     defaults: { cell: 12 },
     fields: [num('cell', 'Cell size', 4, 60), color('ink', 'Ink'), color('paper', 'Paper')],
   },
+  refract: {
+    label: 'Glass',
+    hint: 'A glass dome that bends what is under it, with colour fringes and a highlight. Needs WebGL2; without it the lens shows the picture unchanged.',
+    defaults: { strength: 24, dispersion: 0.3, highlight: 0.4 },
+    fields: [num('strength', 'Strength', 0, 200), num('dispersion', 'Dispersion', 0, 1, 0.05), num('highlight', 'Highlight', 0, 1, 0.05)],
+  },
+  ripple: {
+    label: 'Ripple',
+    hint: 'Rings spread from impulses you place on frames, like drops in water. Needs WebGL2; without it the lens shows the picture unchanged.',
+    defaults: { amplitude: 10, wavelength: 40, speed: 6, decay: 0.05, refraction: 6, life: 60, ambientEvery: 0 },
+    fields: [
+      num('amplitude', 'Amplitude', 0, 60, 0.5),
+      num('wavelength', 'Wavelength', 4, 200),
+      num('speed', 'Speed', 0.5, 40, 0.5),
+      num('decay', 'Decay', 0, 0.5, 0.01),
+      num('refraction', 'Refraction', 0, 30, 0.5),
+      num('life', 'Life', 4, 300),
+      num('ambientEvery', 'Automatic every', 0, 240),
+    ],
+  },
 };
 
+/** Lens modes drawn by WebGL2. */
+export const GPU_LENS_MODES: LensMode[] = ['refract', 'ripple'];
+
 export const LENS_MODES = Object.keys(LENS_SPECS) as LensMode[];
+
+// ── GPU transition parameters ─────────────────────────
+
+export interface TransitionSpec {
+  /** The shader's float uniforms, keyed by uniform name, with their defaults. */
+  defaults: Record<string, number>;
+  fields: FxField[];
+}
+
+/**
+ * Float parameters of the GPU transitions (Scene.transitionParams). Defaults
+ * are the shaders' own `// = value` comments; fx-kinds.test.ts checks them.
+ * Transitions without float parameters have an empty entry.
+ */
+export const TRANSITION_SPECS: Partial<Record<TransitionType, TransitionSpec>> = {
+  cube: {
+    defaults: { persp: 0.7, unzoom: 0.3, reflection: 0.4, floating: 3 },
+    fields: [num('persp', 'Perspective', 0, 1, 0.05), num('unzoom', 'Unzoom', 0, 1, 0.05), num('reflection', 'Reflection', 0, 1, 0.05), num('floating', 'Floating', 0, 20, 0.5)],
+  },
+  doorway: {
+    defaults: { reflection: 0.4, perspective: 0.4, depth: 3 },
+    fields: [num('reflection', 'Reflection', 0, 1, 0.05), num('perspective', 'Perspective', 0, 1, 0.05), num('depth', 'Depth', 1, 10, 0.5)],
+  },
+  'grid-flip': {
+    defaults: { pause: 0.1, dividerWidth: 0.05, randomness: 0.1 },
+    fields: [num('pause', 'Pause', 0, 0.4, 0.01), num('dividerWidth', 'Divider', 0, 0.5, 0.01), num('randomness', 'Randomness', 0, 1, 0.05)],
+  },
+  'water-drop': {
+    defaults: { amplitude: 30, speed: 30 },
+    fields: [num('amplitude', 'Ripples', 0, 100, 1), num('speed', 'Speed', 0, 100, 1)],
+  },
+  crosswarp: { defaults: {}, fields: [] },
+  'glitch-displace': { defaults: {}, fields: [] },
+  'film-burn': { defaults: { Seed: 2.31 }, fields: [num('Seed', 'Seed', 0, 10, 0.01)] },
+  'page-curl': { defaults: {}, fields: [] },
+  'ascii-sweep': {
+    defaults: { u_cell: 16, u_band: 0.3, u_surge: 0.8 },
+    fields: [num('u_cell', 'Cell size', 6, 60), num('u_band', 'Band width', 0.05, 1, 0.05), num('u_surge', 'Surge', 0, 2, 0.05)],
+  },
+};

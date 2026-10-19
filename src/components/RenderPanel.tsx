@@ -6,6 +6,8 @@ import { checkFfmpeg, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
 import { countUndecodableVideoLayers, undecodableWarning, videoSourcesKey } from '../lib/video-support';
+import { gpuFeatureUses, gpuWarning } from '../lib/gpu-features';
+import { glAvailable } from '../renderer/gl/context';
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   mp4: 'MP4 (H.264)',
@@ -59,6 +61,11 @@ export function RenderPanel() {
     });
     return () => { cancelled = true; };
   }, [videoKey, projectPath]);
+
+  // Effects that need WebGL2 render without it (R5.6): say which, before export.
+  const gpuUses = gpuFeatureUses(composition).join('\n');
+  const gpuNote = gpuUses && !glAvailable() ? gpuWarning(gpuUses.split('\n')) : null;
+  const warnings = [videoWarning, gpuNote].filter((w): w is string => !!w);
 
   useEffect(() => {
     checkFfmpeg()
@@ -212,7 +219,7 @@ export function RenderPanel() {
           )}
         </div>
       </div>
-      {videoWarning && <p className="render-warning">{videoWarning}</p>}
+      {warnings.map((w) => <p key={w} className="render-warning">{w}</p>)}
 
       {renderQueue.length > 0 && (
         <div className="render-queue">

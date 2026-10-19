@@ -137,6 +137,8 @@ Select a scene in the timeline, then in the Property Inspector change the **Tran
 - **Zoom in/out** — Zoom transition
 - **Dissolve** — The next scene replaces the current one in small blocks, in scattered order
 
+The **GPU** group (Cube, Doorway, Grid flip, Water drop, Cross warp, Glitch displace, Film burn, Page curl, ASCII sweep) is drawn with WebGL2. Their settings appear as sliders under the Transition menu; switching to another transition resets them. Without WebGL2 they play as a fade, and the Render panel lists them before you export.
+
 Set the **Transition Frames** to control how long the transition lasts (in frames). Each scene keeps its own background throughout the transition. In the preview, a transition other than zoom is drawn at the output resolution and scaled, so it looks slightly soft when you zoom the canvas in past 100%; the export is unaffected.
 
 ## Working with Layers
@@ -225,6 +227,7 @@ order. Choose **Add layer → Lens**; it is added on top of the scene.
 
 - **Shape** — circle, rectangle or rounded rectangle. **Feather** softens the edge.
 - **Mode** — *Magnify* enlarges what's under it, *Pixelate* turns it into blocks, *Dither* reduces it to a few colour levels in a fine pattern, and *ASCII* redraws it as text-like density glyphs. Each mode shows its own controls. For Dither and ASCII, tick **Set** next to *Ink* and *Paper* to use two fixed colours instead of the picture's own.
+- **Glass** and **Ripple** (GPU) — *Glass* bends what is under it like a glass dome, with colour fringes (*Dispersion*) and a shine (*Highlight*). *Ripple* sends rings out from impulses: press **Add at current frame** to drop one at the lens centre on the current frame, then edit its frame and position (0–1 across the lens), or set *Automatic every* to drop them on a beat of frames. Without WebGL2 both show the picture unchanged.
 - **Intensity** — how strong the effect is, from 0 (none) to 1. Set keyframes on it (the ◇ button) to bring a lens in or out.
 - **Ring** — an outline around the lens, like a HUD.
 - **Moving it** — keyframe *X* and *Y*, or give it a motion path, to sweep it across a product or a title.
@@ -261,6 +264,8 @@ Tips: a few well-placed pairs on distinctive features (eyes, corners, tips)
 beat many vague ones. If the result tears or folds, remove the pair causing it.
 
 ## Rendering
+
+The Render panel warns before export when something can't render as designed: video files the app can't decode, and, if WebGL2 is unavailable, every GPU transition, Glass or Ripple lens and VHS tube curvature in the project, with what each falls back to.
 
 ### Checking FFmpeg
 
@@ -425,7 +430,7 @@ The Render Panel supports queue-based rendering:
 - **Decrypt** — Cells of glyphs scramble over the layer, then resolve into it. *Glyphs* picks cipher characters, binary digits, or a density ramp that follows the layer's brightness. *Tint* moves the glyph colour from the layer's own colour (0) to *Glyph colour* (1). *Order* resolves cells at random, in a sweep along *Sweep angle*, or from the centre out; *Stagger* sets how strictly. This works on any layer, not just text; for per-character scrambling of a text layer's own font, use the text layer's *Scramble* character animation instead.
 - **Wipe edge** — On a Wipe reveal, raise *Edge glow* for a hot line along the front, and *Sparks* for sparks drifting off it, both in *Edge colour*. Leave them at 0 for a plain wipe.
 - **Text in a box** — Layer FX clip the layer to its box, so give a text layer with FX a box tall enough for all its lines.
-- **VHS** — A scene FX (Scene FX → VHS) for worn tape: *Wave* and *Jitter* wobble the picture, *Colour bleed* pulls red and blue apart, *Head switching* and *Switching band* add the noisy strip at the bottom, *Crease* rolls a bright glitch line down the frame, and *Saturation* fades the colour. Stack it with Film grain and Camera shake: the VHS moves with the shake and the grain stays on top. *Tube curvature* isn't drawn yet.
+- **VHS** — A scene FX (Scene FX → VHS) for worn tape: *Wave* and *Jitter* wobble the picture, *Colour bleed* pulls red and blue apart, *Head switching* and *Switching band* add the noisy strip at the bottom, *Crease* rolls a bright glitch line down the frame, and *Saturation* fades the colour. Stack it with Film grain and Camera shake: the VHS moves with the shake and the grain stays on top. *Tube curvature* bends the picture like an old TV screen (GPU; skipped without WebGL2).
 - **Disintegrate** — The layer assembles from dust. *Wind angle* sets where the dust comes from (and blows to on exit), *Sweep angle* the direction in which grains land, and *Stagger* how strictly they land in that order (0 = all at once). *Gravity* drops (positive) or lifts (negative) the grains, and *Grain* is their size in pixels. Set *Out* to make the layer blow away at the end. At the default *Fade* of 1, far-off grains are nearly invisible; lower it to see the dust cloud travel.
 - **Stacking order** — Reveals are applied before decorations, so a glow or outline follows the revealed shape. Stack Slice with Sticker outline to see the border trace each strip as it arrives.
 - **Performance** — Large canvas resolutions (e.g., 4K) may slow down preview playback. The final render is unaffected since it runs frame-by-frame.

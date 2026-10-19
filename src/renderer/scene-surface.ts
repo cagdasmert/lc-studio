@@ -3,6 +3,7 @@ import type { MediaCache } from './media-cache';
 import type { PreparedVideoFrames } from './draw-video';
 import { drawScene } from './draw';
 import { applyVhs, getVhs, vhsIsIdentity } from './scene-vhs';
+import { applyVhsBarrel } from './scene-vhs-gl';
 
 /**
  * Scene surfaces: a whole scene (background plus layers) drawn into its own
@@ -66,7 +67,10 @@ export function renderSceneSurface(
   // VHS belongs to the scene's picture: applied here, it shakes with it and
   // each scene in a transition keeps its own look. Overlays come later.
   const vhs = getVhs(scene.sceneFx);
-  if (vhs) applyVhs(surface, vhs, frameInScene);
+  if (vhs) {
+    applyVhs(surface, vhs, frameInScene);
+    applyVhsBarrel(surface, vhs.barrel); // WebGL2; skipped without it
+  }
   return surface;
 }
 

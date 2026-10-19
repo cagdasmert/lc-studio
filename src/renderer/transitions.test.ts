@@ -120,6 +120,16 @@ describe('transitions keep both backgrounds', () => {
   });
 });
 
+describe('GPU transitions without WebGL', () => {
+  it('render as a fade (node-canvas has no WebGL)', () => {
+    for (const type of ['cube', 'page-curl', 'ascii-sweep'] as const) {
+      const a = frame(type, MID);
+      const b = frame('fade', MID);
+      expect(a.every((v, i) => v === b[i])).toBe(true);
+    }
+  });
+});
+
 describe('A0.3 dissolve', () => {
   const block = dissolveBlock(W, H);
 

@@ -12,7 +12,7 @@ import { hash, hash4, signedHash, smoothNoise } from './noise';
  * right). Then saturation, then the switching speckle and the crease's bright
  * noise. Rows with nothing to do are left untouched.
  *
- * `barrel` (tube curvature) needs WebGL and is not drawn here.
+ * `barrel` (tube curvature) needs WebGL2 and is drawn by scene-vhs-gl.ts.
  */
 
 export function getVhs(fx: SceneFxDef[] | undefined): VhsFx | undefined {
@@ -21,7 +21,7 @@ export function getVhs(fx: SceneFxDef[] | undefined): VhsFx | undefined {
 
 /** True when the VHS settings change no pixel, so the scene needs no surface for it. */
 export function vhsIsIdentity(fx: VhsFx): boolean {
-  return fx.wave <= 0 && fx.jitter <= 0 && fx.bleed <= 0 && fx.crease <= 0
+  return fx.barrel <= 0 && fx.wave <= 0 && fx.jitter <= 0 && fx.bleed <= 0 && fx.crease <= 0
     && (fx.switching <= 0 || fx.switchingHeight <= 0) && fx.saturation === 1;
 }
 

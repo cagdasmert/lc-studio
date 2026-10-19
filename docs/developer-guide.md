@@ -84,6 +84,10 @@ src/                              # React frontend
     glyphs.ts                     # 5×5 bitmap glyph sets (RAMP, CIPHER, BINARY) and drawGlyph
     lens.ts                       # Lens layers: magnify, pixelate, dither, ascii over what's below
     scene-vhs.ts                  # VHS scene FX, applied to the scene surface
+    scene-vhs-gl.ts               # VHS tube curvature (WebGL2)
+    lens-gl.ts                    # Glass (refract) and ripple lens modes (WebGL2)
+    lens-ripple.ts                # Which ripple impulses are live at a frame
+    gl/                           # WebGL2 context, runPassInto, uniforms, GPU hash, transition shaders
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
@@ -268,6 +272,8 @@ The lens's mode list (`LENS_MODES`) mirrors `LENS_SPECS` in `fx-schema.ts`, and
 2. Add it, with its label, to `TRANSITION_LABELS` in `src/lib/transition-options.ts`. The inspector, the AI prompt and the AI parser all read that list, so nothing else needs to know about it
 3. Implement it in `src/renderer/transitions.ts`, in `compositeSurfaces()`: it gets the outgoing and incoming scene surfaces and the progress (0–1). Add a node-canvas test to `transitions.test.ts`
 
+A shader transition instead goes in `src/renderer/gl/transitions/`: add its source, list it in `GL_TRANSITION_TYPES` and (for a gl-transitions shader) `GL_TRANSITION_SOURCES` in `index.ts`, add it to `GPU_TRANSITIONS` in `transition-options.ts`, and give its float uniforms a `TRANSITION_SPECS` entry in `fx-schema.ts`. `fx-kinds.test.ts` checks those lists and defaults against each other, and `scripts/e2e/fx-gl.mjs` (A5.3) checks its first frame, determinism and last frame in the app. See "Adding a GL effect".
+
 ### Adding a New Layer FX
 
 The inspector is schema-driven, so no UI code is needed — an entry in
@@ -318,6 +324,23 @@ Two rules that are not optional:
 
 Keep pure geometry in `fx-envelope.ts` or `fx-geometry.ts` — those are DOM-free
 so they can be unit-tested under Vitest's `node` environment.
+
+### Adding a GL effect
+
+Everything WebGL2 goes through `src/renderer/gl/`:
+
+- `context.ts` — `getGl()`: one shared WebGL2 context on a detached canvas, created lazily; null when WebGL2 is missing, the context is lost (programs are rebuilt after a restore), or the e2e job option `disableGl: true` is set.
+- `pass.ts` — `runPassInto(target, dx, dy, w, h, program, inputs, uniforms, keys?)`: uploads the inputs as textures (premultiplied, flipped so uv (0,0) is the bottom-left), draws one full-screen triangle into a w×h viewport, and `drawImage`s the result onto the 2D `target` in the same task, under its transform. It returns false when GL is unavailable; every caller has a fallback. Programs are cached by name; the GL canvas only grows.
+- `uniforms.ts` — DOM-free: uniform value types, `parseUniformDefaults` for gl-transitions' `uniform <type> <name>; // = value` comments (ivec2 and vec4 included), `withOverrides` for `transitionParams`.
+- `hash.glsl.ts` — `lcsHash1…4`, an exact GLSL ES 3.00 port of `hash` in `noise.ts` (A5.2 checks it against the CPU over a 64×64 grid).
+
+lc-studio's own shaders are GLSL ES 3.00 (`#version 300 es`, `in vec2 v_uv`, `out vec4 o_color`) and follow one uniform convention: `u_progress`, `u_frame` (int), `u_fps`, `u_resolution`, `u_seed`, plus the effect's own parameters. Time never comes from a clock. gl-transitions shaders are GLSL ES 1.00 and run inside `wrapGlTransition`.
+
+Keep the logic that decides things in plain TypeScript with unit tests (`gpu-features.ts` for the Render panel's warning, `lens-ripple.ts` for which impulses are live, `uniforms.ts`), and check GL output in `scripts/e2e/fx-gl.mjs`, since node-canvas has no WebGL.
+
+Uploading a 1080×1920 canvas costs about 5 ms in WKWebView, far more than drawing. Pass `keys` to `runPassInto` for inputs that don't change between frames (a transition's frozen incoming scene) so their textures are reused, and `textureHolds()` tells you whether you can skip producing the input at all.
+
+New effects that need GL must be listed by `gpuFeatureUses()` so the Render panel can warn when WebGL2 is missing.
 
 ### Pixel loops in WKWebView
 
@@ -375,6 +398,7 @@ node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real export
 node scripts/e2e/fx2-decrypt-wipe.mjs  # FX pack P2: decrypt and the wipe edge in real exports
 node scripts/e2e/fx3-lens.mjs  # FX pack P3: lens preview matches export (A3.6), all four modes exported
 node scripts/e2e/fx4-vhs.mjs   # FX pack P4: VHS in real exports, with shake, grain and a transition
+node scripts/e2e/fx-gl.mjs     # FX pack P5: A5.1–A5.7, the WebGL2 pass, its transitions, lenses and fallback
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.
