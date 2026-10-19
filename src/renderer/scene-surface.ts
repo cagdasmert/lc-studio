@@ -2,6 +2,7 @@ import type { Scene } from '../types';
 import type { MediaCache } from './media-cache';
 import type { PreparedVideoFrames } from './draw-video';
 import { drawScene } from './draw';
+import { applyVhs, getVhs, vhsIsIdentity } from './scene-vhs';
 
 /**
  * Scene surfaces: a whole scene (background plus layers) drawn into its own
@@ -62,14 +63,19 @@ export function renderSceneSurface(
   const surface = acquire(width, height);
   const ctx = surface.getContext('2d');
   if (ctx) drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
+  // VHS belongs to the scene's picture: applied here, it shakes with it and
+  // each scene in a transition keeps its own look. Overlays come later.
+  const vhs = getVhs(scene.sceneFx);
+  if (vhs) applyVhs(surface, vhs, frameInScene);
   return surface;
 }
 
 /**
  * Whether a scene must be drawn through a surface even outside a transition,
  * because something in it reads back the pixels drawn beneath it: a visible
- * lens layer. (The VHS scene FX will be the other.)
+ * lens layer, or a VHS scene FX that changes any pixel.
  */
 export function sceneNeedsSurface(scene: Scene): boolean {
-  return scene.layers.some((l) => l.type === 'lens' && l.visible);
+  const vhs = getVhs(scene.sceneFx);
+  return (!!vhs && !vhsIsIdentity(vhs)) || scene.layers.some((l) => l.type === 'lens' && l.visible);
 }

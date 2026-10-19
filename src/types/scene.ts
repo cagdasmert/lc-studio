@@ -336,7 +336,20 @@ export interface ShakeFx {
   decayFrames: number;  // 0 = never settles
 }
 
-export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx;
+/** Worn tape playback. */
+export interface VhsFx {
+  type: 'vhs';
+  wave: number;            // px amplitude of the slow horizontal wave
+  jitter: number;          // px of per-line horizontal jitter
+  bleed: number;           // px red/blue horizontal offset (chroma bleed)
+  switching: number;       // 0–1 strength of the head-switching noise band
+  switchingHeight: number; // 0–0.2, band height as a fraction of the frame
+  crease: number;          // 0–1, a travelling tape-crease band
+  saturation: number;      // 0–2
+  barrel: number;          // 0–1 tube curvature; drawn only by the WebGL pass (not yet)
+}
+
+export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx | VhsFx;
 export type SceneFxType = SceneFxDef['type'];
 
 export interface LayerBase {

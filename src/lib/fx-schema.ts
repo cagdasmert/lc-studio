@@ -287,6 +287,25 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
       num('rollSpeed', 'Roll', -4, 4, 0.25),
     ],
   },
+  vhs: {
+    label: 'VHS',
+    hint: 'Worn tape: a wavy, jittery picture, colour bleed, a noisy head-switching band and a rolling crease. Tube curvature needs the WebGL pass and is not drawn yet.',
+    kind: 'continuous',
+    defaults: {
+      type: 'vhs', wave: 6, jitter: 1.5, bleed: 3, switching: 0.6, switchingHeight: 0.06,
+      crease: 0.3, saturation: 0.8, barrel: 0,
+    },
+    fields: [
+      num('wave', 'Wave', 0, 40, 0.5),
+      num('jitter', 'Jitter', 0, 10, 0.5),
+      num('bleed', 'Colour bleed', 0, 20),
+      num('switching', 'Head switching', 0, 1, 0.05),
+      num('switchingHeight', 'Switching band', 0, 0.2, 0.01),
+      num('crease', 'Crease', 0, 1, 0.05),
+      num('saturation', 'Saturation', 0, 2, 0.05),
+      num('barrel', 'Tube curvature', 0, 1, 0.05),
+    ],
+  },
   shake: {
     label: 'Camera shake',
     hint: 'Jitters the whole frame; decays to still if you set a decay.',

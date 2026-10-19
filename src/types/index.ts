@@ -44,6 +44,7 @@ export type {
   VignetteFx,
   ScanlinesFx,
   ShakeFx,
+  VhsFx,
   SceneFxDef,
   SceneFxType,
   LayerBase,

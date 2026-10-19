@@ -83,6 +83,7 @@ src/                              # React frontend
     fx-wipe-edge.ts               # The wipe reveal's glowing front and sparks
     glyphs.ts                     # 5×5 bitmap glyph sets (RAMP, CIPHER, BINARY) and drawGlyph
     lens.ts                       # Lens layers: magnify, pixelate, dither, ascii over what's below
+    scene-vhs.ts                  # VHS scene FX, applied to the scene surface
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
@@ -199,7 +200,7 @@ User interaction → Zustand store → React re-render → Canvas draw
 
 Zoom transitions are the exception: they draw both scenes straight onto the target, as they always have, because scaling a pre-rendered surface would resample it and change their output. They switch to surfaces only when a scene needs one.
 
-`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it: today, a visible lens layer. The compositor then draws such a scene into a surface and the surface onto the target, under the shake and the preview's pan/zoom.
+`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it: a visible lens layer, or a VHS scene FX that changes any pixel. `renderSceneSurface` applies VHS to the surface itself, after the scene is drawn and before the surface goes onto the target, so the order for such a scene is: draw the scene, apply VHS, draw the surface under the shake, then the overlay FX. The compositor then draws such a scene into a surface and the surface onto the target, under the shake and the preview's pan/zoom.
 
 Surfaces are full-frame, so never allocate one per frame: take canvases from the pool with `acquire(w, h)` and hand them back with `release(canvas)`. `renderSceneSurface` acquires; its caller releases.
 
@@ -318,6 +319,22 @@ Two rules that are not optional:
 Keep pure geometry in `fx-envelope.ts` or `fx-geometry.ts` — those are DOM-free
 so they can be unit-tested under Vitest's `node` environment.
 
+### Pixel loops in WKWebView
+
+Full-frame pixel loops (VHS) run much slower in JavaScriptCore than in V8 if
+written as one big loop. Measured on a 1080×1920 VHS frame:
+
+- Keep each pass in its own small function. Inlined into one large function,
+  the saturation pass took about 40 ms; on its own, about 4.
+- Read and write whole pixels through an `Int32Array` view, not a
+  `Uint32Array`: an opaque pixel read through a Uint32 view is ≥ 2³¹, which
+  JavaScriptCore holds as a double (66 vs 42 ms for the same loop).
+- Use `hash4` from `noise.ts` in per-pixel loops; it returns exactly what
+  `hash` does, without the rest-parameter array.
+
+Time it in the app, not in node or Chromium: `applyVhs` took 17 ms in Chromium
+when it cost 70 in WKWebView.
+
 ### Adding a New Scene FX
 
 Same shape, one layer up: define the interface in `src/types/scene.ts`, add it
@@ -357,6 +374,7 @@ node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pi
 node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real exports, and its cost per frame
 node scripts/e2e/fx2-decrypt-wipe.mjs  # FX pack P2: decrypt and the wipe edge in real exports
 node scripts/e2e/fx3-lens.mjs  # FX pack P3: lens preview matches export (A3.6), all four modes exported
+node scripts/e2e/fx4-vhs.mjs   # FX pack P4: VHS in real exports, with shake, grain and a transition
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.

@@ -20,6 +20,19 @@ export function hash(...values: number[]): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+function fold(h: number, v: number): number {
+  let x = Math.imul(Math.round(v), 374761393) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0;
+  h = Math.imul(h ^ x, 16777619) >>> 0;
+  return (h ^ (h >>> 13)) >>> 0;
+}
+
+/** hash(a, b, c, d), exactly, with a fixed arity for per-pixel loops (no rest-parameter array). */
+export function hash4(a: number, b: number, c: number, d: number): number {
+  const h = fold(fold(fold(fold(2166136261 >>> 0, a), b), c), d);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
 /** Hash to a float in [-1, 1). */
 export function signedHash(...values: number[]): number {
   return hash(...values) * 2 - 1;

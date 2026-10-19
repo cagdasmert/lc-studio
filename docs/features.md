@@ -133,8 +133,21 @@ their modes from `LENS_SPECS`, and the parser validates their fields.
 ### Scene FX
 
 Full-frame treatments applied after the scene is composited: **film grain**,
-**vignette**, **scanlines** (with optional vertical roll), and **camera shake**
-(with optional decay). Scene FX have no timing envelope.
+**vignette**, **scanlines** (with optional vertical roll), **camera shake**
+(with optional decay), and **VHS**. Scene FX have no timing envelope.
+
+**VHS** (`src/renderer/scene-vhs.ts`) is worn tape playback: a slow horizontal
+`wave`, per-line `jitter` (2-px strips), chroma `bleed` (red shifted left, blue
+right), a head-switching band at the bottom (`switching`, `switchingHeight`:
+the picture dragged sideways plus noise speckle), a 6–14 px `crease` band that
+travels down the frame and wraps, and `saturation`. It is applied to the
+scene's own surface, so it shakes with the picture under camera shake, grain,
+scanlines and vignette stay on top of it, and in a transition each scene keeps
+its own look. With every amount at 0 and saturation at 1 it changes nothing,
+and the scene isn't routed through a surface for it. `barrel` (tube curvature)
+is stored and shown but not drawn yet: it needs the WebGL pass. VHS costs about
+15 ms per frame at 1080×1920 in WKWebView (34 vs 19 ms). In the preview a VHS
+scene, like a lens scene, is rendered at output resolution and then scaled.
 
 All FX are frame-deterministic — the stochastic ones derive every random value
 from a hash of the frame number, so preview and final render produce identical
