@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import type {
-  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData,
+  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData, LensLayerData, LensMode,
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
   ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
@@ -10,6 +10,7 @@ import type {
 } from '../../types';
 import {
   LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES, DEFAULT_FX_WINDOW,
+  LENS_SPECS, LENS_MODES,
   type FxField,
 } from '../../lib/fx-schema';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
@@ -142,12 +143,14 @@ function TransformSection({ layer, sceneIndex, frameInLayer }: {
         <NumericField label="Opacity" value={layer.opacity} onChange={(v) => update({ opacity: v } as Partial<Layer>)} min={0} max={1} step={0.05} />
         <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="opacity" frame={frameInLayer} value={layer.opacity} />
       </div>
-      <label className="prop-field">
-        <span>Blend</span>
-        <select value={layer.blendMode} onChange={(e) => update({ blendMode: e.target.value as BlendMode } as Partial<Layer>)}>
-          {BLEND_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </label>
+      {layer.type !== 'lens' && (
+        <label className="prop-field">
+          <span>Blend</span>
+          <select value={layer.blendMode} onChange={(e) => update({ blendMode: e.target.value as BlendMode } as Partial<Layer>)}>
+            {BLEND_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+      )}
     </div>
   );
 }
@@ -1061,6 +1064,92 @@ function CharAnimationSection({ layer, sceneIndex }: { layer: TextLayerData; sce
 
 // ── SVG Layer ─────────────────────────────────────────
 
+/** A lens: its shape, intensity and ring, then the active mode's own controls (from LENS_SPECS). */
+function LensSection({ layer, sceneIndex, frameInLayer }: { layer: LensLayerData; sceneIndex: number; frameInLayer: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const update = (patch: Partial<LensLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+  const spec = LENS_SPECS[layer.mode];
+  const values = layer as unknown as Record<string, unknown>;
+
+  return (
+    <div className="prop-section">
+      <h4>Lens</h4>
+      <p className="fx-card-hint">Changes the layers below it, inside its shape.</p>
+      <label className="prop-field">
+        <span>Shape</span>
+        <select value={layer.shape} onChange={(e) => update({ shape: e.target.value as LensLayerData['shape'] })}>
+          <option value="circle">Circle</option>
+          <option value="rect">Rectangle</option>
+          <option value="rounded-rect">Rounded rectangle</option>
+        </select>
+      </label>
+      {layer.shape === 'rounded-rect' && (
+        <NumericField label="Corner radius" value={layer.cornerRadius} onChange={(v) => update({ cornerRadius: v })} min={0} />
+      )}
+      <NumericField label="Feather" value={layer.feather} onChange={(v) => update({ feather: v })} min={0} />
+      <div className="prop-row">
+        <NumericField label="Intensity" value={layer.intensity} onChange={(v) => update({ intensity: v })} min={0} max={1} step={0.05} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="intensity" frame={frameInLayer} value={layer.intensity} />
+      </div>
+      <label className="prop-checkbox">
+        <input
+          type="checkbox"
+          checked={!!layer.ring}
+          onChange={(e) => update({ ring: e.target.checked ? { color: '#ffffff', width: 4 } : null })}
+        />
+        <span>Ring</span>
+      </label>
+      {layer.ring && (
+        <div className="prop-row">
+          <ColorField label="Ring colour" value={layer.ring.color} onChange={(v) => update({ ring: { ...layer.ring!, color: v } })} />
+          <NumericField label="Width" value={layer.ring.width} onChange={(v) => update({ ring: { ...layer.ring!, width: v } })} min={0} />
+        </div>
+      )}
+      <label className="prop-field">
+        <span>Mode</span>
+        <select
+          value={layer.mode}
+          onChange={(e) => {
+            const mode = e.target.value as LensMode;
+            update({ ...LENS_SPECS[mode].defaults, mode });
+          }}
+        >
+          {LENS_MODES.map((m) => <option key={m} value={m}>{LENS_SPECS[m].label}</option>)}
+        </select>
+      </label>
+      <p className="fx-card-hint">{spec.hint}</p>
+      {spec.fields.map((field) => field.kind === 'color' ? (
+        // ink / paper are optional: unset keeps the source colours.
+        <div key={field.key} className="prop-row">
+          <ColorField
+            label={field.label}
+            value={String(values[field.key] ?? '#ffffff')}
+            onChange={(v) => update({ [field.key]: v } as Partial<LensLayerData>)}
+          />
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={values[field.key] !== undefined}
+              onChange={(e) => update({ [field.key]: e.target.checked ? (field.key === 'ink' ? '#ffffff' : '#000000') : undefined } as Partial<LensLayerData>)}
+            />
+            <span>Set</span>
+          </label>
+        </div>
+      ) : (
+        <NumericField
+          key={field.key}
+          label={field.label}
+          value={Number(values[field.key] ?? 0)}
+          onChange={(v) => update({ [field.key]: Math.min(field.max ?? v, Math.max(field.min ?? v, v)) } as Partial<LensLayerData>)}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+        />
+      ))}
+    </div>
+  );
+}
+
 function SvgSection({ layer, sceneIndex }: { layer: SvgLayerData; sceneIndex: number }) {
   const updateLayer = useStore((s) => s.updateLayer);
   const update = (patch: Partial<SvgLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
@@ -1323,11 +1412,17 @@ export function PropertyInspector() {
           {layer.type === 'image' && <MorphSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'svg' && <SvgSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'lens' && <LensSection layer={layer} sceneIndex={selectedSceneIndex} frameInLayer={toLayerFrame(layer, frameInScene)} />}
 
-          <LayerFxSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />
+          {/* A lens ignores FX, filters, shadows and clip paths. */}
+          {layer.type !== 'lens' && (
+            <>
+              <LayerFxSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />
+            </>
+          )}
           <MotionPathSection layer={layer} sceneIndex={selectedSceneIndex} />
         </>
       )}

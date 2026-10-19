@@ -371,7 +371,7 @@ export interface LayerBase {
 
 // ── Layer types ────────────────────────────────────────
 
-export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio' | 'svg';
+export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio' | 'svg' | 'lens';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type VerticalAlign = 'top' | 'middle' | 'bottom';
@@ -492,13 +492,38 @@ export interface SvgLayerData extends LayerBase {
   strokeColor?: string;
 }
 
+/** What a lens does to the pixels under it. (P5 adds 'refract' and 'ripple'.) */
+export type LensMode = 'magnify' | 'pixelate' | 'dither' | 'ascii';
+
+/**
+ * A lens changes whatever is drawn *under* it (lower zIndex) inside its
+ * shape. It moves on keyframes or a motion path like any layer. Lenses ignore
+ * effects, layerFx, boxShadow, blendMode and clipPath, and never echo.
+ */
+export interface LensLayerData extends LayerBase {
+  type: 'lens';
+  shape: 'circle' | 'rect' | 'rounded-rect';
+  cornerRadius: number;
+  feather: number;          // px soft edge, 0 = hard
+  intensity: number;        // 0–1, keyframable ('intensity' track); 0 = no effect
+  ring: { color: string; width: number } | null;  // HUD outline
+  mode: LensMode;
+  magnify: number;          // 1–6, 'magnify'
+  block: number;            // px, 'pixelate'
+  ditherLevels: number;     // 2–8 per channel, 'dither'
+  ink?: string;             // 'dither'/'ascii' foreground; unset = keep the source colours
+  paper?: string;           // 'dither'/'ascii' background; unset = source darkened to 25%
+  cell: number;             // px, 'ascii'
+}
+
 export type Layer =
   | TextLayerData
   | ImageLayerData
   | ShapeLayerData
   | VideoLayerData
   | AudioLayerData
-  | SvgLayerData;
+  | SvgLayerData
+  | LensLayerData;
 
 // ── Scene & Composition ────────────────────────────────
 

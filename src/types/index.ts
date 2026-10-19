@@ -68,6 +68,8 @@ export type {
   VideoLayerData,
   AudioLayerData,
   SvgLayerData,
+  LensLayerData,
+  LensMode,
   Layer,
   TransitionType,
   BackgroundType,

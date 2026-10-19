@@ -4,6 +4,7 @@ import type { PreparedVideoFrames } from './draw-video';
 import { drawScene } from './draw';
 import { drawTransition } from './transitions';
 import { applyShake, applyScenePostFx, hasShake } from './scene-fx';
+import { release, renderSceneSurface, sceneNeedsSurface } from './scene-surface';
 
 export function getTotalFrames(composition: Composition): number {
   return composition.scenes.reduce((sum, s) => sum + s.durationFrames, 0);
@@ -81,6 +82,12 @@ export function drawCompositionFrame(
       ctx, scene, transition.incoming, frameInScene, transition.progress,
       scene.transition, width, height, mediaCache, fps, videoFrames,
     );
+  } else if (sceneNeedsSurface(scene)) {
+    // Drawn whole into a surface, then onto the target, so the shake and the
+    // preview's pan/zoom apply to the finished scene.
+    const surface = renderSceneSurface(scene, frameInScene, width, height, mediaCache, fps, videoFrames);
+    ctx.drawImage(surface, 0, 0);
+    release(surface);
   } else {
     drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
   }

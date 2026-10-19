@@ -104,3 +104,49 @@ describe('parseGenerationResponse: FX and transitions (A0.4)', () => {
     }
   });
 });
+
+describe('parseGenerationResponse: lens layers (R3.6)', () => {
+  const raw = JSON.stringify([{
+    label: 'Lens', durationSeconds: 2, backgroundColor: '#000000', transition: 'cut',
+    layers: [
+      { name: 'Product', type: 'shape', x: 540, y: 960, width: 600, height: 600 },
+      {
+        name: 'Magnifier', type: 'lens', x: 300, y: 960, width: 300, height: 300,
+        shape: 'hexagon', feather: 500, intensity: 0.7, mode: 'magnify', magnify: 9, ink: 'red',
+        ring: { color: '#00ffcc', width: 6 },
+        layerFx: [{ type: 'glow', color: '#ffffff', radius: 10, intensity: 1, pulseFrames: 0 }],
+        animation: [{ property: 'x', from: 300, to: 780, startFrame: 0, endFrame: 50, easing: 'ease-in-out' }],
+      },
+      { name: 'Bad mode', type: 'lens', x: 1, y: 1, width: 10, height: 10, mode: 'x-ray', ring: null },
+    ],
+  }]);
+  const { scenes } = parseGenerationResponse(raw, 'full-composition');
+  const [product, magnifier, bad] = scenes![0].layers;
+
+  it('validates lens fields on the lens defaults', () => {
+    expect(magnifier.type).toBe('lens');
+    expect(magnifier.lens).toMatchObject({
+      shape: 'circle', feather: 120, intensity: 0.7, mode: 'magnify', magnify: 6,
+      ring: { color: '#00ffcc', width: 6 },
+    });
+    expect(magnifier.lens!.ink).toBeUndefined();
+    expect(magnifier.layerFx).toBeUndefined();
+    expect(product.lens).toBeUndefined();
+  });
+
+  it('falls back to the default mode and honours ring: null', () => {
+    expect(bad.lens!.mode).toBe('magnify');
+    expect(bad.lens!.ring).toBeNull();
+  });
+
+  it('converts into a real lens layer, above the layer listed before it', () => {
+    const [scene] = convertGeneratedScenes(scenes!, 30);
+    const lens = scene.layers[1];
+    expect(lens.type).toBe('lens');
+    expect(lens.zIndex).toBeGreaterThan(scene.layers[0].zIndex);
+    if (lens.type === 'lens') {
+      expect(lens.magnify).toBe(6);
+      expect(lens.keyframes.x.keyframes.map((k) => k.value)).toEqual([300, 780]);
+    }
+  });
+});

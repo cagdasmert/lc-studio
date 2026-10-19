@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildMessages } from './prompts';
-import { LAYER_FX_TYPES, SCENE_FX_TYPES } from '../fx-schema';
+import { LAYER_FX_TYPES, LENS_MODES, SCENE_FX_TYPES } from '../fx-schema';
 import { TRANSITION_TYPES } from '../transition-options';
 
 const output = { id: 'o', label: 'o', width: 1080, height: 1920, fps: 30 };
@@ -17,6 +17,11 @@ describe('the full-composition system prompt (A0.4)', () => {
 
   it('names every transition except none', () => {
     for (const t of TRANSITION_TYPES.filter((x) => x !== 'none')) expect(system).toContain(`"${t}"`);
+  });
+
+  it('describes the lens layer and every lens mode', () => {
+    expect(system).toContain('"lens"');
+    for (const m of LENS_MODES) expect(system).toContain(`- "${m}":`);
   });
 
   it('explains reveal windows and shows FX in the example', () => {

@@ -3,7 +3,7 @@ import type { Template } from '../../types/template';
 import type { OutputPreset } from '../../types';
 import type { GenerationMode } from '../../types/ai';
 import type { ChatMessage } from './provider';
-import { LAYER_FX_SPECS, SCENE_FX_SPECS, type FxField, type FxSpec } from '../fx-schema';
+import { LAYER_FX_SPECS, SCENE_FX_SPECS, LENS_SPECS, LENS_COMMON_FIELDS, type FxField, type FxSpec } from '../fx-schema';
 import { TRANSITION_TYPES } from '../transition-options';
 
 const SCENE_SCHEMA = `{
@@ -56,6 +56,15 @@ function describeFx<T>(specs: Record<string, FxSpec<T>>): string {
     .join('\n');
 }
 
+/** The lens layer: what it is, its common fields, and each mode's fields. */
+export function buildLensSection(): string {
+  const modes = Object.entries(LENS_SPECS)
+    .map(([mode, spec]) => `  - "${mode}": ${spec.hint} Fields: ${spec.fields.map(describeField).join(', ')}.`)
+    .join('\n');
+  return `- Lens layers change whatever is drawn under them (layers listed before them) inside their shape; animate x/y to sweep one across a product or a title. Fields: ${LENS_COMMON_FIELDS.map(describeField).join(', ')}, ring ({ "color": hex, "width": px } or null), mode:
+${modes}`;
+}
+
 /**
  * The FX and transitions section, generated from the FX schema and the
  * transition list so it never drifts from what the app accepts. Kept terse:
@@ -81,9 +90,10 @@ function buildSystemPrompt(
 Canvas dimensions: ${output.width}x${output.height} pixels at ${output.fps} FPS.
 Coordinate system: (0,0) is top-left. Center is (${output.width / 2}, ${output.height / 2}).
 
-Layer types available: "text" and "shape".
+Layer types available: "text", "shape" and "lens".
 - Text layers: content, fontSize (16-120), fontWeight ("normal"/"bold"), fontStyle ("normal"/"italic"), color (hex), align ("left"/"center"/"right"), verticalAlign ("top"/"middle"/"bottom"), lineHeight (1-2), letterSpacing (0-10).
 - Shape layers: shapeType ("rect"/"circle"/"ellipse"/"rounded-rect"/"line"), fill (hex), stroke (hex), strokeWidth (0-10), cornerRadius (0-50).
+${buildLensSection()}
 
 Animations: each layer can have an animation array. Each animation targets a property (opacity, x, y, scaleX, scaleY, rotation, width, height) with from/to values, startFrame/endFrame, and easing (linear, ease-in, ease-out, ease-in-out, ease-out-back, ease-in-out-cubic).
 

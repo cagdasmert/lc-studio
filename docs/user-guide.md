@@ -218,6 +218,22 @@ While the colour track has keyframes it overrides the Color field. The keys also
 3. At frame 20, set X to 540 (centered), add keyframe
 4. The layer slides in from the left
 
+## Lens Layers
+
+A lens changes whatever is under it: the layers below it in the Layer Panel
+order. Choose **Add layer → Lens**; it is added on top of the scene.
+
+- **Shape** — circle, rectangle or rounded rectangle. **Feather** softens the edge.
+- **Mode** — *Magnify* enlarges what's under it, *Pixelate* turns it into blocks, *Dither* reduces it to a few colour levels in a fine pattern, and *ASCII* redraws it as text-like density glyphs. Each mode shows its own controls. For Dither and ASCII, tick **Set** next to *Ink* and *Paper* to use two fixed colours instead of the picture's own.
+- **Intensity** — how strong the effect is, from 0 (none) to 1. Set keyframes on it (the ◇ button) to bring a lens in or out.
+- **Ring** — an outline around the lens, like a HUD.
+- **Moving it** — keyframe *X* and *Y*, or give it a motion path, to sweep it across a product or a title.
+
+A lens doesn't take Layer FX, Effects, a shadow, a blend mode or a clip path, so
+those sections are hidden while one is selected. In the preview, a scene with a
+lens looks slightly soft when you zoom the canvas in past 100%; the export is
+sharp.
+
 ## Morphing One Image into Another
 
 1. Add an image layer with the first image (**A**).

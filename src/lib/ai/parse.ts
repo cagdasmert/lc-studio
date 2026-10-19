@@ -1,6 +1,9 @@
 import type { GeneratedScene, GeneratedLayer, GeneratedContent, GenerationMode } from '../../types/ai';
 import type { EasingType, FxWindow, LayerFxDef, SceneFxDef } from '../../types';
-import { LAYER_FX_SPECS, SCENE_FX_SPECS, type FxSpec } from '../fx-schema';
+import {
+  LAYER_FX_SPECS, SCENE_FX_SPECS, LENS_SPECS, LENS_MODES, LENS_DEFAULTS, LENS_COMMON_FIELDS,
+  type FxField, type FxSpec, type LensProps,
+} from '../fx-schema';
 import { EASING_GROUPS } from '../easing-options';
 import { isTransitionType } from '../transition-options';
 
@@ -269,18 +272,7 @@ function validateFxList<T extends { type: string; window?: FxWindow }>(
 
     const fx: Record<string, unknown> = { ...spec.defaults };
     if (spec.defaults.window) fx.window = { ...spec.defaults.window };
-    for (const field of spec.fields) {
-      const v = obj[field.key];
-      if (field.kind === 'number') {
-        if (typeof v === 'number' && Number.isFinite(v)) {
-          fx[field.key] = Math.min(field.max ?? Infinity, Math.max(field.min ?? -Infinity, v));
-        }
-      } else if (field.kind === 'select') {
-        if (field.options?.some((o) => o.value === v)) fx[field.key] = v;
-      } else if (typeof v === 'string' && HEX.test(v)) {
-        fx[field.key] = v;
-      }
-    }
+    for (const field of spec.fields) takeField(fx, obj, field);
     if ('window' in obj) {
       const window = validateWindow(obj.window);
       if (window) fx.window = window;
@@ -290,12 +282,49 @@ function validateFxList<T extends { type: string; window?: FxWindow }>(
   return out.length > 0 ? out : undefined;
 }
 
+/** Copy `obj[field.key]` into `out` if it is valid for the field (numbers clamped). */
+function takeField(out: Record<string, unknown>, obj: Record<string, unknown>, field: FxField): void {
+  const v = obj[field.key];
+  if (field.kind === 'number') {
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      out[field.key] = Math.min(field.max ?? Infinity, Math.max(field.min ?? -Infinity, v));
+    }
+  } else if (field.kind === 'select') {
+    if (field.options?.some((o) => o.value === v)) out[field.key] = v;
+  } else if (typeof v === 'string' && HEX.test(v)) {
+    out[field.key] = v;
+  }
+}
+
+/** A lens layer's own properties, on LENS_DEFAULTS: only valid values are taken. */
+function validateLens(obj: Record<string, unknown>): LensProps {
+  const out: Record<string, unknown> = { ...LENS_DEFAULTS, ring: LENS_DEFAULTS.ring && { ...LENS_DEFAULTS.ring } };
+  for (const field of LENS_COMMON_FIELDS) takeField(out, obj, field);
+  if (typeof obj.mode === 'string' && (LENS_MODES as string[]).includes(obj.mode)) out.mode = obj.mode;
+  const seen = new Set<string>();
+  for (const spec of Object.values(LENS_SPECS)) {
+    for (const field of spec.fields) {
+      if (!seen.has(field.key)) takeField(out, obj, field);
+      seen.add(field.key);
+    }
+  }
+  if (obj.ring === null || obj.ring === false) out.ring = null;
+  else if (obj.ring && typeof obj.ring === 'object') {
+    const r = obj.ring as Record<string, unknown>;
+    out.ring = {
+      color: typeof r.color === 'string' && HEX.test(r.color) ? r.color : '#ffffff',
+      width: typeof r.width === 'number' && Number.isFinite(r.width) ? Math.min(40, Math.max(0, r.width)) : 4,
+    };
+  }
+  return out as unknown as LensProps;
+}
+
 function validateLayer(raw: unknown): GeneratedLayer | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
 
   const type = obj.type as string;
-  if (type !== 'text' && type !== 'shape') return null;
+  if (type !== 'text' && type !== 'shape' && type !== 'lens') return null;
 
   return {
     name: String(obj.name ?? `${type} layer`),
@@ -325,7 +354,9 @@ function validateLayer(raw: unknown): GeneratedLayer | null {
           easing: String(a.easing ?? 'ease-out'),
         }))
       : undefined,
-    layerFx: validateFxList<LayerFxDef>(obj.layerFx, LAYER_FX_SPECS),
+    // A lens takes no layer FX.
+    layerFx: type === 'lens' ? undefined : validateFxList<LayerFxDef>(obj.layerFx, LAYER_FX_SPECS),
+    lens: type === 'lens' ? validateLens(obj) : undefined,
   };
 }
 

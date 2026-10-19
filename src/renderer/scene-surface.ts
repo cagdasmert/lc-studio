@@ -67,9 +67,9 @@ export function renderSceneSurface(
 
 /**
  * Whether a scene must be drawn through a surface even outside a transition,
- * because something in it reads back the pixels drawn beneath it. Nothing
- * does yet; lens layers and the VHS scene FX will.
+ * because something in it reads back the pixels drawn beneath it: a visible
+ * lens layer. (The VHS scene FX will be the other.)
  */
-export function sceneNeedsSurface(_scene: Scene): boolean {
-  return false;
+export function sceneNeedsSurface(scene: Scene): boolean {
+  return scene.layers.some((l) => l.type === 'lens' && l.visible);
 }

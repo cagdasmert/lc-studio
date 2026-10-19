@@ -82,6 +82,7 @@ src/                              # React frontend
     fx-decrypt.ts                 # Decrypt reveal: cells of bitmap glyphs resolving into the layer
     fx-wipe-edge.ts               # The wipe reveal's glowing front and sparks
     glyphs.ts                     # 5×5 bitmap glyph sets (RAMP, CIPHER, BINARY) and drawGlyph
+    lens.ts                       # Lens layers: magnify, pixelate, dither, ascii over what's below
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
@@ -198,7 +199,7 @@ User interaction → Zustand store → React re-render → Canvas draw
 
 Zoom transitions are the exception: they draw both scenes straight onto the target, as they always have, because scaling a pre-rendered surface would resample it and change their output. They switch to surfaces only when a scene needs one.
 
-`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it. It is false for every feature today.
+`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it: today, a visible lens layer. The compositor then draws such a scene into a surface and the surface onto the target, under the shake and the preview's pan/zoom.
 
 Surfaces are full-frame, so never allocate one per frame: take canvases from the pool with `acquire(w, h)` and hand them back with `release(canvas)`. `renderSceneSurface` acquires; its caller releases.
 
@@ -240,12 +241,19 @@ The `zundo` temporal middleware wraps the store to provide undo/redo, tracking o
 
 ### Adding a New Layer Type
 
-1. Define the data interface in `src/types/scene.ts` extending `LayerBase`
-2. Add the type to the `Layer` discriminated union
-3. Create a draw function in `src/renderer/draw-<type>.ts`
-4. Add a case to the `drawLayer` switch in `src/renderer/draw.ts`
-5. Add a creation function and UI section in the relevant components
-6. Add a property section in `PropertyInspector.tsx`
+1. Define the data interface in `src/types/scene.ts` extending `LayerBase`, add the type to `LayerType` and the `Layer` union, and re-export it from `src/types/index.ts`
+2. Create a draw function in `src/renderer/draw-<type>.ts`
+3. Add a case to the `drawLayer` switch in `src/renderer/draw.ts`
+4. Add a creation function and a button in `AddLayerDialog.tsx`, and an icon in `LAYER_TYPE_ICONS` (`LayerPanel.tsx`)
+5. Add a property section in `PropertyInspector.tsx`, and hide the shared sections the type ignores
+6. List its keyframable properties in `getAnimatableProperties` (`KeyframeEditor.tsx`)
+7. If the AI generator should make it, describe it in `prompts.ts` and validate it in `parse.ts` (`GeneratedLayer`, `convertGeneratedScenes`)
+
+A layer that reads what is under it, like the lens (`src/renderer/lens.ts`),
+is drawn by `drawSceneLayers` itself in z-order, not by `drawLayer`, and makes
+`sceneNeedsSurface` true so the scene is drawn into a surface it can read back.
+The lens's mode list (`LENS_MODES`) mirrors `LENS_SPECS` in `fx-schema.ts`, and
+`fx-kinds.test.ts` keeps them in sync.
 
 ### Adding a New Easing Function
 
@@ -348,6 +356,7 @@ node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundar
 node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pixel for pixel
 node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real exports, and its cost per frame
 node scripts/e2e/fx2-decrypt-wipe.mjs  # FX pack P2: decrypt and the wipe edge in real exports
+node scripts/e2e/fx3-lens.mjs  # FX pack P3: lens preview matches export (A3.6), all four modes exported
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.

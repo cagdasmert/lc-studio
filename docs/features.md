@@ -11,6 +11,7 @@ Local Content Studio is a cross-platform desktop application for creating, previ
 - **Image layers** — Local image files (PNG, JPG, GIF, WebP, BMP, SVG) with fit modes: cover, contain, fill, none. Supports border radius, tint, and morphing into a second image (see Image Morph).
 - **Video layers** — Video file references with playback rate, start/end time, and mute controls.
 - **Audio layers** — Audio file references with volume, start/end time, fade in/out.
+- **Lens layers** — A circle, rectangle or rounded rectangle that changes whatever is drawn *under* it: magnify, pixelate, dither or ASCII (see Lens Layers). It moves on keyframes or a motion path like any layer.
 
 Each layer has:
 - Position (x, y), size (width, height), and anchor point
@@ -99,6 +100,35 @@ sparks read as a fine sparkle rather than a shower.
 Any bitmap FX draws the layer through its own canvas, clipped to the layer box,
 so text that overflows its box (more lines than the box is tall) is cut off at
 the box edge, which a plain text layer is not.
+
+### Lens Layers
+
+A lens layer changes the layers below it in z-order, inside its shape;
+layers above it are untouched. Typical shots: a magnifier sweeping over a
+product, or an ASCII circle passing over a logo.
+
+| Mode | What it does |
+| --- | --- |
+| Magnify | Enlarges what is under the lens around its centre, by `1 + (magnify − 1) × intensity` |
+| Pixelate | Coarse blocks of `block × intensity` px |
+| Dither | Ordered 4×4 Bayer dither with `ditherLevels` levels per channel, or two colours (`ink` on `paper`) when `ink` is set |
+| ASCII | `cell`-px cells of density glyphs picked by brightness, in the source colours (or `ink`) on the source darkened to 25% (or `paper`) |
+
+Every lens has a `feather` (soft edge, px), an `intensity` (0–1, keyframable;
+0 = no effect, and dither and ASCII mix with the original by it) and an
+optional `ring` outline. Lenses ignore effects, layer FX, box shadow, blend
+mode and clip path, and never echo. The dither pattern is keyed on frame
+pixels, so it doesn't crawl as the lens moves; the ASCII grid is centred on the
+lens, so its cells move with it.
+
+A scene with a visible lens is drawn into a scene surface, so the lens can read
+back what is under it (`src/renderer/lens.ts`). In the preview that scene is
+rendered at output resolution and then scaled, so it is slightly soft above
+100% zoom; the export is unaffected. Four 420-px lenses at 1080×1920 export at
+about 23 ms per frame in WKWebView.
+
+The AI generator can place lens layers too: the prompt describes them and
+their modes from `LENS_SPECS`, and the parser validates their fields.
 
 ### Scene FX
 

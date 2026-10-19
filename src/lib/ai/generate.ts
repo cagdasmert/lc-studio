@@ -5,7 +5,7 @@ import type {
   GeneratedContent,
   GeneratedScene,
 } from '../../types/ai';
-import type { Composition, Scene, Layer, TextLayerData, ShapeLayerData, OutputPreset } from '../../types';
+import type { Composition, Scene, Layer, TextLayerData, ShapeLayerData, LensLayerData, OutputPreset } from '../../types';
 import type { BrandKit } from '../../types/brand';
 import type { Template } from '../../types/template';
 import type { EasingType } from '../../types';
@@ -167,6 +167,32 @@ export function convertGeneratedScenes(
           textStroke: null,
           textShadow: null,
           ...(gl.layerFx ? { layerFx: gl.layerFx } : {}),
+        };
+        return layer;
+      } else if (gl.type === 'lens' && gl.lens) {
+        const layer: LensLayerData = {
+          id: baseId,
+          name: gl.name,
+          type: 'lens',
+          startFrame: 0,
+          endFrame: durationFrames,
+          x: gl.x,
+          y: gl.y,
+          width: gl.width,
+          height: gl.height,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          opacity: 1,
+          anchorX: 0.5,
+          anchorY: 0.5,
+          zIndex: j,
+          blendMode: 'normal',
+          effects: [],
+          visible: true,
+          locked: false,
+          keyframes,
+          ...gl.lens,
         };
         return layer;
       } else {

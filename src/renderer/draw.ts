@@ -1,4 +1,4 @@
-import type { Scene, Layer, ClipPathDef, BoxShadow } from '../types';
+import type { Scene, Layer, ClipPathDef, BoxShadow, ResolvedTransform } from '../types';
 import type { MediaCache } from './media-cache';
 import type { PreparedVideoFrames } from './draw-video';
 import { resolveLayerTransform } from './interpolation';
@@ -13,6 +13,7 @@ import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
 import { drawVideoLayer } from './draw-video';
 import { drawSvgLayer } from './draw-svg';
+import { drawLensLayer } from './lens';
 
 /**
  * Draw all layers of a scene at the given frame.
@@ -36,6 +37,15 @@ export function drawSceneLayers(
   for (const layer of sorted) {
     // Check if layer is active at this frame
     if (frameInScene < layer.startFrame || frameInScene >= layer.endFrame) {
+      continue;
+    }
+
+    // A lens changes what is already drawn beneath it, so it needs `ctx` to
+    // be a scene surface (sceneNeedsSurface routes such scenes through one).
+    // It takes no FX and never echoes.
+    if (layer.type === 'lens') {
+      const frameInLayer = frameInScene - layer.startFrame;
+      drawLensLayer(ctx, layer, resolveLayerAt(layer, frameInLayer), frameInLayer);
       continue;
     }
 
@@ -76,18 +86,8 @@ function drawLayerAtFrame(
   alphaMultiplier: number,
 ): void {
   const frameInLayer = frameInScene - layer.startFrame;
-  const resolved = resolveLayerTransform(layer, frameInLayer);
+  const resolved = resolveLayerAt(layer, frameInLayer);
   const layerDuration = layer.endFrame - layer.startFrame;
-
-  // Motion path override — replaces x/y (and optionally rotation)
-  if (layer.motionPath && layer.motionPath.points.length >= 2) {
-    const pos = motionPathAt(layer.motionPath, frameInLayer, layerDuration);
-    resolved.x = pos.x;
-    resolved.y = pos.y;
-    if (layer.motionPath.alignToPath) {
-      resolved.rotation = (pos.angle * 180) / Math.PI;
-    }
-  }
 
   // Zoom reveal runs here, not in compositeLayerFx, because it writes two
   // values that are read further down this function and nowhere else:
@@ -207,6 +207,20 @@ function drawLayerAtFrame(
   ctx.restore();
 }
 
+/** A layer's transform at a frame: keyframes, then the motion path, which replaces x/y (and optionally rotation). */
+export function resolveLayerAt(layer: Layer, frameInLayer: number): ResolvedTransform {
+  const resolved = resolveLayerTransform(layer, frameInLayer);
+  if (layer.motionPath && layer.motionPath.points.length >= 2) {
+    const pos = motionPathAt(layer.motionPath, frameInLayer, layer.endFrame - layer.startFrame);
+    resolved.x = pos.x;
+    resolved.y = pos.y;
+    if (layer.motionPath.alignToPath) {
+      resolved.rotation = (pos.angle * 180) / Math.PI;
+    }
+  }
+  return resolved;
+}
+
 /**
  * Stamp a layer's drop shadow using the already-rendered layer as the mask.
  * The shadow is drawn on its own canvas, then the layer is erased out of it
@@ -273,6 +287,9 @@ function drawLayer(
     case 'svg':
       drawSvgLayer(ctx, layer, resolved);
       break;
+    case 'lens':
+      break; // drawn by drawSceneLayers, which hands it the surface
+
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LAYER_FX_SPECS } from '../lib/fx-schema';
+import { LAYER_FX_SPECS, LENS_SPECS } from '../lib/fx-schema';
 import { BITMAP_FX, REVEAL_FX } from './layer-fx';
+import { LENS_MODES } from './lens';
 import type { LayerFxType } from '../types';
 
 /**
@@ -44,5 +45,11 @@ describe('BITMAP_FX', () => {
     const unaccounted = (Object.keys(LAYER_FX_SPECS) as LayerFxType[])
       .filter((t) => !accounted.has(t));
     expect(unaccounted).toEqual([]);
+  });
+});
+
+describe('LENS_MODES', () => {
+  it('matches LENS_SPECS in fx-schema, which the renderer cannot import', () => {
+    expect([...LENS_MODES].sort()).toEqual(Object.keys(LENS_SPECS).sort());
   });
 });

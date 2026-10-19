@@ -15,6 +15,7 @@ function getAnimatableProperties(layer: Layer): string[] {
     case 'text': return TEXT_PROPERTIES;
     case 'shape': return SHAPE_PROPERTIES;
     case 'image': return layer.morph ? [...IMAGE_PROPERTIES, 'morphProgress'] : IMAGE_PROPERTIES;
+    case 'lens': return [...BASE_PROPERTIES, 'intensity'];
     default: return BASE_PROPERTIES;
   }
 }

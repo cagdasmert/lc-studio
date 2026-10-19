@@ -1,4 +1,4 @@
-import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow } from '../types';
+import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow, LensLayerData, LensMode } from '../types';
 
 /**
  * UI metadata for effects: label, default parameters, and the controls to
@@ -302,3 +302,69 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
 
 export const LAYER_FX_TYPES = Object.keys(LAYER_FX_SPECS) as LayerFxType[];
 export const SCENE_FX_TYPES = Object.keys(SCENE_FX_SPECS) as SceneFxType[];
+
+// ── Lens layers ──────────────────────────────────────
+
+/** The lens-specific part of a lens layer (everything LayerBase doesn't have). */
+export type LensProps = Omit<LensLayerData, keyof import('../types').LayerBase | 'type'>;
+
+export interface LensModeSpec {
+  label: string;
+  hint: string;
+  /** Values this mode starts from when you switch to it. */
+  defaults: Partial<LensProps>;
+  /** The mode's own controls; the inspector shows only the active mode's. */
+  fields: FxField[];
+}
+
+/** What a new lens layer gets. */
+export const LENS_DEFAULTS: LensProps = {
+  shape: 'circle', cornerRadius: 24, feather: 8, intensity: 1,
+  ring: { color: '#ffffff', width: 4 },
+  mode: 'magnify', magnify: 2, block: 24, ditherLevels: 3, cell: 12,
+};
+
+/** Controls every lens has, whatever its mode. */
+export const LENS_COMMON_FIELDS: FxField[] = [
+  select('shape', 'Shape', [
+    { value: 'circle', label: 'Circle' },
+    { value: 'rect', label: 'Rectangle' },
+    { value: 'rounded-rect', label: 'Rounded rectangle' },
+  ]),
+  num('cornerRadius', 'Corner radius', 0, 300),
+  num('feather', 'Feather', 0, 120),
+  num('intensity', 'Intensity', 0, 1, 0.05),
+];
+
+/**
+ * UI metadata for lens modes. The renderer keeps its own LENS_MODES list in
+ * src/renderer/lens.ts; fx-kinds.test.ts checks the two match.
+ */
+export const LENS_SPECS: Record<LensMode, LensModeSpec> = {
+  magnify: {
+    label: 'Magnify',
+    hint: 'Enlarges what is under the lens around its centre.',
+    defaults: { magnify: 2 },
+    fields: [num('magnify', 'Zoom', 1, 6, 0.1)],
+  },
+  pixelate: {
+    label: 'Pixelate',
+    hint: 'Turns what is under the lens into coarse blocks.',
+    defaults: { block: 24 },
+    fields: [num('block', 'Block size', 2, 120)],
+  },
+  dither: {
+    label: 'Dither',
+    hint: 'Ordered (Bayer) dither: a few levels per channel, or two colours when Ink is set.',
+    defaults: { ditherLevels: 3 },
+    fields: [num('ditherLevels', 'Levels', 2, 8), color('ink', 'Ink'), color('paper', 'Paper')],
+  },
+  ascii: {
+    label: 'ASCII',
+    hint: 'Cells of density glyphs picked by brightness, in the source colours or Ink on Paper.',
+    defaults: { cell: 12 },
+    fields: [num('cell', 'Cell size', 4, 60), color('ink', 'Ink'), color('paper', 'Paper')],
+  },
+};
+
+export const LENS_MODES = Object.keys(LENS_SPECS) as LensMode[];
