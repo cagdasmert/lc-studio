@@ -1,7 +1,7 @@
 import type { Composition, Scene } from '../types';
 import type { MediaCache } from './media-cache';
 import type { PreparedVideoFrames } from './draw-video';
-import { drawScene, drawSceneBackground } from './draw';
+import { drawScene } from './draw';
 import { drawTransition } from './transitions';
 import { applyShake, applyScenePostFx, hasShake } from './scene-fx';
 
@@ -76,8 +76,7 @@ export function drawCompositionFrame(
   if (shake) applyShake(ctx, shake, frameInScene, fps, width, height);
 
   if (transition) {
-    drawSceneBackground(ctx, transition.incoming, width, height, mediaCache);
-
+    // Draws both scenes, backgrounds included.
     drawTransition(
       ctx, scene, transition.incoming, frameInScene, transition.progress,
       scene.transition, width, height, mediaCache, fps, videoFrames,
