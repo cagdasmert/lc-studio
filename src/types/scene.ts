@@ -268,7 +268,21 @@ export interface GooeyFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx;
+/** The layer assembles from (or blows away into) grains of its own pixels. */
+export interface DisintegrateFx {
+  type: 'disintegrate';
+  grain: number;      // px per grain, 1–8
+  scatter: number;    // px a grain is away from home at env 0
+  angle: number;      // degrees, direction of the dust cloud (the wind)
+  spread: number;     // 0–1, how far each grain's direction varies around `angle`
+  gravity: number;    // px of extra downward offset at env 0; negative lifts
+  sweep: number;      // degrees, direction the release sweeps across the layer
+  stagger: number;    // 0 = all grains move together, up to 0.95 = a strict sweep
+  fade: number;       // 0–1, grain alpha lost at full scatter (1 = invisible at env 0)
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx | DisintegrateFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

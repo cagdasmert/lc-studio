@@ -36,6 +36,7 @@ export type {
   GlitchFx,
   OutlineFx,
   GooeyFx,
+  DisintegrateFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,

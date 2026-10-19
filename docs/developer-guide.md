@@ -78,6 +78,7 @@ src/                              # React frontend
     motion-path.ts                # Motion paths: easing, per-segment / constant-speed timing
     effects.ts                    # CSS filter string builder
     layer-fx.ts                   # Layer FX: reveal phase + decoration compositing
+    fx-disintegrate.ts            # Disintegrate reveal, written straight into a pixel buffer
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
@@ -275,6 +276,10 @@ The inspector is schema-driven, so no UI code is needed — an entry in
    - **Reveal** (geometry driven by the envelope): write an
      `applyX(src, fx, env): HTMLCanvasElement` and add a case to
      `applyReveals`. Reveals rewrite the bitmap and chain in list order.
+     A reveal that works per pixel or per grain, like disintegrate, lives in
+     its own module (`fx-disintegrate.ts`): read the bitmap once with
+     `getImageData`, write into an `ImageData` through a `Uint32Array` view, and
+     `putImageData` once. Never one `fillRect` per grain.
 4. Register the type: add it to `BITMAP_FX` if it needs the layer bitmap, and to
    `REVEAL_FX` if it is a reveal. `fx-kinds.test.ts` enforces that `REVEAL_FX`
    matches the `kind: 'reveal'` specs and that every type is accounted for.
@@ -331,6 +336,7 @@ node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and prev
 node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
 node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundary
 node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pixel for pixel
+node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real exports, and its cost per frame
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.

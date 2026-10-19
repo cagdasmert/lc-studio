@@ -36,6 +36,7 @@ read that value differently:
 | Pixelate reveal | Content resolves out of coarse blocks, with optional per-block flicker |
 | Slice reveal | The layer arrives in strips; alternate bands slide in from opposite sides |
 | Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors |
+| Disintegrate | The layer assembles from grains of its own pixels drifting in on a wind, released in a sweep across it; on exit it blows away into dust. Works on text, shapes, logos and images alike |
 
 **Continuous FX** are always on, and the envelope only *dims* them — so you can
 also fade one in over the first half-second and hold it.
@@ -53,6 +54,19 @@ also fade one in over the first half-second and hold it.
 
 Reveals are composited before continuous FX, so a glow blooms off what is
 actually visible rather than off the finished layer.
+
+Disintegrate (`src/renderer/fx-disintegrate.ts`) cuts the layer bitmap into
+`grain`-px cells. Each cell is released at a point along `sweep` set by
+`stagger`; until it lands it sits up to `scatter` px away along `angle` (varied
+by `spread`), plus `gravity` × d² px downwards, at `1 − fade × d` alpha, where d
+is how far the cell is from landing. Grains are written straight into a pixel
+buffer, and the sweep is measured across the visible content, not the padded
+bitmap. The layer is padded by `scatter + |gravity|`. With the default
+`fade: 1`, grains far from home are nearly invisible, so the cloud reads as
+dust settling rather than a long drift; lower `fade` to see grains travel.
+On an exit the release runs in reverse sweep order, so the last part to land is
+the first to blow away. A 1080×1920 export with a 1000×240 title disintegrating
+costs about 5 ms per frame in WKWebView (21 vs 16 ms).
 
 ### Scene FX
 

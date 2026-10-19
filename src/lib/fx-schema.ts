@@ -165,6 +165,26 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('softness', 'Softness', 0, 300, 5),
     ],
   },
+  disintegrate: {
+    label: 'Disintegrate',
+    hint: 'The layer assembles from drifting grains of dust, or blows away into them on exit.',
+    kind: 'reveal',
+    defaults: {
+      type: 'disintegrate', grain: 2, scatter: 180, angle: -30, spread: 0.35, gravity: -40,
+      sweep: 0, stagger: 0.6, fade: 1,
+      window: { inDelay: 0, inFrames: 24, outFrames: 0, easing: 'ease-out-cubic' },
+    },
+    fields: [
+      num('grain', 'Grain', 1, 8),
+      num('scatter', 'Scatter', 0, 600, 5),
+      num('angle', 'Wind angle', -180, 180, 5),
+      num('spread', 'Spread', 0, 1, 0.05),
+      num('gravity', 'Gravity', -300, 300, 5),
+      num('sweep', 'Sweep angle', -180, 180, 5),
+      num('stagger', 'Stagger', 0, 0.95, 0.05),
+      num('fade', 'Fade', 0, 1, 0.05),
+    ],
+  },
   glitch: {
     label: 'Glitch blocks',
     hint: 'Horizontal strips tear sideways on random frames, with rgb fringing.',
