@@ -239,6 +239,9 @@ export interface WipeFx {
   shape: 'linear' | 'iris' | 'barn';
   angle: number;     // degrees; applies to linear and barn
   softness: number;  // px of gradient ramp; 0 = hard edge
+  edgeGlow?: number;   // px width of a glow along the front; absent or 0 = off
+  edgeColor?: string;  // glow and spark colour
+  sparks?: number;     // 0–1 density of sparks drifting off the front; absent or 0 = off
   window?: FxWindow;
 }
 
@@ -282,7 +285,22 @@ export interface DisintegrateFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx | DisintegrateFx;
+/** Cells of cipher glyphs that scramble, then resolve into the layer. */
+export interface DecryptFx {
+  type: 'decrypt';
+  cell: number;           // px cell size, 6–40
+  charset: 'cipher' | 'ramp' | 'binary';
+  color: string;          // glyph ink
+  tint: number;           // 0 = glyph takes the cell's own colour, 1 = `color`
+  scrambleFrames: number; // frames between glyph changes, 1–12
+  order: 'random' | 'sweep' | 'center-out';
+  angle: number;          // degrees, for 'sweep'
+  stagger: number;        // 0–0.95
+  edgeGlow: number;       // 0–1, brightness surge on cells about to resolve
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx | DisintegrateFx | DecryptFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────

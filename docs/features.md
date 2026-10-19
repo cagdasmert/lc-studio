@@ -35,7 +35,8 @@ read that value differently:
 | Zoom reveal | Punches in from a smaller scale, or recedes from a larger one |
 | Pixelate reveal | Content resolves out of coarse blocks, with optional per-block flicker |
 | Slice reveal | The layer arrives in strips; alternate bands slide in from opposite sides |
-| Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors |
+| Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors — optionally with a glowing front and sparks |
+| Decrypt | Cells of cipher glyphs flicker over the layer's shape, then snap into its real pixels — at random, in a sweep, or from the centre out |
 | Disintegrate | The layer assembles from grains of its own pixels drifting in on a wind, released in a sweep across it; on exit it blows away into dust. Works on text, shapes, logos and images alike |
 
 **Continuous FX** are always on, and the envelope only *dims* them — so you can
@@ -67,6 +68,37 @@ dust settling rather than a long drift; lower `fade` to see grains travel.
 On an exit the release runs in reverse sweep order, so the last part to land is
 the first to blow away. A 1080×1920 export with a 1000×240 title disintegrating
 costs about 5 ms per frame in WKWebView (21 vs 16 ms).
+
+Decrypt (`src/renderer/fx-decrypt.ts`) splits the layer bitmap into `cell`-px
+cells. A cell with mean alpha of at least 0.15 shows a glyph while it is
+resolving: a cipher glyph that changes every `scrambleFrames` frames, a
+binary digit, or (charset `ramp`) a density glyph picked by the cell's
+brightness, which does not scramble. The glyph is coloured from the cell's mean
+colour mixed towards `color` by `tint`, and brightens by `edgeGlow` just before
+the cell resolves into its real pixels. Glyphs stay inside the layer's shape
+(transparent pixels stay transparent), so decrypt needs no padding. The glyphs
+are 5×5 bitmaps from `src/renderer/glyphs.ts`, not font characters, so every
+webview draws the same pixels.
+
+Decrypt is not text `charAnimation: 'scramble'`: scramble swaps each character
+of a text layer for other characters of its own font, one character at a time.
+Decrypt works on the finished pixels of any layer type (text, shapes, images,
+video) in a grid of cells, with bitmap glyphs, and is driven by the FX timing
+window like any reveal.
+
+The wipe reveal's front can glow and throw sparks. `edgeGlow` (px) draws a band
+of `edgeColor` with its bright core on the front, falling off over that width on
+the revealed side, added with 'lighter' and only on revealed pixels; it follows
+linear, barn (two fronts) and iris (a ring) wipes. `sparks` (0–1, up to 80)
+adds 1–3 px dots, each spawned at a hashed frame of the entrance on the front
+where it was at that frame, wherever the layer has content, drifting along the
+wipe at 0.3–1.3× the front's speed for 6–14 frames, clipped to the layer box.
+Both are off when absent or 0, so older wipes render as before. At 1080 wide,
+sparks read as a fine sparkle rather than a shower.
+
+Any bitmap FX draws the layer through its own canvas, clipped to the layer box,
+so text that overflows its box (more lines than the box is tall) is cut off at
+the box edge, which a plain text layer is not.
 
 ### Scene FX
 

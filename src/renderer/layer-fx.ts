@@ -5,6 +5,8 @@ import { hash, signedHash } from './noise';
 import { envelope } from './fx-envelope';
 import { bandOrderPosition, bandProgress } from './fx-geometry';
 import { applyDisintegrate } from './fx-disintegrate';
+import { applyDecrypt } from './fx-decrypt';
+import { drawWipeGlow, drawWipeSparks } from './fx-wipe-edge';
 
 /**
  * Layer FX are composited from the layer's own rendered pixels: draw the layer
@@ -24,13 +26,13 @@ import { applyDisintegrate } from './fx-disintegrate';
  *  the bitmap it hands the box shadow, so a reveal missing from this list
  *  would reveal the shadow while the layer itself direct-draws unrevealed.
  *  fx-kinds.test.ts asserts the containment. */
-export const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch', 'outline', 'gooey', 'disintegrate'];
+export const BITMAP_FX: LayerFxType[] = ['rgb-split', 'shine', 'glow', 'long-shadow', 'pixelate', 'slice', 'wipe', 'glitch', 'outline', 'gooey', 'disintegrate', 'decrypt'];
 
 /** FX whose geometry is driven by the envelope rather than merely dimmed by
  *  it. These read `env` unclamped so back/elastic easings can overshoot.
  *  Mirrors `kind: 'reveal'` in fx-schema.ts — the renderer must not import
  *  that module, so the knowledge is duplicated and a test keeps them in sync. */
-export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate', 'slice', 'wipe', 'disintegrate'];
+export const REVEAL_FX: LayerFxType[] = ['zoom', 'pixelate', 'slice', 'wipe', 'disintegrate', 'decrypt'];
 
 export function getFx<T extends LayerFxDef['type']>(
   fx: LayerFxDef[] | undefined,
@@ -431,9 +433,21 @@ function applyWipe(
   src: HTMLCanvasElement,
   fx: WipeFx,
   env: number,
+  frameInLayer: number,
+  layerDuration: number,
+  pad: number,
 ): HTMLCanvasElement {
   const t = Math.max(0, Math.min(1, env));
-  if (t >= 1) return src;
+  const sparks = (fx.sparks ?? 0) > 0;
+  const envAt = (frame: number) => fxEnv(fx, frame, layerDuration);
+  if (t >= 1) {
+    // Sparks spawned late in the entrance outlive it.
+    if (!sparks) return src;
+    const copy = createCanvas(src.width, src.height);
+    copy.getContext('2d')?.drawImage(src, 0, 0);
+    drawWipeSparks(copy, src, fx, frameInLayer, envAt, pad);
+    return copy;
+  }
 
   const w = src.width;
   const h = src.height;
@@ -505,6 +519,10 @@ function applyWipe(
 
   octx.globalCompositeOperation = 'destination-in';
   octx.drawImage(mask, 0, 0);
+  octx.globalCompositeOperation = 'source-over';
+
+  drawWipeGlow(out, fx, t);
+  if (sparks) drawWipeSparks(out, src, fx, frameInLayer, envAt, pad);
   return out;
 }
 
@@ -518,6 +536,8 @@ export function applyReveals(
   fx: LayerFxDef[] | undefined,
   frameInLayer: number,
   layerDuration: number,
+  /** The bitmap's padding around the layer box (fxPadding). */
+  pad = 0,
 ): RevealResult {
   let current = bitmap;
   let alpha = 1;
@@ -536,10 +556,13 @@ export function applyReveals(
         current = applySlice(current, f, env);
         break;
       case 'wipe':
-        current = applyWipe(current, f, env);
+        current = applyWipe(current, f, env, frameInLayer, layerDuration, pad);
         break;
       case 'disintegrate':
         current = applyDisintegrate(current, f, env);
+        break;
+      case 'decrypt':
+        current = applyDecrypt(current, f, env, frameInLayer);
         break;
       default:
         break;

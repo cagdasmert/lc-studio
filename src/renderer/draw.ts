@@ -182,7 +182,7 @@ function drawLayerAtFrame(
   // reveal's own alpha (pixelate `fade`) dims the shadow with the layer.
   let revealed = layerCanvas;
   if (layerCanvas) {
-    const reveal = applyReveals(layerCanvas, layer.layerFx, frameInLayer, layerDuration);
+    const reveal = applyReveals(layerCanvas, layer.layerFx, frameInLayer, layerDuration, fxPad);
     revealed = reveal.bitmap;
     // Multiplied here rather than at the globalAlpha line above only because
     // the bitmap does not exist yet up there; nothing has drawn in between.

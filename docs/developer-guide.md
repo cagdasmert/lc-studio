@@ -79,6 +79,9 @@ src/                              # React frontend
     effects.ts                    # CSS filter string builder
     layer-fx.ts                   # Layer FX: reveal phase + decoration compositing
     fx-disintegrate.ts            # Disintegrate reveal, written straight into a pixel buffer
+    fx-decrypt.ts                 # Decrypt reveal: cells of bitmap glyphs resolving into the layer
+    fx-wipe-edge.ts               # The wipe reveal's glowing front and sparks
+    glyphs.ts                     # 5×5 bitmap glyph sets (RAMP, CIPHER, BINARY) and drawGlyph
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
@@ -283,6 +286,13 @@ The inspector is schema-driven, so no UI code is needed — an entry in
 4. Register the type: add it to `BITMAP_FX` if it needs the layer bitmap, and to
    `REVEAL_FX` if it is a reveal. `fx-kinds.test.ts` enforces that `REVEAL_FX`
    matches the `kind: 'reveal'` specs and that every type is accounted for.
+   An effect that draws characters uses the bitmap glyphs in `glyphs.ts`
+   (`drawGlyph` into a `Uint32Array` view), never `fillText`: fonts differ
+   between webviews. `applyReveals` gets the bitmap's padding as `pad`, for
+   anything that must stay inside the layer box, such as wipe sparks.
+   New optional fields on an existing effect must be off when absent, so old
+   projects render as before; the inspector shows a missing field at its spec
+   default.
 5. If the effect reaches outside the layer box, add a `fxPadding` case.
    Decorations contribute to the decoration max; reveals that displace content
    contribute to the displacement term, which is added on top. **Never derive
@@ -337,6 +347,7 @@ node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
 node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundary
 node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pixel for pixel
 node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real exports, and its cost per frame
+node scripts/e2e/fx2-decrypt-wipe.mjs  # FX pack P2: decrypt and the wipe edge in real exports
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.

@@ -599,6 +599,11 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
  * scene FX are arrays of discriminated unions with a `type` tag, so the same
  * component drives both — new effects only need an entry in fx-schema.ts.
  */
+/** A field's value, or the spec default when an older project lacks the (optional) field. */
+function fieldValue(item: object, defaults: object, key: string): unknown {
+  return (item as Record<string, unknown>)[key] ?? (defaults as Record<string, unknown>)[key];
+}
+
 function FxListEditor<T extends { type: string }>({
   title, items, specs, typeList, onChange, showEnvelope = false,
 }: {
@@ -662,7 +667,7 @@ function FxListEditor<T extends { type: string }>({
                   <span>{field.label}</span>
                   <input
                     type="color"
-                    value={String((item as Record<string, unknown>)[field.key] ?? '#ffffff')}
+                    value={String(fieldValue(item, spec.defaults, field.key) ?? '#ffffff')}
                     onChange={(e) => patch(i, field.key, e.target.value)}
                   />
                 </label>
@@ -670,7 +675,7 @@ function FxListEditor<T extends { type: string }>({
                 <label key={field.key} className="prop-field">
                   <span>{field.label}</span>
                   <select
-                    value={String((item as Record<string, unknown>)[field.key] ?? '')}
+                    value={String(fieldValue(item, spec.defaults, field.key) ?? '')}
                     onChange={(e) => patch(i, field.key, e.target.value)}
                   >
                     {(field.options ?? []).map((o) => (
@@ -686,11 +691,11 @@ function FxListEditor<T extends { type: string }>({
                     min={field.min}
                     max={field.max}
                     step={field.step}
-                    value={Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                    value={Number(fieldValue(item, spec.defaults, field.key) ?? 0)}
                     onChange={(e) => patch(i, field.key, Number(e.target.value))}
                   />
                   <span className="fx-value">
-                    {Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                    {Number(fieldValue(item, spec.defaults, field.key) ?? 0)}
                   </span>
                 </label>
               )

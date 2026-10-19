@@ -52,6 +52,7 @@ describe('parseGenerationResponse: FX and transitions (A0.4)', () => {
   it('clamps numbers and drops a bad select value, keeping a valid window', () => {
     expect(fx[0]).toEqual({
       type: 'wipe', shape: 'linear', angle: 360, softness: 20,
+      edgeGlow: 0, edgeColor: '#ff6a3d', sparks: 0,
       window: { inDelay: 3, inFrames: 18, outFrames: 6, easing: 'ease-out-back' },
     });
   });

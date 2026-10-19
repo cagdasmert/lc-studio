@@ -154,7 +154,11 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
     label: 'Wipe reveal',
     hint: 'A soft edge sweeps across. Linear, iris, or barn doors.',
     kind: 'reveal',
-    defaults: { type: 'wipe', shape: 'linear', angle: 0, softness: 40, window: { ...DEFAULT_FX_WINDOW } },
+    defaults: {
+      type: 'wipe', shape: 'linear', angle: 0, softness: 40,
+      edgeGlow: 0, edgeColor: '#ff6a3d', sparks: 0,
+      window: { ...DEFAULT_FX_WINDOW },
+    },
     fields: [
       select('shape', 'Shape', [
         { value: 'linear', label: 'Linear' },
@@ -163,6 +167,9 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       ]),
       num('angle', 'Angle', 0, 360, 5),
       num('softness', 'Softness', 0, 300, 5),
+      num('edgeGlow', 'Edge glow', 0, 120),
+      color('edgeColor', 'Edge colour'),
+      num('sparks', 'Sparks', 0, 1, 0.05),
     ],
   },
   disintegrate: {
@@ -183,6 +190,35 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       num('sweep', 'Sweep angle', -180, 180, 5),
       num('stagger', 'Stagger', 0, 0.95, 0.05),
       num('fade', 'Fade', 0, 1, 0.05),
+    ],
+  },
+  decrypt: {
+    label: 'Decrypt',
+    hint: 'Cells of cipher glyphs flicker over the layer, then resolve into it.',
+    kind: 'reveal',
+    defaults: {
+      type: 'decrypt', cell: 14, charset: 'cipher', color: '#7CFFB2', tint: 0.6, scrambleFrames: 2,
+      order: 'random', angle: 0, stagger: 0.7, edgeGlow: 0.6,
+      window: { inDelay: 0, inFrames: 30, outFrames: 0, easing: 'ease-out-cubic' },
+    },
+    fields: [
+      num('cell', 'Cell size', 6, 40),
+      select('charset', 'Glyphs', [
+        { value: 'cipher', label: 'Cipher' },
+        { value: 'ramp', label: 'Density ramp' },
+        { value: 'binary', label: 'Binary' },
+      ]),
+      color('color', 'Glyph colour'),
+      num('tint', 'Tint', 0, 1, 0.05),
+      num('scrambleFrames', 'Scramble every', 1, 12),
+      select('order', 'Order', [
+        { value: 'random', label: 'Random' },
+        { value: 'sweep', label: 'Sweep' },
+        { value: 'center-out', label: 'Centre out' },
+      ]),
+      num('angle', 'Sweep angle', 0, 360, 5),
+      num('stagger', 'Stagger', 0, 0.95, 0.05),
+      num('edgeGlow', 'Resolve glow', 0, 1, 0.05),
     ],
   },
   glitch: {

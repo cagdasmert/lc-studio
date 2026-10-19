@@ -37,6 +37,7 @@ export type {
   OutlineFx,
   GooeyFx,
   DisintegrateFx,
+  DecryptFx,
   LayerFxDef,
   LayerFxType,
   GrainFx,
