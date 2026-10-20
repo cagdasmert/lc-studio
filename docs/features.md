@@ -11,6 +11,7 @@ Local Content Studio is a cross-platform desktop application for creating, previ
 - **Image layers** — Local image files (PNG, JPG, GIF, WebP, BMP, SVG) with fit modes: cover, contain, fill, none. Supports border radius, tint, and morphing into a second image (see Image Morph).
 - **Video layers** — Video file references with playback rate, start/end time, and mute controls.
 - **Audio layers** — Audio file references with volume, start/end time, fade in/out.
+- **Lens layers** — A circle, rectangle or rounded rectangle that changes whatever is drawn *under* it: magnify, pixelate, dither or ASCII (see Lens Layers). It moves on keyframes or a motion path like any layer.
 
 Each layer has:
 - Position (x, y), size (width, height), and anchor point
@@ -35,7 +36,9 @@ read that value differently:
 | Zoom reveal | Punches in from a smaller scale, or recedes from a larger one |
 | Pixelate reveal | Content resolves out of coarse blocks, with optional per-block flicker |
 | Slice reveal | The layer arrives in strips; alternate bands slide in from opposite sides |
-| Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors |
+| Wipe reveal | A soft edge sweeps across — linear, iris, or barn doors — optionally with a glowing front and sparks |
+| Decrypt | Cells of cipher glyphs flicker over the layer's shape, then snap into its real pixels — at random, in a sweep, or from the centre out |
+| Disintegrate | The layer assembles from grains of its own pixels drifting in on a wind, released in a sweep across it; on exit it blows away into dust. Works on text, shapes, logos and images alike |
 
 **Continuous FX** are always on, and the envelope only *dims* them — so you can
 also fade one in over the first half-second and hold it.
@@ -54,11 +57,101 @@ also fade one in over the first half-second and hold it.
 Reveals are composited before continuous FX, so a glow blooms off what is
 actually visible rather than off the finished layer.
 
+Disintegrate (`src/renderer/fx-disintegrate.ts`) cuts the layer bitmap into
+`grain`-px cells. Each cell is released at a point along `sweep` set by
+`stagger`; until it lands it sits up to `scatter` px away along `angle` (varied
+by `spread`), plus `gravity` × d² px downwards, at `1 − fade × d` alpha, where d
+is how far the cell is from landing. Grains are written straight into a pixel
+buffer, and the sweep is measured across the visible content, not the padded
+bitmap. The layer is padded by `scatter + |gravity|`. With the default
+`fade: 1`, grains far from home are nearly invisible, so the cloud reads as
+dust settling rather than a long drift; lower `fade` to see grains travel.
+On an exit the release runs in reverse sweep order, so the last part to land is
+the first to blow away. A 1080×1920 export with a 1000×240 title disintegrating
+costs about 5 ms per frame in WKWebView (21 vs 16 ms).
+
+Decrypt (`src/renderer/fx-decrypt.ts`) splits the layer bitmap into `cell`-px
+cells. A cell with mean alpha of at least 0.15 shows a glyph while it is
+resolving: a cipher glyph that changes every `scrambleFrames` frames, a
+binary digit, or (charset `ramp`) a density glyph picked by the cell's
+brightness, which does not scramble. The glyph is coloured from the cell's mean
+colour mixed towards `color` by `tint`, and brightens by `edgeGlow` just before
+the cell resolves into its real pixels. Glyphs stay inside the layer's shape
+(transparent pixels stay transparent), so decrypt needs no padding. The glyphs
+are 5×5 bitmaps from `src/renderer/glyphs.ts`, not font characters, so every
+webview draws the same pixels.
+
+Decrypt is not text `charAnimation: 'scramble'`: scramble swaps each character
+of a text layer for other characters of its own font, one character at a time.
+Decrypt works on the finished pixels of any layer type (text, shapes, images,
+video) in a grid of cells, with bitmap glyphs, and is driven by the FX timing
+window like any reveal.
+
+The wipe reveal's front can glow and throw sparks. `edgeGlow` (px) draws a band
+of `edgeColor` with its bright core on the front, falling off over that width on
+the revealed side, added with 'lighter' and only on revealed pixels; it follows
+linear, barn (two fronts) and iris (a ring) wipes. `sparks` (0–1, up to 80)
+adds 1–3 px dots, each spawned at a hashed frame of the entrance on the front
+where it was at that frame, wherever the layer has content, drifting along the
+wipe at 0.3–1.3× the front's speed for 6–14 frames, clipped to the layer box.
+Both are off when absent or 0, so older wipes render as before. At 1080 wide,
+sparks read as a fine sparkle rather than a shower.
+
+Any bitmap FX draws the layer through its own canvas, clipped to the layer box,
+so text that overflows its box (more lines than the box is tall) is cut off at
+the box edge, which a plain text layer is not.
+
+### Lens Layers
+
+A lens layer changes the layers below it in z-order, inside its shape;
+layers above it are untouched. Typical shots: a magnifier sweeping over a
+product, or an ASCII circle passing over a logo.
+
+| Mode | What it does |
+| --- | --- |
+| Magnify | Enlarges what is under the lens around its centre, by `1 + (magnify − 1) × intensity` |
+| Pixelate | Coarse blocks of `block × intensity` px |
+| Dither | Ordered 4×4 Bayer dither with `ditherLevels` levels per channel, or two colours (`ink` on `paper`) when `ink` is set |
+| ASCII | `cell`-px cells of density glyphs picked by brightness, in the source colours (or `ink`) on the source darkened to 25% (or `paper`) |
+| Glass (`refract`, WebGL2) | A glass dome: each pixel is sampled along the dome's normal, towards the centre, by `strength × intensity × ρ / R` px (ρ the distance from the centre, R the radius), so the middle magnifies; `dispersion` splits red and blue, `highlight` adds a specular spot |
+| Ripple (`ripple`, WebGL2) | Rings spreading from `impulses` (a layer frame and an x, y in the lens box) at `speed` px per frame, fading with `decay`; each ring's height is a sine of `wavelength` within two wavelengths behind its front, and pixels move by its slope × `refraction`. `ambientEvery` adds impulses at hashed positions. At most the 16 newest live impulses draw |
+
+Every lens has a `feather` (soft edge, px), an `intensity` (0–1, keyframable;
+0 = no effect, and dither and ASCII mix with the original by it) and an
+optional `ring` outline. Lenses ignore effects, layer FX, box shadow, blend
+mode and clip path, and never echo. The dither pattern is keyed on frame
+pixels, so it doesn't crawl as the lens moves; the ASCII grid is centred on the
+lens, so its cells move with it.
+
+Without WebGL2, Glass and Ripple lenses show the picture unchanged, and the
+Render panel names them. A scene with a visible lens is drawn into a scene surface, so the lens can read
+back what is under it (`src/renderer/lens.ts`). In the preview that scene is
+rendered at output resolution and then scaled, so it is slightly soft above
+100% zoom; the export is unaffected. Four 420-px lenses at 1080×1920 export at
+about 23 ms per frame in WKWebView.
+
+The AI generator can place lens layers too: the prompt describes them and
+their modes from `LENS_SPECS`, and the parser validates their fields.
+
 ### Scene FX
 
 Full-frame treatments applied after the scene is composited: **film grain**,
-**vignette**, **scanlines** (with optional vertical roll), and **camera shake**
-(with optional decay). Scene FX have no timing envelope.
+**vignette**, **scanlines** (with optional vertical roll), **camera shake**
+(with optional decay), and **VHS**. Scene FX have no timing envelope.
+
+**VHS** (`src/renderer/scene-vhs.ts`) is worn tape playback: a slow horizontal
+`wave`, per-line `jitter` (2-px strips), chroma `bleed` (red shifted left, blue
+right), a head-switching band at the bottom (`switching`, `switchingHeight`:
+the picture dragged sideways plus noise speckle), a 6–14 px `crease` band that
+travels down the frame and wraps, and `saturation`. It is applied to the
+scene's own surface, so it shakes with the picture under camera shake, grain,
+scanlines and vignette stay on top of it, and in a transition each scene keeps
+its own look. With every amount at 0 and saturation at 1 it changes nothing,
+and the scene isn't routed through a surface for it. `barrel` (tube curvature)
+is a WebGL2 pass after the rest (`scene-vhs-gl.ts`): the picture bulges like a
+CRT face, black outside the tube; without WebGL2 it is skipped. VHS costs about
+15 ms per frame at 1080×1920 in WKWebView (34 vs 19 ms). In the preview a VHS
+scene, like a lens scene, is rendered at output resolution and then scaled.
 
 All FX are frame-deterministic — the stochastic ones derive every random value
 from a hash of the frame number, so preview and final render produce identical
@@ -101,6 +194,13 @@ These properties can be animated with keyframes:
 - **Hold behavior:** Values hold at the first keyframe before the track starts and at the last keyframe after it ends
 - **Per-keyframe easing:** Each keyframe specifies its own easing curve
 
+### Motion Paths
+
+A layer can follow a path of points (lines, or cubic curves where a point has a control point) instead of its x/y keyframes, optionally rotating to follow the path and looping.
+
+- **Easing** — any easing from the table below shapes progress along the path. Overshooting easings (back, elastic, spring) carry the layer past the ends, along the path's direction there.
+- **Timing** — *per segment* gives every segment the same share of time, so the layer is slow on short segments and fast on long ones; *constant speed* (the default for new paths) moves at one speed over the whole length.
+
 ### 28+ Easing Functions
 
 | Category | Available |
@@ -117,22 +217,32 @@ These properties can be animated with keyframes:
 
 ### Scene Transitions
 
-12 transition types between scenes:
+21 transition types between scenes. Twelve are drawn with Canvas 2D:
 - **none** / **cut** — Instant switch
-- **fade** — Crossfade with opacity
+- **fade** — Crossfade: the incoming scene fades in over the outgoing one
 - **slide** — Slide left, right, up, down
 - **wipe** — Horizontal and vertical wipes
 - **zoom** — Zoom in, zoom out
-- **dissolve** — Pixel-level dissolve
+- **dissolve** — The incoming scene replaces the outgoing one block by block, in a scattered order (8 px blocks at 1080 wide, never under 4 px)
 
-Each transition has a configurable duration in frames.
+Nine are WebGL2 shaders (marked GPU in the inspector), drawn from the same two scene surfaces:
+
+- **cube**, **doorway**, **grid-flip**, **water-drop**, **crosswarp**, **glitch-displace**, **film-burn** and **page-curl** — shaders from [gl-transitions](https://github.com/gl-transitions/gl-transitions) at `e1e4bde` (`page-curl` is its `InvertedPageCurl`), copied into `src/renderer/gl/transitions/` with their licences (see `THIRD_PARTY_NOTICES.md`). Their float parameters (perspective, reflection, ripples, …) appear in the inspector under the transition and are saved in `Scene.transitionParams`; absent, each takes its shader's default
+- **ascii-sweep** — lc-studio's own: a soft band sweeps left to right, outgoing ahead of it and incoming behind, with cells of density glyphs (the same 5×5 bitmaps as decrypt) and a bright surge at its centre. Cell size, band width and surge are its parameters
+
+Without WebGL2 a GPU transition renders as a fade, and the Render panel says which scenes it affects. Page-curl starts slightly earlier than gl-transitions' own progress 0, at which its corner is already curled onto the page, so its first frame is the outgoing scene. The shaders' own `sin()`-based noise (film-burn, glitch-displace, grid-flip) repeats exactly on one machine but may differ in the last bits between GPUs. A GL transition frame costs about 5 ms more than a fade at 1080×1920 in WKWebView, nearly all of it uploading the outgoing scene to the GPU; the incoming scene is frozen, so its texture is uploaded once per transition. A 15-second, five-scene export with four GL transitions took 1.28× as long as the same with fades.
+
+Each transition has a configurable duration in frames. The outgoing scene plays on, and the incoming scene is shown frozen at its frame 0.
+
+Fade, slide, wipe and dissolve draw each scene whole, background included, into its own composition-sized surface (`src/renderer/scene-surface.ts`) and composite the two. Before the FX pack, these transitions dropped the outgoing scene's background from the first transition frame (a wipe showed the incoming background on the not-yet-wiped side, too), dissolve was the same crossfade as fade, and a fade dimmed the layers of both scenes where they overlapped. Projects whose transitions run between scenes with different backgrounds, or whose fading layers overlap, look different now. Zoom already drew both backgrounds and is unchanged.
+
+The list of transitions, with their labels, lives in `src/lib/transition-options.ts`.
 
 ### Audio System
 
-- **Web Audio API** playback synchronized to the canvas frame loop
-- Per-audio-layer volume control with fade in/out
-- Automatic seek/sync when scrubbing the timeline
-- FFmpeg audio mixing during render: per-track volume, multi-track amix filter, AAC encoding at 192kbps
+- **Preview playback** — Web Audio plays audio layers and unmuted video layers' sound in sync with the canvas: started with playback, restarted when it loops, stopped on pause. `AudioEngine` (`src/renderer/audio.ts`) takes its timing from `collectAudibleLayers()`, the helper the export uses, so preview places, trims and fades every sound where the render does. Sped-up video sound is higher-pitched in preview; the export keeps its pitch.
+- Per-audio-layer volume with fade in/out, in preview and export alike
+- **Export audio** — MP4, WebM and MOV exports contain every visible audio layer and the sound of every unmuted video layer whose file has an audio stream. Each is placed at its time on the timeline, trimmed by `startTime`/`endTime` and cut at its scene's end, sped up or slowed down by a video layer's `playbackRate` (pitch preserved), and given its volume and fades. `buildAudioTracks()` (`src/lib/audio-tracks.ts`) computes the timing; `build_audio_filter()` (`src-tauri/src/render/ffmpeg.rs`) turns it into one filter graph: `atempo`, `volume`, `afade` and `adelay` per track, then `amix` without normalisation, a limiter, and `apad`/`atrim` to exactly the video's length, so the video sets the output length. GIF and PNG sequences stay silent.
 
 ### Render Pipeline
 
@@ -142,7 +252,7 @@ Custom Canvas + FFmpeg pipeline:
 3. Pixels sent to the Rust backend via Tauri IPC
 4. Rust pipes pixels to FFmpeg's stdin as `rawvideo`
 5. FFmpeg encodes to H.264 (libx264) in MP4 container with `yuv420p`, CRF 23, `faststart`
-6. Audio tracks are mixed in if present
+6. Audio tracks are placed, faded and mixed in by one FFmpeg filter graph; FFmpeg's own error output is shown if it fails
 
 **Deterministic output** — same composition + assets = same render every time.
 
@@ -199,6 +309,7 @@ AI-assisted content generation with 3 provider backends and 4 generation modes. 
 
 **Key implementation details:**
 - Structured JSON output -- the LLM is prompted to return raw JSON arrays/objects matching the scene and layer schemas
+- FX and transitions -- the system prompt lists every layer FX and scene FX (generated from `fx-schema.ts`: type, hint, kind, and each field's range or options), explains reveal windows, and lists every transition. The parser keeps a generated `layerFx` or `sceneFx` entry only if its type is known; each field is taken only if valid (finite numbers clamped to the field's range, select values from its options, hex colours), otherwise the effect's default is used, and an invalid `window` falls back to the default one. An unknown `transition` becomes `fade`
 - Brand-kit-aware prompts -- when a brand kit is active, its colors, fonts, and naming are injected into the system prompt so generated content stays on-brand
 - CORS-free local requests via the Tauri HTTP plugin (`http.ts` wraps `@tauri-apps/plugin-http`), falling back to browser fetch outside Tauri
 - Store state tracked in AISlice: provider config, availability check, generation mode, loading flag, last error
@@ -297,7 +408,10 @@ Global keyboard shortcuts registered via the `useKeyboardShortcuts` hook (`useKe
 
 ### Video Layer Rendering
 
-Canvas-based video frame rendering with a caching layer.
+Video layers are decoded frame by frame with WebCodecs through [mediabunny](https://github.com/Vanilagy/mediabunny).
 
-- **draw-video.ts** -- draws a single video layer's current frame onto the canvas. Calculates source time from layer frame position, playback rate, and start time offset. Uses cover-mode scaling to fit the video into the layer's dimensions.
-- **video-cache.ts** -- `VideoCache` class that manages `HTMLVideoElement` instances. One element per unique source URL, with deduplication of concurrent loads. Provides `seekTo()` for frame-accurate positioning (waits for the `seeked` event), `preloadScene()` to warm the cache for all video layers in a scene, and `clear()` to release all resources.
+- **video-time.ts** — `sourceTimeFor()` maps a layer frame to a source time (`startTime + frame / fps × playbackRate`, holding the last frame before `endTime`); `collectVideoDraws()` lists the frames a composition frame needs, including the incoming scene's during a transition.
+- **video-frames.ts** — `VideoFrameCache`, adapted from OpenCut Classic (MIT): one decoder per layer, decoding forward for short jumps and seeking for long ones, prefetching a frame ahead. `prepareVideoFrames()` runs before each draw. Export awaits it, so every exported frame shows its exact source frame; preview draws with what's ready and redraws when the decode lands.
+- **draw-video.ts** — draws the prepared frame cover-fitted and clipped to the layer box.
+- Files the webview can't decode (for example ProRes) are skipped, so a poster image underneath shows through, and the Render panel warns before export.
+- **Limitation:** Echo FX on a video layer repeats the current frame; the trailing copies don't show earlier video frames.

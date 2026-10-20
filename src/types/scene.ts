@@ -87,10 +87,20 @@ export interface MotionPathPoint {
   cpY?: number;
 }
 
+/**
+ * How progress spreads over the path: 'per-segment' gives every segment the
+ * same share of time (so short segments are slow), 'constant-speed' moves at
+ * one speed over the whole length.
+ */
+export type MotionPathTiming = 'per-segment' | 'constant-speed';
+
 export interface MotionPathDef {
   points: MotionPathPoint[];
   alignToPath?: boolean;  // rotate layer to follow path tangent
   loop?: boolean;
+  easing?: EasingType;           // absent = linear
+  easingParams?: EasingParams;
+  timing?: MotionPathTiming;     // absent = per-segment
 }
 
 // ── Per-character text animation ─────────────────────
@@ -229,6 +239,9 @@ export interface WipeFx {
   shape: 'linear' | 'iris' | 'barn';
   angle: number;     // degrees; applies to linear and barn
   softness: number;  // px of gradient ramp; 0 = hard edge
+  edgeGlow?: number;   // px width of a glow along the front; absent or 0 = off
+  edgeColor?: string;  // glow and spark colour
+  sparks?: number;     // 0–1 density of sparks drifting off the front; absent or 0 = off
   window?: FxWindow;
 }
 
@@ -258,7 +271,36 @@ export interface GooeyFx {
   window?: FxWindow;
 }
 
-export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx;
+/** The layer assembles from (or blows away into) grains of its own pixels. */
+export interface DisintegrateFx {
+  type: 'disintegrate';
+  grain: number;      // px per grain, 1–8
+  scatter: number;    // px a grain is away from home at env 0
+  angle: number;      // degrees, direction of the dust cloud (the wind)
+  spread: number;     // 0–1, how far each grain's direction varies around `angle`
+  gravity: number;    // px of extra downward offset at env 0; negative lifts
+  sweep: number;      // degrees, direction the release sweeps across the layer
+  stagger: number;    // 0 = all grains move together, up to 0.95 = a strict sweep
+  fade: number;       // 0–1, grain alpha lost at full scatter (1 = invisible at env 0)
+  window?: FxWindow;
+}
+
+/** Cells of cipher glyphs that scramble, then resolve into the layer. */
+export interface DecryptFx {
+  type: 'decrypt';
+  cell: number;           // px cell size, 6–40
+  charset: 'cipher' | 'ramp' | 'binary';
+  color: string;          // glyph ink
+  tint: number;           // 0 = glyph takes the cell's own colour, 1 = `color`
+  scrambleFrames: number; // frames between glyph changes, 1–12
+  order: 'random' | 'sweep' | 'center-out';
+  angle: number;          // degrees, for 'sweep'
+  stagger: number;        // 0–0.95
+  edgeGlow: number;       // 0–1, brightness surge on cells about to resolve
+  window?: FxWindow;
+}
+
+export type LayerFxDef = EchoFx | RgbSplitFx | ShineFx | GlowFx | LongShadowFx | ZoomFx | PixelateFx | SliceFx | WipeFx | GlitchFx | OutlineFx | GooeyFx | DisintegrateFx | DecryptFx;
 export type LayerFxType = LayerFxDef['type'];
 
 // ── Scene FX ──────────────────────────────────────────
@@ -294,7 +336,20 @@ export interface ShakeFx {
   decayFrames: number;  // 0 = never settles
 }
 
-export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx;
+/** Worn tape playback. */
+export interface VhsFx {
+  type: 'vhs';
+  wave: number;            // px amplitude of the slow horizontal wave
+  jitter: number;          // px of per-line horizontal jitter
+  bleed: number;           // px red/blue horizontal offset (chroma bleed)
+  switching: number;       // 0–1 strength of the head-switching noise band
+  switchingHeight: number; // 0–0.2, band height as a fraction of the frame
+  crease: number;          // 0–1, a travelling tape-crease band
+  saturation: number;      // 0–2
+  barrel: number;          // 0–1 tube curvature; WebGL2 only, skipped without it
+}
+
+export type SceneFxDef = GrainFx | VignetteFx | ScanlinesFx | ShakeFx | VhsFx;
 export type SceneFxType = SceneFxDef['type'];
 
 export interface LayerBase {
@@ -329,7 +384,7 @@ export interface LayerBase {
 
 // ── Layer types ────────────────────────────────────────
 
-export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio' | 'svg';
+export type LayerType = 'text' | 'image' | 'shape' | 'video' | 'audio' | 'svg' | 'lens';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type VerticalAlign = 'top' | 'middle' | 'bottom';
@@ -450,13 +505,51 @@ export interface SvgLayerData extends LayerBase {
   strokeColor?: string;
 }
 
+/** What a lens does to the pixels under it. 'refract' and 'ripple' need WebGL2. */
+export type LensMode = 'magnify' | 'pixelate' | 'dither' | 'ascii' | 'refract' | 'ripple';
+
+/**
+ * A lens changes whatever is drawn *under* it (lower zIndex) inside its
+ * shape. It moves on keyframes or a motion path like any layer. Lenses ignore
+ * effects, layerFx, boxShadow, blendMode and clipPath, and never echo.
+ */
+export interface LensLayerData extends LayerBase {
+  type: 'lens';
+  shape: 'circle' | 'rect' | 'rounded-rect';
+  cornerRadius: number;
+  feather: number;          // px soft edge, 0 = hard
+  intensity: number;        // 0–1, keyframable ('intensity' track); 0 = no effect
+  ring: { color: string; width: number } | null;  // HUD outline
+  mode: LensMode;
+  magnify: number;          // 1–6, 'magnify'
+  block: number;            // px, 'pixelate'
+  ditherLevels: number;     // 2–8 per channel, 'dither'
+  ink?: string;             // 'dither'/'ascii' foreground; unset = keep the source colours
+  paper?: string;           // 'dither'/'ascii' background; unset = source darkened to 25%
+  cell: number;             // px, 'ascii'
+  // 'refract' (WebGL2): a glass dome. Absent fields take REFRACT_DEFAULTS.
+  strength?: number;        // px the sample moves along the dome's normal at the rim, × intensity
+  dispersion?: number;      // 0–1, splits the red and blue offsets
+  highlight?: number;       // 0–1, a soft specular highlight
+  // 'ripple' (WebGL2): rings from impulses. Absent fields take RIPPLE_DEFAULTS.
+  impulses?: { frame: number; x: number; y: number }[];  // layer frame; x, y 0–1 in the lens box
+  amplitude?: number;       // px of ring height, × intensity
+  wavelength?: number;      // px
+  speed?: number;           // px per frame the ring front travels
+  decay?: number;           // per frame, exponential fade with age
+  refraction?: number;      // px of displacement per unit of slope
+  life?: number;            // frames an impulse lasts
+  ambientEvery?: number;    // frames between automatic impulses at hashed positions; 0 = off
+}
+
 export type Layer =
   | TextLayerData
   | ImageLayerData
   | ShapeLayerData
   | VideoLayerData
   | AudioLayerData
-  | SvgLayerData;
+  | SvgLayerData
+  | LensLayerData;
 
 // ── Scene & Composition ────────────────────────────────
 
@@ -465,7 +558,10 @@ export type TransitionType =
   | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down'
   | 'wipe-horizontal' | 'wipe-vertical'
   | 'zoom-in' | 'zoom-out'
-  | 'dissolve';
+  | 'dissolve'
+  // Drawn by a WebGL2 shader; fall back to 'fade' without WebGL.
+  | 'cube' | 'doorway' | 'grid-flip' | 'water-drop' | 'crosswarp'
+  | 'glitch-displace' | 'film-burn' | 'page-curl' | 'ascii-sweep';
 
 export type BackgroundType = 'solid' | 'linear-gradient' | 'radial-gradient' | 'image';
 
@@ -482,6 +578,8 @@ export interface Scene {
   sceneFx?: SceneFxDef[];
   transition: TransitionType;
   transitionDurationFrames: number;
+  /** Shader parameters for a GPU transition (TRANSITION_SPECS); absent = its defaults. */
+  transitionParams?: Record<string, number>;
 }
 
 export interface OutputPreset {
@@ -519,11 +617,16 @@ export interface RenderProgress {
 
 // ── Audio track spec (for FFmpeg) ──────────────────────
 
+/** One sound placed on the output timeline; built by buildAudioTracks (src/lib/audio-tracks.ts). */
 export interface AudioTrackSpec {
-  path: string;
-  startTimeSecs: number;
-  durationSecs: number;
+  path: string;               // absolute filesystem path (or URL) of the source
+  startTimeSecs: number;      // where to start reading in the source
+  durationSecs: number;       // how long it lasts in the output, after the speed change
   volume: number;
+  timelineOffsetSecs: number; // where it starts in the output
+  fadeInSecs: number;
+  fadeOutSecs: number;
+  playbackRate: number;
 }
 
 // ── Resolved transform (output of interpolation) ──────

@@ -130,14 +130,16 @@ Hover over a scene and click **x**. You must have at least one scene.
 ### Scene Transitions
 
 Select a scene in the timeline, then in the Property Inspector change the **Transition** dropdown. Options:
-- **none / cut** — Instant switch to next scene
-- **fade** — Crossfade
-- **slide-left/right/up/down** — The current scene slides out, revealing the next
-- **wipe-horizontal/vertical** — A wipe reveals the next scene
-- **zoom-in/out** — Zoom transition
-- **dissolve** — Pixel-level dissolve
+- **None / Cut** — Instant switch to next scene
+- **Fade** — Crossfade
+- **Slide left/right/up/down** — The current scene slides out as the next slides in
+- **Wipe horizontal/vertical** — A wipe reveals the next scene
+- **Zoom in/out** — Zoom transition
+- **Dissolve** — The next scene replaces the current one in small blocks, in scattered order
 
-Set the **Transition Frames** to control how long the transition lasts (in frames).
+The **GPU** group (Cube, Doorway, Grid flip, Water drop, Cross warp, Glitch displace, Film burn, Page curl, ASCII sweep) is drawn with WebGL2. Their settings appear as sliders under the Transition menu; switching to another transition resets them. Without WebGL2 they play as a fade, and the Render panel lists them before you export.
+
+Set the **Transition Frames** to control how long the transition lasts (in frames). Each scene keeps its own background throughout the transition. In the preview, a transition other than zoom is drawn at the output resolution and scaled, so it looks slightly soft when you zoom the canvas in past 100%; the export is unaffected.
 
 ## Working with Layers
 
@@ -218,6 +220,23 @@ While the colour track has keyframes it overrides the Color field. The keys also
 3. At frame 20, set X to 540 (centered), add keyframe
 4. The layer slides in from the left
 
+## Lens Layers
+
+A lens changes whatever is under it: the layers below it in the Layer Panel
+order. Choose **Add layer → Lens**; it is added on top of the scene.
+
+- **Shape** — circle, rectangle or rounded rectangle. **Feather** softens the edge.
+- **Mode** — *Magnify* enlarges what's under it, *Pixelate* turns it into blocks, *Dither* reduces it to a few colour levels in a fine pattern, and *ASCII* redraws it as text-like density glyphs. Each mode shows its own controls. For Dither and ASCII, tick **Set** next to *Ink* and *Paper* to use two fixed colours instead of the picture's own.
+- **Glass** and **Ripple** (GPU) — *Glass* bends what is under it like a glass dome, with colour fringes (*Dispersion*) and a shine (*Highlight*). *Ripple* sends rings out from impulses: press **Add at current frame** to drop one at the lens centre on the current frame, then edit its frame and position (0–1 across the lens), or set *Automatic every* to drop them on a beat of frames. Without WebGL2 both show the picture unchanged.
+- **Intensity** — how strong the effect is, from 0 (none) to 1. Set keyframes on it (the ◇ button) to bring a lens in or out.
+- **Ring** — an outline around the lens, like a HUD.
+- **Moving it** — keyframe *X* and *Y*, or give it a motion path, to sweep it across a product or a title.
+
+A lens doesn't take Layer FX, Effects, a shadow, a blend mode or a clip path, so
+those sections are hidden while one is selected. In the preview, a scene with a
+lens looks slightly soft when you zoom the canvas in past 100%; the export is
+sharp.
+
 ## Morphing One Image into Another
 
 1. Add an image layer with the first image (**A**).
@@ -245,6 +264,8 @@ Tips: a few well-placed pairs on distinctive features (eyes, corners, tips)
 beat many vague ones. If the result tears or folds, remove the pair causing it.
 
 ## Rendering
+
+The Render panel warns before export when something can't render as designed: video files the app can't decode, and, if WebGL2 is unavailable, every GPU transition, Glass or Ripple lens and VHS tube curvature in the project, with what each falls back to.
 
 ### Checking FFmpeg
 
@@ -403,8 +424,13 @@ The Render Panel supports queue-based rendering:
 - **Blend modes** — Experiment with multiply, screen, overlay, and other blend modes for creative compositing effects.
 - **Effects stack** — Multiple effects (blur, brightness, contrast, etc.) can be applied to a single layer and are processed in order.
 - **Layer FX vs Effects** — These are two different sections in the Property Inspector. *Effects* are CSS filters applied to the finished layer. *Layer FX* composite the layer's own pixels several times over — glow, echo trails, glitch tearing, and the reveal effects that animate a layer into frame.
-- **Reveal effects** — Zoom, Pixelate, Slice and Wipe are how a layer arrives. Add one and it brings a **Timing** panel with Delay, In, Out and Easing. Set *In* to control how long the entrance takes; set *Out* to make the layer leave the same way before the scene ends. Reveals cannot be switched off — a reveal with no timing would simply be a layer that is already there.
+- **Reveal effects** — Zoom, Pixelate, Slice, Wipe, Decrypt and Disintegrate are how a layer arrives. Add one and it brings a **Timing** panel with Delay, In, Out and Easing. Set *In* to control how long the entrance takes; set *Out* to make the layer leave the same way before the scene ends. Reveals cannot be switched off — a reveal with no timing would simply be a layer that is already there.
 - **Timing on continuous effects** — Glow, glitch, shine and the rest are always on by default, but tick **Timing** on any of them and the same Delay/In/Out controls appear. That is how you get a glow that blooms in over the first twenty frames, or glitching that eases off rather than stopping dead.
 - **Easing on reveals** — Try `ease-out-back` on a Zoom reveal. Reveals deliberately allow the easing to overshoot, so the layer scales past its final size and settles back.
+- **Decrypt** — Cells of glyphs scramble over the layer, then resolve into it. *Glyphs* picks cipher characters, binary digits, or a density ramp that follows the layer's brightness. *Tint* moves the glyph colour from the layer's own colour (0) to *Glyph colour* (1). *Order* resolves cells at random, in a sweep along *Sweep angle*, or from the centre out; *Stagger* sets how strictly. This works on any layer, not just text; for per-character scrambling of a text layer's own font, use the text layer's *Scramble* character animation instead.
+- **Wipe edge** — On a Wipe reveal, raise *Edge glow* for a hot line along the front, and *Sparks* for sparks drifting off it, both in *Edge colour*. Leave them at 0 for a plain wipe.
+- **Text in a box** — Layer FX clip the layer to its box, so give a text layer with FX a box tall enough for all its lines.
+- **VHS** — A scene FX (Scene FX → VHS) for worn tape: *Wave* and *Jitter* wobble the picture, *Colour bleed* pulls red and blue apart, *Head switching* and *Switching band* add the noisy strip at the bottom, *Crease* rolls a bright glitch line down the frame, and *Saturation* fades the colour. Stack it with Film grain and Camera shake: the VHS moves with the shake and the grain stays on top. *Tube curvature* bends the picture like an old TV screen (GPU; skipped without WebGL2).
+- **Disintegrate** — The layer assembles from dust. *Wind angle* sets where the dust comes from (and blows to on exit), *Sweep angle* the direction in which grains land, and *Stagger* how strictly they land in that order (0 = all at once). *Gravity* drops (positive) or lifts (negative) the grains, and *Grain* is their size in pixels. Set *Out* to make the layer blow away at the end. At the default *Fade* of 1, far-off grains are nearly invisible; lower it to see the dust cloud travel.
 - **Stacking order** — Reveals are applied before decorations, so a glow or outline follows the revealed shape. Stack Slice with Sticker outline to see the border trace each strip as it arrives.
 - **Performance** — Large canvas resolutions (e.g., 4K) may slow down preview playback. The final render is unaffected since it runs frame-by-frame.

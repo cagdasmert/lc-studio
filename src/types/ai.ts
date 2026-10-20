@@ -1,3 +1,5 @@
+import type { LayerFxDef, LensLayerData, LayerBase, SceneFxDef, TransitionType } from './scene';
+
 export type AIProviderType = 'ollama' | 'lmstudio' | 'openai-compatible';
 
 export interface OllamaConfig {
@@ -50,12 +52,13 @@ export interface GeneratedScene {
   durationSeconds: number;
   backgroundColor: string;
   layers: GeneratedLayer[];
-  transition: string;
+  sceneFx?: SceneFxDef[];
+  transition: TransitionType;   // validated against src/lib/transition-options.ts
 }
 
 export interface GeneratedLayer {
   name: string;
-  type: 'text' | 'shape';
+  type: 'text' | 'shape' | 'lens';
   content?: string;          // text content
   fontSize?: number;
   fontWeight?: string;
@@ -76,4 +79,6 @@ export interface GeneratedLayer {
     endFrame: number;
     easing: string;
   }[];
+  layerFx?: LayerFxDef[];       // validated against LAYER_FX_SPECS
+  lens?: Omit<LensLayerData, keyof LayerBase | 'type'>;  // lens layers: validated against LENS_SPECS
 }

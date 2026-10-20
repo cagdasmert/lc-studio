@@ -23,6 +23,8 @@ npx tsc --noEmit         # Type-check without emitting
 npm run fetch-models     # Download + verify the auto-match model (tauri build runs it)
 npm test                 # Run the Vitest suite once
 npm run test:watch       # Vitest in watch mode
+cargo test --manifest-path src-tauri/Cargo.toml   # Rust unit tests (FFmpeg args, audio graph)
+node scripts/e2e/f2-export.mjs                    # Acceptance checks; see docs/developer-guide.md
 ```
 
 ## Tech Stack
@@ -52,6 +54,9 @@ Implemented subsystems:
 - **Effects system** — Layer FX (`src/renderer/layer-fx.ts`) composited from the layer's own pixels, with an optional timing envelope (`fx-envelope.ts`) that drives reveal effects and dims continuous ones; scene FX (`scene-fx.ts`) applied full-frame. UI is schema-driven from `src/lib/fx-schema.ts`, which the renderer must never import. All FX are frame-deterministic via `noise.ts` — never `Math.random()`
 - **Image morph** — Image layers can warp into a second image (`src/renderer/morph-field.ts`, `draw-morph.ts`, driven by the `morphProgress` track). Matching points come from a bundled DINOv2 model run in a Web Worker at authoring time only (`src/lib/morph-match/`, model fetched by `npm run fetch-models`) — never during rendering
 - **AI generation** — LLM orchestration via Ollama, LM Studio, or OpenAI-compatible APIs (`src/lib/ai/`), using `@tauri-apps/plugin-http` for CORS-free local requests
+- **Export audio** — `buildAudioTracks()` (`src/lib/audio-tracks.ts`) times every audible layer; `build_audio_filter()` in `src-tauri/src/render/ffmpeg.rs` mixes them in one FFmpeg graph; preview playback (`AudioEngine`) uses the same timing helper. Media bytes are read with `src/lib/media-bytes.ts` (plugin-fs), never by fetching a filesystem path
+- **Video frames** — `prepareVideoFrames()` decodes each frame's video (WebCodecs via mediabunny, `src/renderer/video-frames.ts`, adapted from OpenCut Classic — see `THIRD_PARTY_NOTICES.md`) before the synchronous draw; export awaits it, preview doesn't. Never draw a video layer by seeking an `HTMLVideoElement`
+- **Acceptance scripts** — `node scripts/e2e/<feature>.mjs` drives real exports in the debug app through the `LCS_E2E` hook (`src-tauri/src/e2e.rs`, `src/lib/e2e.ts`)
 - **Storage** — JSON project manifests (`.lcs.json`) via `src/lib/project-io.ts`, recent projects tracked in localStorage
 
 ## Core Domain Concepts

@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-http": "^2.5.9",
     "@tauri-apps/plugin-opener": "^2",
     "immer": "^11.1.16",
+    "mediabunny": "1.61.3",
     "onnxruntime-web": "1.30.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

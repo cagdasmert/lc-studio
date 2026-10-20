@@ -9,6 +9,8 @@ const LAYER_TYPE_ICONS: Record<string, string> = {
   shape: 'S',
   video: 'V',
   audio: 'A',
+  svg: 'SVG',
+  lens: 'L',
 };
 
 function createDefaultTextLayer(scene: import('../../types').Scene): TextLayerData {

@@ -164,6 +164,7 @@ export function applyScenePostFx(
       case 'grain': drawGrain(ctx, f, frameInScene, width, height); break;
       case 'vignette': drawVignette(ctx, f, width, height); break;
       case 'shake': break; // applied as a pre-transform
+      case 'vhs': break;   // applied to the scene surface (scene-vhs.ts)
     }
   }
 }

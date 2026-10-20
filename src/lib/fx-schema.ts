@@ -1,4 +1,4 @@
-import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow } from '../types';
+import type { LayerFxDef, LayerFxType, SceneFxDef, SceneFxType, FxWindow, LensLayerData, LensMode, TransitionType } from '../types';
 
 /**
  * UI metadata for effects: label, default parameters, and the controls to
@@ -154,7 +154,11 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
     label: 'Wipe reveal',
     hint: 'A soft edge sweeps across. Linear, iris, or barn doors.',
     kind: 'reveal',
-    defaults: { type: 'wipe', shape: 'linear', angle: 0, softness: 40, window: { ...DEFAULT_FX_WINDOW } },
+    defaults: {
+      type: 'wipe', shape: 'linear', angle: 0, softness: 40,
+      edgeGlow: 0, edgeColor: '#ff6a3d', sparks: 0,
+      window: { ...DEFAULT_FX_WINDOW },
+    },
     fields: [
       select('shape', 'Shape', [
         { value: 'linear', label: 'Linear' },
@@ -163,6 +167,58 @@ export const LAYER_FX_SPECS: Record<LayerFxType, FxSpec<LayerFxDef>> = {
       ]),
       num('angle', 'Angle', 0, 360, 5),
       num('softness', 'Softness', 0, 300, 5),
+      num('edgeGlow', 'Edge glow', 0, 120),
+      color('edgeColor', 'Edge colour'),
+      num('sparks', 'Sparks', 0, 1, 0.05),
+    ],
+  },
+  disintegrate: {
+    label: 'Disintegrate',
+    hint: 'The layer assembles from drifting grains of dust, or blows away into them on exit.',
+    kind: 'reveal',
+    defaults: {
+      type: 'disintegrate', grain: 2, scatter: 180, angle: -30, spread: 0.35, gravity: -40,
+      sweep: 0, stagger: 0.6, fade: 1,
+      window: { inDelay: 0, inFrames: 24, outFrames: 0, easing: 'ease-out-cubic' },
+    },
+    fields: [
+      num('grain', 'Grain', 1, 8),
+      num('scatter', 'Scatter', 0, 600, 5),
+      num('angle', 'Wind angle', -180, 180, 5),
+      num('spread', 'Spread', 0, 1, 0.05),
+      num('gravity', 'Gravity', -300, 300, 5),
+      num('sweep', 'Sweep angle', -180, 180, 5),
+      num('stagger', 'Stagger', 0, 0.95, 0.05),
+      num('fade', 'Fade', 0, 1, 0.05),
+    ],
+  },
+  decrypt: {
+    label: 'Decrypt',
+    hint: 'Cells of cipher glyphs flicker over the layer, then resolve into it.',
+    kind: 'reveal',
+    defaults: {
+      type: 'decrypt', cell: 14, charset: 'cipher', color: '#7CFFB2', tint: 0.6, scrambleFrames: 2,
+      order: 'random', angle: 0, stagger: 0.7, edgeGlow: 0.6,
+      window: { inDelay: 0, inFrames: 30, outFrames: 0, easing: 'ease-out-cubic' },
+    },
+    fields: [
+      num('cell', 'Cell size', 6, 40),
+      select('charset', 'Glyphs', [
+        { value: 'cipher', label: 'Cipher' },
+        { value: 'ramp', label: 'Density ramp' },
+        { value: 'binary', label: 'Binary' },
+      ]),
+      color('color', 'Glyph colour'),
+      num('tint', 'Tint', 0, 1, 0.05),
+      num('scrambleFrames', 'Scramble every', 1, 12),
+      select('order', 'Order', [
+        { value: 'random', label: 'Random' },
+        { value: 'sweep', label: 'Sweep' },
+        { value: 'center-out', label: 'Centre out' },
+      ]),
+      num('angle', 'Sweep angle', 0, 360, 5),
+      num('stagger', 'Stagger', 0, 0.95, 0.05),
+      num('edgeGlow', 'Resolve glow', 0, 1, 0.05),
     ],
   },
   glitch: {
@@ -231,6 +287,25 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
       num('rollSpeed', 'Roll', -4, 4, 0.25),
     ],
   },
+  vhs: {
+    label: 'VHS',
+    hint: 'Worn tape: a wavy, jittery picture, colour bleed, a noisy head-switching band and a rolling crease. Tube curvature needs WebGL2 and is skipped without it.',
+    kind: 'continuous',
+    defaults: {
+      type: 'vhs', wave: 6, jitter: 1.5, bleed: 3, switching: 0.6, switchingHeight: 0.06,
+      crease: 0.3, saturation: 0.8, barrel: 0,
+    },
+    fields: [
+      num('wave', 'Wave', 0, 40, 0.5),
+      num('jitter', 'Jitter', 0, 10, 0.5),
+      num('bleed', 'Colour bleed', 0, 20),
+      num('switching', 'Head switching', 0, 1, 0.05),
+      num('switchingHeight', 'Switching band', 0, 0.2, 0.01),
+      num('crease', 'Crease', 0, 1, 0.05),
+      num('saturation', 'Saturation', 0, 2, 0.05),
+      num('barrel', 'Tube curvature', 0, 1, 0.05),
+    ],
+  },
   shake: {
     label: 'Camera shake',
     hint: 'Jitters the whole frame; decays to still if you set a decay.',
@@ -246,3 +321,132 @@ export const SCENE_FX_SPECS: Record<SceneFxType, FxSpec<SceneFxDef>> = {
 
 export const LAYER_FX_TYPES = Object.keys(LAYER_FX_SPECS) as LayerFxType[];
 export const SCENE_FX_TYPES = Object.keys(SCENE_FX_SPECS) as SceneFxType[];
+
+// ── Lens layers ──────────────────────────────────────
+
+/** The lens-specific part of a lens layer (everything LayerBase doesn't have). */
+export type LensProps = Omit<LensLayerData, keyof import('../types').LayerBase | 'type'>;
+
+export interface LensModeSpec {
+  label: string;
+  hint: string;
+  /** Values this mode starts from when you switch to it. */
+  defaults: Partial<LensProps>;
+  /** The mode's own controls; the inspector shows only the active mode's. */
+  fields: FxField[];
+}
+
+/** What a new lens layer gets. */
+export const LENS_DEFAULTS: LensProps = {
+  shape: 'circle', cornerRadius: 24, feather: 8, intensity: 1,
+  ring: { color: '#ffffff', width: 4 },
+  mode: 'magnify', magnify: 2, block: 24, ditherLevels: 3, cell: 12,
+};
+
+/** Controls every lens has, whatever its mode. */
+export const LENS_COMMON_FIELDS: FxField[] = [
+  select('shape', 'Shape', [
+    { value: 'circle', label: 'Circle' },
+    { value: 'rect', label: 'Rectangle' },
+    { value: 'rounded-rect', label: 'Rounded rectangle' },
+  ]),
+  num('cornerRadius', 'Corner radius', 0, 300),
+  num('feather', 'Feather', 0, 120),
+  num('intensity', 'Intensity', 0, 1, 0.05),
+];
+
+/**
+ * UI metadata for lens modes. The renderer keeps its own LENS_MODES list in
+ * src/renderer/lens.ts; fx-kinds.test.ts checks the two match.
+ */
+export const LENS_SPECS: Record<LensMode, LensModeSpec> = {
+  magnify: {
+    label: 'Magnify',
+    hint: 'Enlarges what is under the lens around its centre.',
+    defaults: { magnify: 2 },
+    fields: [num('magnify', 'Zoom', 1, 6, 0.1)],
+  },
+  pixelate: {
+    label: 'Pixelate',
+    hint: 'Turns what is under the lens into coarse blocks.',
+    defaults: { block: 24 },
+    fields: [num('block', 'Block size', 2, 120)],
+  },
+  dither: {
+    label: 'Dither',
+    hint: 'Ordered (Bayer) dither: a few levels per channel, or two colours when Ink is set.',
+    defaults: { ditherLevels: 3 },
+    fields: [num('ditherLevels', 'Levels', 2, 8), color('ink', 'Ink'), color('paper', 'Paper')],
+  },
+  ascii: {
+    label: 'ASCII',
+    hint: 'Cells of density glyphs picked by brightness, in the source colours or Ink on Paper.',
+    defaults: { cell: 12 },
+    fields: [num('cell', 'Cell size', 4, 60), color('ink', 'Ink'), color('paper', 'Paper')],
+  },
+  refract: {
+    label: 'Glass',
+    hint: 'A glass dome that bends what is under it, with colour fringes and a highlight. Needs WebGL2; without it the lens shows the picture unchanged.',
+    defaults: { strength: 24, dispersion: 0.3, highlight: 0.4 },
+    fields: [num('strength', 'Strength', 0, 200), num('dispersion', 'Dispersion', 0, 1, 0.05), num('highlight', 'Highlight', 0, 1, 0.05)],
+  },
+  ripple: {
+    label: 'Ripple',
+    hint: 'Rings spread from impulses you place on frames, like drops in water. Needs WebGL2; without it the lens shows the picture unchanged.',
+    defaults: { amplitude: 10, wavelength: 40, speed: 6, decay: 0.05, refraction: 6, life: 60, ambientEvery: 0 },
+    fields: [
+      num('amplitude', 'Amplitude', 0, 60, 0.5),
+      num('wavelength', 'Wavelength', 4, 200),
+      num('speed', 'Speed', 0.5, 40, 0.5),
+      num('decay', 'Decay', 0, 0.5, 0.01),
+      num('refraction', 'Refraction', 0, 30, 0.5),
+      num('life', 'Life', 4, 300),
+      num('ambientEvery', 'Automatic every', 0, 240),
+    ],
+  },
+};
+
+/** Lens modes drawn by WebGL2. */
+export const GPU_LENS_MODES: LensMode[] = ['refract', 'ripple'];
+
+export const LENS_MODES = Object.keys(LENS_SPECS) as LensMode[];
+
+// ── GPU transition parameters ─────────────────────────
+
+export interface TransitionSpec {
+  /** The shader's float uniforms, keyed by uniform name, with their defaults. */
+  defaults: Record<string, number>;
+  fields: FxField[];
+}
+
+/**
+ * Float parameters of the GPU transitions (Scene.transitionParams). Defaults
+ * are the shaders' own `// = value` comments; fx-kinds.test.ts checks them.
+ * Transitions without float parameters have an empty entry.
+ */
+export const TRANSITION_SPECS: Partial<Record<TransitionType, TransitionSpec>> = {
+  cube: {
+    defaults: { persp: 0.7, unzoom: 0.3, reflection: 0.4, floating: 3 },
+    fields: [num('persp', 'Perspective', 0, 1, 0.05), num('unzoom', 'Unzoom', 0, 1, 0.05), num('reflection', 'Reflection', 0, 1, 0.05), num('floating', 'Floating', 0, 20, 0.5)],
+  },
+  doorway: {
+    defaults: { reflection: 0.4, perspective: 0.4, depth: 3 },
+    fields: [num('reflection', 'Reflection', 0, 1, 0.05), num('perspective', 'Perspective', 0, 1, 0.05), num('depth', 'Depth', 1, 10, 0.5)],
+  },
+  'grid-flip': {
+    defaults: { pause: 0.1, dividerWidth: 0.05, randomness: 0.1 },
+    fields: [num('pause', 'Pause', 0, 0.4, 0.01), num('dividerWidth', 'Divider', 0, 0.5, 0.01), num('randomness', 'Randomness', 0, 1, 0.05)],
+  },
+  'water-drop': {
+    defaults: { amplitude: 30, speed: 30 },
+    fields: [num('amplitude', 'Ripples', 0, 100, 1), num('speed', 'Speed', 0, 100, 1)],
+  },
+  crosswarp: { defaults: {}, fields: [] },
+  'glitch-displace': { defaults: {}, fields: [] },
+  'film-burn': { defaults: { Seed: 2.31 }, fields: [num('Seed', 'Seed', 0, 10, 0.01)] },
+  'page-curl': { defaults: {}, fields: [] },
+  'ascii-sweep': {
+    defaults: { u_cell: 16, u_band: 0.3, u_surge: 0.8 },
+    fields: [num('u_cell', 'Cell size', 6, 60), num('u_band', 'Band width', 0.05, 1, 0.05), num('u_surge', 'Surge', 0, 2, 0.05)],
+  },
+};

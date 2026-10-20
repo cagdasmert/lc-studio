@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../store';
 import type {
-  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData,
+  Layer, TextLayerData, ShapeLayerData, ImageLayerData, VideoLayerData, SvgLayerData, LensLayerData, LensMode,
   TransitionType, BlendMode, FontWeight, LayerEffect,
   GradientDef, FillType, BackgroundType, Scene, BoxShadow, TintBlendMode,
   ClipPathDef, ClipPathType, MotionPathDef, CharAnimationType, CharAnimationDef, EasingType,
@@ -10,6 +10,7 @@ import type {
 } from '../../types';
 import {
   LAYER_FX_SPECS, SCENE_FX_SPECS, LAYER_FX_TYPES, SCENE_FX_TYPES, DEFAULT_FX_WINDOW,
+  LENS_SPECS, LENS_MODES, GPU_LENS_MODES, TRANSITION_SPECS,
   type FxField,
 } from '../../lib/fx-schema';
 import { OUTPUT_PRESETS } from '../../lib/output-presets';
@@ -18,6 +19,8 @@ import { pickImageFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
 import { enableMorph, disableMorph } from '../../lib/morph-edit';
 import { isInLayer, toLayerFrame } from '../../lib/layer-frames';
+import { EASING_GROUPS } from '../../lib/easing-options';
+import { TRANSITION_LABELS, TRANSITION_TYPES, needsGpu } from '../../lib/transition-options';
 import { MorphEditor } from './MorphEditor';
 
 const BLEND_MODES: BlendMode[] = [
@@ -26,7 +29,6 @@ const BLEND_MODES: BlendMode[] = [
   'hard-light', 'soft-light', 'difference', 'exclusion',
   'hue', 'saturation', 'color', 'luminosity',
 ];
-const TRANSITIONS: TransitionType[] = ['none', 'cut', 'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe-horizontal', 'wipe-vertical', 'zoom-in', 'zoom-out', 'dissolve'];
 const FONT_WEIGHTS: FontWeight[] = ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
 const EASING_OPTIONS: EasingType[] = [
   'linear',
@@ -141,12 +143,14 @@ function TransformSection({ layer, sceneIndex, frameInLayer }: {
         <NumericField label="Opacity" value={layer.opacity} onChange={(v) => update({ opacity: v } as Partial<Layer>)} min={0} max={1} step={0.05} />
         <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="opacity" frame={frameInLayer} value={layer.opacity} />
       </div>
-      <label className="prop-field">
-        <span>Blend</span>
-        <select value={layer.blendMode} onChange={(e) => update({ blendMode: e.target.value as BlendMode } as Partial<Layer>)}>
-          {BLEND_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </label>
+      {layer.type !== 'lens' && (
+        <label className="prop-field">
+          <span>Blend</span>
+          <select value={layer.blendMode} onChange={(e) => update({ blendMode: e.target.value as BlendMode } as Partial<Layer>)}>
+            {BLEND_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+      )}
     </div>
   );
 }
@@ -598,6 +602,11 @@ function EffectsSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: numbe
  * scene FX are arrays of discriminated unions with a `type` tag, so the same
  * component drives both — new effects only need an entry in fx-schema.ts.
  */
+/** A field's value, or the spec default when an older project lacks the (optional) field. */
+function fieldValue(item: object, defaults: object, key: string): unknown {
+  return (item as Record<string, unknown>)[key] ?? (defaults as Record<string, unknown>)[key];
+}
+
 function FxListEditor<T extends { type: string }>({
   title, items, specs, typeList, onChange, showEnvelope = false,
 }: {
@@ -661,7 +670,7 @@ function FxListEditor<T extends { type: string }>({
                   <span>{field.label}</span>
                   <input
                     type="color"
-                    value={String((item as Record<string, unknown>)[field.key] ?? '#ffffff')}
+                    value={String(fieldValue(item, spec.defaults, field.key) ?? '#ffffff')}
                     onChange={(e) => patch(i, field.key, e.target.value)}
                   />
                 </label>
@@ -669,7 +678,7 @@ function FxListEditor<T extends { type: string }>({
                 <label key={field.key} className="prop-field">
                   <span>{field.label}</span>
                   <select
-                    value={String((item as Record<string, unknown>)[field.key] ?? '')}
+                    value={String(fieldValue(item, spec.defaults, field.key) ?? '')}
                     onChange={(e) => patch(i, field.key, e.target.value)}
                   >
                     {(field.options ?? []).map((o) => (
@@ -685,11 +694,11 @@ function FxListEditor<T extends { type: string }>({
                     min={field.min}
                     max={field.max}
                     step={field.step}
-                    value={Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                    value={Number(fieldValue(item, spec.defaults, field.key) ?? 0)}
                     onChange={(e) => patch(i, field.key, Number(e.target.value))}
                   />
                   <span className="fx-value">
-                    {Number((item as Record<string, unknown>)[field.key] ?? 0)}
+                    {Number(fieldValue(item, spec.defaults, field.key) ?? 0)}
                   </span>
                 </label>
               )
@@ -942,6 +951,8 @@ function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: nu
         ],
         alignToPath: false,
         loop: false,
+        easing: 'linear',
+        timing: 'constant-speed',
       };
       updateLayer(sceneIndex, layer.id, { motionPath: def } as Partial<Layer>);
     }
@@ -969,6 +980,27 @@ function MotionPathSection({ layer, sceneIndex }: { layer: Layer; sceneIndex: nu
           <label className="prop-checkbox">
             <input type="checkbox" checked={mp.loop ?? false} onChange={(e) => updateMP({ loop: e.target.checked })} />
             <span>Loop</span>
+          </label>
+          <label className="prop-field">
+            <span>Easing</span>
+            <select
+              value={mp.easing ?? 'linear'}
+              onChange={(e) => updateMP({ easing: e.target.value as EasingType })}
+            >
+              {EASING_GROUPS.map((group) => (
+                <optgroup key={group.group} label={group.group}>
+                  {group.values.map((v) => <option key={v} value={v}>{v}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={mp.timing === 'constant-speed'}
+              onChange={(e) => updateMP({ timing: e.target.checked ? 'constant-speed' : 'per-segment' })}
+            />
+            <span>Constant speed</span>
           </label>
           <p className="prop-hint">{mp.points.length} points defined</p>
         </>
@@ -1031,6 +1063,124 @@ function CharAnimationSection({ layer, sceneIndex }: { layer: TextLayerData; sce
 }
 
 // ── SVG Layer ─────────────────────────────────────────
+
+/** A lens: its shape, intensity and ring, then the active mode's own controls (from LENS_SPECS). */
+function LensSection({ layer, sceneIndex, frameInLayer }: { layer: LensLayerData; sceneIndex: number; frameInLayer: number }) {
+  const updateLayer = useStore((s) => s.updateLayer);
+  const update = (patch: Partial<LensLayerData>) => updateLayer(sceneIndex, layer.id, patch as Partial<Layer>);
+  const spec = LENS_SPECS[layer.mode];
+  const values = layer as unknown as Record<string, unknown>;
+
+  return (
+    <div className="prop-section">
+      <h4>Lens</h4>
+      <p className="fx-card-hint">Changes the layers below it, inside its shape.</p>
+      <label className="prop-field">
+        <span>Shape</span>
+        <select value={layer.shape} onChange={(e) => update({ shape: e.target.value as LensLayerData['shape'] })}>
+          <option value="circle">Circle</option>
+          <option value="rect">Rectangle</option>
+          <option value="rounded-rect">Rounded rectangle</option>
+        </select>
+      </label>
+      {layer.shape === 'rounded-rect' && (
+        <NumericField label="Corner radius" value={layer.cornerRadius} onChange={(v) => update({ cornerRadius: v })} min={0} />
+      )}
+      <NumericField label="Feather" value={layer.feather} onChange={(v) => update({ feather: v })} min={0} />
+      <div className="prop-row">
+        <NumericField label="Intensity" value={layer.intensity} onChange={(v) => update({ intensity: v })} min={0} max={1} step={0.05} />
+        <KeyframeButton sceneIndex={sceneIndex} layerId={layer.id} property="intensity" frame={frameInLayer} value={layer.intensity} />
+      </div>
+      <label className="prop-checkbox">
+        <input
+          type="checkbox"
+          checked={!!layer.ring}
+          onChange={(e) => update({ ring: e.target.checked ? { color: '#ffffff', width: 4 } : null })}
+        />
+        <span>Ring</span>
+      </label>
+      {layer.ring && (
+        <div className="prop-row">
+          <ColorField label="Ring colour" value={layer.ring.color} onChange={(v) => update({ ring: { ...layer.ring!, color: v } })} />
+          <NumericField label="Width" value={layer.ring.width} onChange={(v) => update({ ring: { ...layer.ring!, width: v } })} min={0} />
+        </div>
+      )}
+      <label className="prop-field">
+        <span>Mode</span>
+        <select
+          value={layer.mode}
+          onChange={(e) => {
+            const mode = e.target.value as LensMode;
+            update({ ...LENS_SPECS[mode].defaults, mode });
+          }}
+        >
+          {LENS_MODES.map((m) => <option key={m} value={m}>{LENS_SPECS[m].label}{GPU_LENS_MODES.includes(m) ? ' · GPU' : ''}</option>)}
+        </select>
+      </label>
+      <p className="fx-card-hint">{spec.hint}</p>
+      {spec.fields.map((field) => field.kind === 'color' ? (
+        // ink / paper are optional: unset keeps the source colours.
+        <div key={field.key} className="prop-row">
+          <ColorField
+            label={field.label}
+            value={String(values[field.key] ?? '#ffffff')}
+            onChange={(v) => update({ [field.key]: v } as Partial<LensLayerData>)}
+          />
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={values[field.key] !== undefined}
+              onChange={(e) => update({ [field.key]: e.target.checked ? (field.key === 'ink' ? '#ffffff' : '#000000') : undefined } as Partial<LensLayerData>)}
+            />
+            <span>Set</span>
+          </label>
+        </div>
+      ) : (
+        <NumericField
+          key={field.key}
+          label={field.label}
+          value={Number(values[field.key] ?? 0)}
+          onChange={(v) => update({ [field.key]: Math.min(field.max ?? v, Math.max(field.min ?? v, v)) } as Partial<LensLayerData>)}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+        />
+      ))}
+      {layer.mode === 'ripple' && <ImpulseList layer={layer} frameInLayer={frameInLayer} update={update} />}
+    </div>
+  );
+}
+
+/** A ripple lens's impulses: each starts rings at a layer frame, at x, y (0–1) in the lens box. */
+function ImpulseList({ layer, frameInLayer, update }: {
+  layer: LensLayerData; frameInLayer: number; update: (patch: Partial<LensLayerData>) => void;
+}) {
+  const impulses = layer.impulses ?? [];
+  const set = (next: typeof impulses) => update({ impulses: [...next].sort((a, b) => a.frame - b.frame) });
+  return (
+    <div className="impulse-list">
+      <div className="prop-row">
+        <span className="prop-label">Impulses</span>
+        <button
+          className="prop-add-btn"
+          onClick={() => set([...impulses, { frame: Math.max(0, Math.round(frameInLayer)), x: 0.5, y: 0.5 }])}
+          title="Start a ripple at the lens centre on the current frame"
+        >
+          Add at current frame
+        </button>
+      </div>
+      {impulses.length === 0 && <p className="fx-card-hint">No impulses: add one, or set Automatic every.</p>}
+      {impulses.map((imp, i) => (
+        <div key={i} className="prop-row">
+          <NumericField label="Frame" value={imp.frame} min={0} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, frame: Math.max(0, Math.round(v)) } : p)))} />
+          <NumericField label="X" value={imp.x} min={0} max={1} step={0.05} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, x: Math.min(1, Math.max(0, v)) } : p)))} />
+          <NumericField label="Y" value={imp.y} min={0} max={1} step={0.05} onChange={(v) => set(impulses.map((p, j) => (j === i ? { ...p, y: Math.min(1, Math.max(0, v)) } : p)))} />
+          <button className="effect-remove-btn" onClick={() => set(impulses.filter((_, j) => j !== i))} title="Remove">x</button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function SvgSection({ layer, sceneIndex }: { layer: SvgLayerData; sceneIndex: number }) {
   const updateLayer = useStore((s) => s.updateLayer);
@@ -1189,11 +1339,33 @@ function SceneSection({ scene, sceneIndex, fps }: { scene: Scene; sceneIndex: nu
         <span>Transition</span>
         <select
           value={scene.transition}
-          onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType })}
+          // Parameters belong to one shader; switching transitions starts from its defaults.
+          onChange={(e) => updateScene(sceneIndex, { transition: e.target.value as TransitionType, transitionParams: undefined })}
         >
-          {TRANSITIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          <optgroup label="Canvas">
+            {TRANSITION_TYPES.filter((t) => !needsGpu(t)).map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]}</option>)}
+          </optgroup>
+          <optgroup label="GPU (WebGL2; a fade without it)">
+            {TRANSITION_TYPES.filter(needsGpu).map((t) => <option key={t} value={t}>{TRANSITION_LABELS[t]} · GPU</option>)}
+          </optgroup>
         </select>
       </label>
+      {(TRANSITION_SPECS[scene.transition]?.fields ?? []).map((field) => (
+        <label key={field.key} className="prop-field fx-slider-field">
+          <span>{field.label}</span>
+          <input
+            type="range"
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            value={scene.transitionParams?.[field.key] ?? TRANSITION_SPECS[scene.transition]!.defaults[field.key]}
+            onChange={(e) => updateScene(sceneIndex, {
+              transitionParams: { ...scene.transitionParams, [field.key]: Number(e.target.value) },
+            })}
+          />
+          <span className="fx-value">{scene.transitionParams?.[field.key] ?? TRANSITION_SPECS[scene.transition]!.defaults[field.key]}</span>
+        </label>
+      ))}
       {scene.transition !== 'none' && scene.transition !== 'cut' && (
         <NumericField
           label="Trans. Frames"
@@ -1294,11 +1466,17 @@ export function PropertyInspector() {
           {layer.type === 'image' && <MorphSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'video' && <VideoSection layer={layer} sceneIndex={selectedSceneIndex} />}
           {layer.type === 'svg' && <SvgSection layer={layer} sceneIndex={selectedSceneIndex} />}
+          {layer.type === 'lens' && <LensSection layer={layer} sceneIndex={selectedSceneIndex} frameInLayer={toLayerFrame(layer, frameInScene)} />}
 
-          <LayerFxSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
-          <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />
+          {/* A lens ignores FX, filters, shadows and clip paths. */}
+          {layer.type !== 'lens' && (
+            <>
+              <LayerFxSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <EffectsSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <BoxShadowSection layer={layer} sceneIndex={selectedSceneIndex} />
+              <ClipPathSection layer={layer} sceneIndex={selectedSceneIndex} />
+            </>
+          )}
           <MotionPathSection layer={layer} sceneIndex={selectedSceneIndex} />
         </>
       )}

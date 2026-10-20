@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store';
 import type { Layer, EasingType, Keyframe, KeyframeValue } from '../../types';
 import { clampToLayer, isInLayer, toLayerFrame, toSceneFrame } from '../../lib/layer-frames';
+import { EASING_GROUPS } from '../../lib/easing-options';
 
 // Animatable properties per layer type
 const BASE_PROPERTIES = ['x', 'y', 'width', 'height', 'scaleX', 'scaleY', 'rotation', 'opacity'];
@@ -14,6 +15,7 @@ function getAnimatableProperties(layer: Layer): string[] {
     case 'text': return TEXT_PROPERTIES;
     case 'shape': return SHAPE_PROPERTIES;
     case 'image': return layer.morph ? [...IMAGE_PROPERTIES, 'morphProgress'] : IMAGE_PROPERTIES;
+    case 'lens': return [...BASE_PROPERTIES, 'intensity'];
     default: return BASE_PROPERTIES;
   }
 }
@@ -25,18 +27,6 @@ function getPropertyValue(layer: Layer, property: string): KeyframeValue {
   if (property === 'color' && layer.type === 'text') return layer.color;
   return (layer as unknown as Record<string, number>)[property] ?? 0;
 }
-
-const EASING_OPTIONS: { group: string; values: EasingType[] }[] = [
-  { group: 'Basic', values: ['linear', 'ease-in', 'ease-out', 'ease-in-out'] },
-  { group: 'Sine', values: ['ease-in-sine', 'ease-out-sine', 'ease-in-out-sine'] },
-  { group: 'Cubic', values: ['ease-in-cubic', 'ease-out-cubic', 'ease-in-out-cubic'] },
-  { group: 'Expo', values: ['ease-in-expo', 'ease-out-expo', 'ease-in-out-expo'] },
-  { group: 'Circ', values: ['ease-in-circ', 'ease-out-circ', 'ease-in-out-circ'] },
-  { group: 'Back', values: ['ease-in-back', 'ease-out-back', 'ease-in-out-back'] },
-  { group: 'Elastic', values: ['ease-in-elastic', 'ease-out-elastic', 'ease-in-out-elastic'] },
-  { group: 'Bounce', values: ['ease-in-bounce', 'ease-out-bounce', 'ease-in-out-bounce'] },
-  { group: 'Special', values: ['steps', 'cubic-bezier', 'spring'] },
-];
 
 const TRACK_HEIGHT = 20;
 const RULER_HEIGHT = 20;
@@ -269,7 +259,7 @@ export function KeyframeEditor() {
             onChange={(e) => handleEasingChange(e.target.value as EasingType)}
             disabled={!selectedKf}
           >
-            {EASING_OPTIONS.map((group) => (
+            {EASING_GROUPS.map((group) => (
               <optgroup key={group.group} label={group.group}>
                 {group.values.map((v) => (
                   <option key={v} value={v}>{v}</option>

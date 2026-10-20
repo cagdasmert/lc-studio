@@ -5,6 +5,9 @@ import type { RenderJob } from '../store/render-slice';
 import { checkFfmpeg, cancelRender } from '../lib/tauri-bridge';
 import { pickOutputFile } from '../lib/dialog';
 import { renderComposition } from '../renderer/capture';
+import { countUndecodableVideoLayers, undecodableWarning, videoSourcesKey } from '../lib/video-support';
+import { gpuFeatureUses, gpuWarning } from '../lib/gpu-features';
+import { glAvailable } from '../renderer/gl/context';
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   mp4: 'MP4 (H.264)',
@@ -45,6 +48,24 @@ export function RenderPanel() {
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
   const [qualityPreset, setQualityPreset] = useState<QualityPreset>('medium');
   const renderingRef = useRef(false);
+  const projectPath = useStore((s) => s.projectPath);
+  const [videoWarning, setVideoWarning] = useState<string | null>(null);
+  const videoKey = videoSourcesKey(composition);
+
+  // Probe the video files when the set of video layers changes (composition
+  // itself changes on every edit, and the key stands in for it).
+  useEffect(() => {
+    let cancelled = false;
+    countUndecodableVideoLayers(composition, projectPath).then((count) => {
+      if (!cancelled) setVideoWarning(undecodableWarning(count));
+    });
+    return () => { cancelled = true; };
+  }, [videoKey, projectPath]);
+
+  // Effects that need WebGL2 render without it (R5.6): say which, before export.
+  const gpuUses = gpuFeatureUses(composition).join('\n');
+  const gpuNote = gpuUses && !glAvailable() ? gpuWarning(gpuUses.split('\n')) : null;
+  const warnings = [videoWarning, gpuNote].filter((w): w is string => !!w);
 
   useEffect(() => {
     checkFfmpeg()
@@ -198,6 +219,7 @@ export function RenderPanel() {
           )}
         </div>
       </div>
+      {warnings.map((w) => <p key={w} className="render-warning">{w}</p>)}
 
       {renderQueue.length > 0 && (
         <div className="render-queue">

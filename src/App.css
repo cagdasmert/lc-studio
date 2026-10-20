@@ -384,6 +384,7 @@ body {
 .ffmpeg-status { font-size: 11px; }
 .ffmpeg-ok { color: #4caf50; }
 .ffmpeg-err { color: #f44336; }
+.render-warning { font-size: 11px; color: #ffb74d; margin: 4px 0 0; }
 
 .render-actions { display: flex; gap: 6px; align-items: center; }
 .render-actions button {
@@ -904,6 +905,15 @@ body {
 }
 .fx-card-title { font-size: 11px; font-weight: 600; color: #ddd; }
 .fx-card-hint { font-size: 10px; color: #666; line-height: 1.4; margin-bottom: 6px; }
+
+/* Ripple lens impulses */
+.impulse-list { margin-top: 6px; }
+.impulse-list .prop-label { flex: 1; font-size: 11px; color: #999; }
+.impulse-list .prop-add-btn {
+  padding: 1px 6px; background: #222; border: 1px solid #333; border-radius: 3px;
+  color: #ccc; cursor: pointer; font-size: 11px;
+}
+.impulse-list .prop-add-btn:hover { background: #333; }
 
 .fx-slider-field input[type="range"] { flex: 1; min-width: 0; }
 .fx-value {

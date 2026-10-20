@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useStore } from '../../store';
 import type {
   TextLayerData, ImageLayerData, ShapeLayerData,
-  VideoLayerData, AudioLayerData, SvgLayerData, Scene,
+  VideoLayerData, AudioLayerData, SvgLayerData, LensLayerData, Scene,
 } from '../../types';
+import { LENS_DEFAULTS } from '../../lib/fx-schema';
 import { pickImageFile, pickAudioFile, pickVideoFile } from '../../lib/file-utils';
 import { copyAssetToProject } from '../../lib/asset-manager';
 
@@ -104,6 +105,19 @@ function createSvgLayer(scene: Scene): SvgLayerData {
     width: 200,
     height: 200,
     content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#e94560"/></svg>',
+  };
+}
+
+function createLensLayer(scene: Scene): LensLayerData {
+  // On top, so it changes everything already in the scene.
+  const top = scene.layers.reduce((z, l) => Math.max(z, l.zIndex + 1), 0);
+  return {
+    ...makeBase(scene, 'Lens', top),
+    type: 'lens',
+    width: 360,
+    height: 360,
+    ...LENS_DEFAULTS,
+    ring: LENS_DEFAULTS.ring && { ...LENS_DEFAULTS.ring },
   };
 }
 
@@ -209,6 +223,10 @@ export function AddLayerDialog({ open, onClose }: { open: boolean; onClose: () =
           <button className="dialog-option" onClick={() => addAndClose(createSvgLayer(scene))}>
             <span className="dialog-icon shape-icon-svg"></span>
             <span>SVG</span>
+          </button>
+          <button className="dialog-option" onClick={() => addAndClose(createLensLayer(scene))}>
+            <span className="dialog-icon">L</span>
+            <span>Lens</span>
           </button>
         </div>
         <h4 className="dialog-section-label">Shapes</h4>

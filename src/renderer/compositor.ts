@@ -1,9 +1,10 @@
-import type { Composition } from '../types';
+import type { Composition, Scene } from '../types';
 import type { MediaCache } from './media-cache';
-import type { VideoCache } from './video-cache';
-import { drawScene, drawSceneBackground } from './draw';
+import type { PreparedVideoFrames } from './draw-video';
+import { drawScene } from './draw';
 import { drawTransition } from './transitions';
 import { applyShake, applyScenePostFx, hasShake } from './scene-fx';
+import { release, renderSceneSurface, sceneNeedsSurface } from './scene-surface';
 
 export function getTotalFrames(composition: Composition): number {
   return composition.scenes.reduce((sum, s) => sum + s.durationFrames, 0);
@@ -32,12 +33,32 @@ export function resolveFrame(
   };
 }
 
+/**
+ * The transition playing at this frame of a scene, if any. Transitions run
+ * over the outgoing scene's last frames and show the incoming scene frozen
+ * at its frame 0.
+ */
+export function transitionAt(
+  composition: Composition,
+  sceneIndex: number,
+  frameInScene: number,
+): { incoming: Scene; progress: number } | null {
+  const scene = composition.scenes[sceneIndex];
+  const incoming = composition.scenes[sceneIndex + 1];
+  const duration = scene.transitionDurationFrames || 0;
+  const start = scene.durationFrames - duration;
+  if (!incoming || scene.transition === 'none' || scene.transition === 'cut' || duration <= 0 || frameInScene < start) {
+    return null;
+  }
+  return { incoming, progress: (frameInScene - start) / duration };
+}
+
 export function drawCompositionFrame(
   ctx: CanvasRenderingContext2D,
   composition: Composition,
   globalFrame: number,
   mediaCache: MediaCache,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   const { width, height, fps } = composition.output;
   const { sceneIndex, frameInScene } = resolveFrame(composition, globalFrame);
@@ -47,17 +68,7 @@ export function drawCompositionFrame(
   }
   const scene = composition.scenes[sceneIndex];
 
-  // Check if we're in a transition zone at the end of this scene
-  const nextScene = composition.scenes[sceneIndex + 1];
-  const transitionDuration = scene.transitionDurationFrames || 0;
-  const transitionStart = scene.durationFrames - transitionDuration;
-
-  const isInTransition =
-    nextScene &&
-    scene.transition !== 'none' &&
-    scene.transition !== 'cut' &&
-    transitionDuration > 0 &&
-    frameInScene >= transitionStart;
+  const transition = transitionAt(composition, sceneIndex, frameInScene);
 
   // Camera shake displaces everything, so it wraps the whole scene draw —
   // including transitions — while the overlay FX go on top afterwards.
@@ -65,17 +76,20 @@ export function drawCompositionFrame(
   ctx.save();
   if (shake) applyShake(ctx, shake, frameInScene, fps, width, height);
 
-  if (isInTransition) {
-    const progress = (frameInScene - transitionStart) / transitionDuration;
-
-    drawSceneBackground(ctx, nextScene, width, height, mediaCache);
-
+  if (transition) {
+    // Draws both scenes, backgrounds included.
     drawTransition(
-      ctx, scene, nextScene, frameInScene, progress,
-      scene.transition, width, height, mediaCache, fps, videoCache,
+      ctx, scene, transition.incoming, frameInScene, transition.progress,
+      scene.transition, width, height, mediaCache, fps, videoFrames, scene.transitionParams,
     );
+  } else if (sceneNeedsSurface(scene)) {
+    // Drawn whole into a surface, then onto the target, so the shake and the
+    // preview's pan/zoom apply to the finished scene.
+    const surface = renderSceneSurface(scene, frameInScene, width, height, mediaCache, fps, videoFrames);
+    ctx.drawImage(surface, 0, 0);
+    release(surface);
   } else {
-    drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
+    drawScene(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
   }
 
   ctx.restore();

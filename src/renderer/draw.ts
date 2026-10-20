@@ -1,18 +1,19 @@
-import type { Scene, Layer, ClipPathDef, BoxShadow } from '../types';
+import type { Scene, Layer, ClipPathDef, BoxShadow, ResolvedTransform } from '../types';
 import type { MediaCache } from './media-cache';
-import type { VideoCache } from './video-cache';
+import type { PreparedVideoFrames } from './draw-video';
 import { resolveLayerTransform } from './interpolation';
 import { buildFilterString } from './effects';
 import {
   getFx, fxEnv, hasBitmapFx, fxPadding, applyReveals, compositeLayerFx,
 } from './layer-fx';
 import { createCanvasGradient } from './gradient';
-import { evaluateMotionPath } from './motion-path';
+import { motionPathAt } from './motion-path';
 import { drawTextLayer } from './draw-text';
 import { drawShapeLayer } from './draw-shape';
 import { drawImageLayer } from './draw-image';
 import { drawVideoLayer } from './draw-video';
 import { drawSvgLayer } from './draw-svg';
+import { drawLensLayer } from './lens';
 
 /**
  * Draw all layers of a scene at the given frame.
@@ -26,7 +27,7 @@ export function drawSceneLayers(
   _height: number,
   mediaCache: MediaCache,
   fps: number = 30,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   // Sort by zIndex (lowest first = drawn first = behind)
   const sorted = [...scene.layers]
@@ -36,6 +37,15 @@ export function drawSceneLayers(
   for (const layer of sorted) {
     // Check if layer is active at this frame
     if (frameInScene < layer.startFrame || frameInScene >= layer.endFrame) {
+      continue;
+    }
+
+    // A lens changes what is already drawn beneath it, so it needs `ctx` to
+    // be a scene surface (sceneNeedsSurface routes such scenes through one).
+    // It takes no FX and never echoes.
+    if (layer.type === 'lens') {
+      const frameInLayer = frameInScene - layer.startFrame;
+      drawLensLayer(ctx, layer, resolveLayerAt(layer, frameInLayer), frameInLayer);
       continue;
     }
 
@@ -51,14 +61,14 @@ export function drawSceneLayers(
           const pastFrame = frameInScene - step * echo.frameGap;
           if (pastFrame < layer.startFrame) continue;
           drawLayerAtFrame(
-            ctx, layer, pastFrame, mediaCache, fps, videoCache,
+            ctx, layer, pastFrame, mediaCache, fps, videoFrames,
             Math.pow(echo.decay, step) * echoEnv,
           );
         }
       }
     }
 
-    drawLayerAtFrame(ctx, layer, frameInScene, mediaCache, fps, videoCache, 1);
+    drawLayerAtFrame(ctx, layer, frameInScene, mediaCache, fps, videoFrames, 1);
   }
 }
 
@@ -72,23 +82,12 @@ function drawLayerAtFrame(
   frameInScene: number,
   mediaCache: MediaCache,
   fps: number,
-  videoCache: VideoCache | undefined,
+  videoFrames: PreparedVideoFrames | undefined,
   alphaMultiplier: number,
 ): void {
   const frameInLayer = frameInScene - layer.startFrame;
-  const resolved = resolveLayerTransform(layer, frameInLayer);
+  const resolved = resolveLayerAt(layer, frameInLayer);
   const layerDuration = layer.endFrame - layer.startFrame;
-
-  // Motion path override — replaces x/y (and optionally rotation)
-  if (layer.motionPath && layer.motionPath.points.length >= 2) {
-    const t = layerDuration > 0 ? frameInLayer / layerDuration : 0;
-    const pos = evaluateMotionPath(layer.motionPath, t);
-    resolved.x = pos.x;
-    resolved.y = pos.y;
-    if (layer.motionPath.alignToPath) {
-      resolved.rotation = (pos.angle * 180) / Math.PI;
-    }
-  }
 
   // Zoom reveal runs here, not in compositeLayerFx, because it writes two
   // values that are read further down this function and nowhere else:
@@ -171,7 +170,7 @@ function drawLayerAtFrame(
     const offCtx = offscreen.getContext('2d');
     if (offCtx) {
       offCtx.translate(fxPad, fxPad);
-      drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+      drawLayer(offCtx, layer, resolved, frameInLayer, mediaCache, fps, videoFrames);
       layerCanvas = offscreen;
     }
   }
@@ -183,7 +182,7 @@ function drawLayerAtFrame(
   // reveal's own alpha (pixelate `fade`) dims the shadow with the layer.
   let revealed = layerCanvas;
   if (layerCanvas) {
-    const reveal = applyReveals(layerCanvas, layer.layerFx, frameInLayer, layerDuration);
+    const reveal = applyReveals(layerCanvas, layer.layerFx, frameInLayer, layerDuration, fxPad);
     revealed = reveal.bitmap;
     // Multiplied here rather than at the globalAlpha line above only because
     // the bitmap does not exist yet up there; nothing has drawn in between.
@@ -202,10 +201,24 @@ function drawLayerAtFrame(
     );
   } else {
     // Dispatch to type-specific drawer
-    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoCache);
+    drawLayer(ctx, layer, resolved, frameInLayer, mediaCache, fps, videoFrames);
   }
 
   ctx.restore();
+}
+
+/** A layer's transform at a frame: keyframes, then the motion path, which replaces x/y (and optionally rotation). */
+export function resolveLayerAt(layer: Layer, frameInLayer: number): ResolvedTransform {
+  const resolved = resolveLayerTransform(layer, frameInLayer);
+  if (layer.motionPath && layer.motionPath.points.length >= 2) {
+    const pos = motionPathAt(layer.motionPath, frameInLayer, layer.endFrame - layer.startFrame);
+    resolved.x = pos.x;
+    resolved.y = pos.y;
+    if (layer.motionPath.alignToPath) {
+      resolved.rotation = (pos.angle * 180) / Math.PI;
+    }
+  }
+  return resolved;
 }
 
 /**
@@ -255,8 +268,8 @@ function drawLayer(
   resolved: import('../types').ResolvedTransform,
   frameInLayer: number,
   mediaCache: MediaCache,
-  fps: number,
-  videoCache?: VideoCache,
+  _fps: number,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   switch (layer.type) {
     case 'text':
@@ -269,13 +282,14 @@ function drawLayer(
       drawImageLayer(ctx, layer, resolved, frameInLayer, mediaCache);
       break;
     case 'video':
-      if (videoCache) {
-        drawVideoLayer(ctx, layer, resolved, frameInLayer, fps, videoCache);
-      }
+      if (videoFrames) drawVideoLayer(ctx, layer, resolved, videoFrames);
       break;
     case 'svg':
       drawSvgLayer(ctx, layer, resolved);
       break;
+    case 'lens':
+      break; // drawn by drawSceneLayers, which hands it the surface
+
   }
 }
 
@@ -399,9 +413,9 @@ export function drawScene(
   height: number,
   mediaCache: MediaCache,
   fps: number = 30,
-  videoCache?: VideoCache,
+  videoFrames?: PreparedVideoFrames,
 ): void {
   drawSceneBackground(ctx, scene, width, height, mediaCache);
 
-  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoCache);
+  drawSceneLayers(ctx, scene, frameInScene, width, height, mediaCache, fps, videoFrames);
 }

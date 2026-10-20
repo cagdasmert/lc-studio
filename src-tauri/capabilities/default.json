@@ -9,6 +9,9 @@
     "dialog:default",
     "fs:default",
     "fs:allow-resource-read-recursive",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-copy-file",
     {
       "identifier": "http:default",
       "allow": [

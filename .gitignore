@@ -29,3 +29,6 @@ dist-ssr
 # Auto-match model — fetched by `npm run fetch-models`, not committed
 src-tauri/resources/models/*.onnx
 src-tauri/resources/models/*.part
+
+# Generated test media and e2e outputs — `node scripts/e2e/*.mjs` recreates them
+test-media/

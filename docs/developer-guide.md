@@ -72,19 +72,32 @@ src/                              # React frontend
     draw-text.ts                  # Text rendering (word wrap, stroke, shadow)
     draw-shape.ts                 # Shape rendering (rect, circle, ellipse, line)
     draw-image.ts                 # Image rendering (fit modes, border radius)
-    draw-video.ts                 # Video layer rendering (frame-accurate seek)
-    video-cache.ts                # HTMLVideoElement management + seek cache
+    draw-video.ts                 # Draws the prepared video frame (cover, clipped)
+    video-time.ts                 # sourceTimeFor, collectVideoDraws
+    video-frames.ts               # VideoFrameCache (WebCodecs via mediabunny), prepareVideoFrames
+    motion-path.ts                # Motion paths: easing, per-segment / constant-speed timing
     effects.ts                    # CSS filter string builder
     layer-fx.ts                   # Layer FX: reveal phase + decoration compositing
+    fx-disintegrate.ts            # Disintegrate reveal, written straight into a pixel buffer
+    fx-decrypt.ts                 # Decrypt reveal: cells of bitmap glyphs resolving into the layer
+    fx-wipe-edge.ts               # The wipe reveal's glowing front and sparks
+    glyphs.ts                     # 5×5 bitmap glyph sets (RAMP, CIPHER, BINARY) and drawGlyph
+    lens.ts                       # Lens layers: magnify, pixelate, dither, ascii over what's below
+    scene-vhs.ts                  # VHS scene FX, applied to the scene surface
+    scene-vhs-gl.ts               # VHS tube curvature (WebGL2)
+    lens-gl.ts                    # Glass (refract) and ripple lens modes (WebGL2)
+    lens-ripple.ts                # Which ripple impulses are live at a frame
+    gl/                           # WebGL2 context, runPassInto, uniforms, GPU hash, transition shaders
     scene-fx.ts                   # Scene FX: grain, vignette, scanlines, shake
     fx-envelope.ts                # FX timing window → single 0→1→0 scalar (pure)
     fx-geometry.ts                # Slice band ordering and staggered progress (pure)
     noise.ts                      # Deterministic hash/noise — never Math.random()
     transitions.ts                # 12 scene transition implementations
+    scene-surface.ts              # Scene surfaces and the full-frame canvas pool
     compositor.ts                 # Frame resolver + composition drawer
     capture.ts                    # Render pipeline (canvas → pixels → FFmpeg)
     media-cache.ts                # Image preloading and caching (ImageBitmap)
-    audio.ts                      # AudioEngine (Web Audio API)
+    audio.ts                      # AudioEngine: preview playback on the export's timing
   components/
     RenderPanel.tsx               # FFmpeg status, render button, progress bar
     storyboard/
@@ -105,6 +118,11 @@ src/                              # React frontend
     useKeyboardShortcuts.ts       # Global keyboard shortcut handler
   lib/
     tauri-bridge.ts               # Tauri invoke wrappers for render commands
+    media-bytes.ts                # Reads media files (plugin-fs) into Blobs, cached per source
+    audio-tracks.ts               # Audio timing shared by export and preview; buildAudioTracks
+    video-support.ts              # Can this webview decode a video? (Render panel warning)
+    easing-options.ts             # Grouped easing list for menus
+    e2e.ts                        # Debug-only scripted acceptance runs (LCS_E2E)
     dialog.ts                     # Save file dialog wrapper
     file-utils.ts                 # File picker + blob URL conversion
     project-io.ts                 # Project save/load (.lcs.json format)
@@ -133,11 +151,12 @@ src-tauri/                        # Rust backend
   src/
     main.rs                       # Desktop entry point
     lib.rs                        # Tauri app builder + plugin registration
+    e2e.rs                        # Debug-only LCS_E2E hook for scripts/e2e/
     render/
       mod.rs                      # Module declaration
       job.rs                      # RenderState (Mutex<Option<FfmpegProcess>>)
       commands.rs                 # Tauri commands (check, start, write, finish, cancel)
-      ffmpeg.rs                   # FFmpeg process spawning + audio mixing
+      ffmpeg.rs                   # FFmpeg args, audio filter graph, process + stderr
   tauri.conf.json                 # Tauri config (window, build, bundle)
   capabilities/default.json       # Permissions (core, opener, dialog, fs, http)
   Cargo.toml                      # Rust dependencies
@@ -171,13 +190,23 @@ User interaction → Zustand store → React re-render → Canvas draw
 4. Calls `startRender()` → Rust spawns FFmpeg with rawvideo input on stdin
 5. For each frame:
    - `drawCompositionFrame()` resolves the current scene and frame
-   - Checks for transition zones between scenes
+   - Checks for transition zones between scenes; a transition draws both scenes itself (see Scene Surfaces)
    - `drawSceneLayers()` iterates layers sorted by z-index
    - Each layer: resolve keyframe interpolation → apply transform matrix → draw
    - `ctx.getImageData()` extracts RGBA pixels
    - `writeFrame()` sends `Uint8Array` to Rust via Tauri IPC
    - Rust writes bytes to FFmpeg's stdin pipe
 6. `finishRender()` closes stdin, FFmpeg finalizes the MP4
+
+### Scene Surfaces
+
+`renderSceneSurface()` (`src/renderer/scene-surface.ts`) draws a whole scene, background and layers, into its own composition-sized canvas with an identity transform. Transitions render the outgoing scene (at its current frame) and the incoming one (at frame 0) into two surfaces and composite them, so each keeps its own background. The result is drawn onto the target under whatever transform it has: the camera shake, and in the preview the workspace's pan/zoom. That means a transition in the preview is rendered at composition resolution and then scaled, so it is slightly soft above 100% zoom.
+
+Zoom transitions are the exception: they draw both scenes straight onto the target, as they always have, because scaling a pre-rendered surface would resample it and change their output. They switch to surfaces only when a scene needs one.
+
+`sceneNeedsSurface(scene)` says whether a scene must go through a surface even outside a transition, because something in it reads back what is drawn beneath it: a visible lens layer, or a VHS scene FX that changes any pixel. `renderSceneSurface` applies VHS to the surface itself, after the scene is drawn and before the surface goes onto the target, so the order for such a scene is: draw the scene, apply VHS, draw the surface under the shake, then the overlay FX. The compositor then draws such a scene into a surface and the surface onto the target, under the shake and the preview's pan/zoom.
+
+Surfaces are full-frame, so never allocate one per frame: take canvases from the pool with `acquire(w, h)` and hand them back with `release(canvas)`. `renderSceneSurface` acquires; its caller releases.
 
 ### Layer Transform Order
 
@@ -217,12 +246,19 @@ The `zundo` temporal middleware wraps the store to provide undo/redo, tracking o
 
 ### Adding a New Layer Type
 
-1. Define the data interface in `src/types/scene.ts` extending `LayerBase`
-2. Add the type to the `Layer` discriminated union
-3. Create a draw function in `src/renderer/draw-<type>.ts`
-4. Add a case to the `drawLayer` switch in `src/renderer/draw.ts`
-5. Add a creation function and UI section in the relevant components
-6. Add a property section in `PropertyInspector.tsx`
+1. Define the data interface in `src/types/scene.ts` extending `LayerBase`, add the type to `LayerType` and the `Layer` union, and re-export it from `src/types/index.ts`
+2. Create a draw function in `src/renderer/draw-<type>.ts`
+3. Add a case to the `drawLayer` switch in `src/renderer/draw.ts`
+4. Add a creation function and a button in `AddLayerDialog.tsx`, and an icon in `LAYER_TYPE_ICONS` (`LayerPanel.tsx`)
+5. Add a property section in `PropertyInspector.tsx`, and hide the shared sections the type ignores
+6. List its keyframable properties in `getAnimatableProperties` (`KeyframeEditor.tsx`)
+7. If the AI generator should make it, describe it in `prompts.ts` and validate it in `parse.ts` (`GeneratedLayer`, `convertGeneratedScenes`)
+
+A layer that reads what is under it, like the lens (`src/renderer/lens.ts`),
+is drawn by `drawSceneLayers` itself in z-order, not by `drawLayer`, and makes
+`sceneNeedsSurface` true so the scene is drawn into a surface it can read back.
+The lens's mode list (`LENS_MODES`) mirrors `LENS_SPECS` in `fx-schema.ts`, and
+`fx-kinds.test.ts` keeps them in sync.
 
 ### Adding a New Easing Function
 
@@ -232,9 +268,11 @@ The `zundo` temporal middleware wraps the store to provide undo/redo, tracking o
 
 ### Adding a New Transition
 
-1. Add the name to `TransitionType` union in `src/types/scene.ts`
-2. Implement the transition in `src/renderer/transitions.ts` inside `drawTransition()`
-3. Add it to the `TRANSITIONS` array in `PropertyInspector.tsx`
+1. Add the name to the `TransitionType` union in `src/types/scene.ts`
+2. Add it, with its label, to `TRANSITION_LABELS` in `src/lib/transition-options.ts`. The inspector, the AI prompt and the AI parser all read that list, so nothing else needs to know about it
+3. Implement it in `src/renderer/transitions.ts`, in `compositeSurfaces()`: it gets the outgoing and incoming scene surfaces and the progress (0–1). Add a node-canvas test to `transitions.test.ts`
+
+A shader transition instead goes in `src/renderer/gl/transitions/`: add its source, list it in `GL_TRANSITION_TYPES` and (for a gl-transitions shader) `GL_TRANSITION_SOURCES` in `index.ts`, add it to `GPU_TRANSITIONS` in `transition-options.ts`, and give its float uniforms a `TRANSITION_SPECS` entry in `fx-schema.ts`. `fx-kinds.test.ts` checks those lists and defaults against each other, and `scripts/e2e/fx-gl.mjs` (A5.3) checks its first frame, determinism and last frame in the app. See "Adding a GL effect".
 
 ### Adding a New Layer FX
 
@@ -256,9 +294,20 @@ The inspector is schema-driven, so no UI code is needed — an entry in
    - **Reveal** (geometry driven by the envelope): write an
      `applyX(src, fx, env): HTMLCanvasElement` and add a case to
      `applyReveals`. Reveals rewrite the bitmap and chain in list order.
+     A reveal that works per pixel or per grain, like disintegrate, lives in
+     its own module (`fx-disintegrate.ts`): read the bitmap once with
+     `getImageData`, write into an `ImageData` through a `Uint32Array` view, and
+     `putImageData` once. Never one `fillRect` per grain.
 4. Register the type: add it to `BITMAP_FX` if it needs the layer bitmap, and to
    `REVEAL_FX` if it is a reveal. `fx-kinds.test.ts` enforces that `REVEAL_FX`
    matches the `kind: 'reveal'` specs and that every type is accounted for.
+   An effect that draws characters uses the bitmap glyphs in `glyphs.ts`
+   (`drawGlyph` into a `Uint32Array` view), never `fillText`: fonts differ
+   between webviews. `applyReveals` gets the bitmap's padding as `pad`, for
+   anything that must stay inside the layer box, such as wipe sparks.
+   New optional fields on an existing effect must be off when absent, so old
+   projects render as before; the inspector shows a missing field at its spec
+   default.
 5. If the effect reaches outside the layer box, add a `fxPadding` case.
    Decorations contribute to the decoration max; reveals that displace content
    contribute to the displacement term, which is added on top. **Never derive
@@ -275,6 +324,39 @@ Two rules that are not optional:
 
 Keep pure geometry in `fx-envelope.ts` or `fx-geometry.ts` — those are DOM-free
 so they can be unit-tested under Vitest's `node` environment.
+
+### Adding a GL effect
+
+Everything WebGL2 goes through `src/renderer/gl/`:
+
+- `context.ts` — `getGl()`: one shared WebGL2 context on a detached canvas, created lazily; null when WebGL2 is missing, the context is lost (programs are rebuilt after a restore), or the e2e job option `disableGl: true` is set.
+- `pass.ts` — `runPassInto(target, dx, dy, w, h, program, inputs, uniforms, keys?)`: uploads the inputs as textures (premultiplied, flipped so uv (0,0) is the bottom-left), draws one full-screen triangle into a w×h viewport, and `drawImage`s the result onto the 2D `target` in the same task, under its transform. It returns false when GL is unavailable; every caller has a fallback. Programs are cached by name; the GL canvas only grows.
+- `uniforms.ts` — DOM-free: uniform value types, `parseUniformDefaults` for gl-transitions' `uniform <type> <name>; // = value` comments (ivec2 and vec4 included), `withOverrides` for `transitionParams`.
+- `hash.glsl.ts` — `lcsHash1…4`, an exact GLSL ES 3.00 port of `hash` in `noise.ts` (A5.2 checks it against the CPU over a 64×64 grid).
+
+lc-studio's own shaders are GLSL ES 3.00 (`#version 300 es`, `in vec2 v_uv`, `out vec4 o_color`) and follow one uniform convention: `u_progress`, `u_frame` (int), `u_fps`, `u_resolution`, `u_seed`, plus the effect's own parameters. Time never comes from a clock. gl-transitions shaders are GLSL ES 1.00 and run inside `wrapGlTransition`.
+
+Keep the logic that decides things in plain TypeScript with unit tests (`gpu-features.ts` for the Render panel's warning, `lens-ripple.ts` for which impulses are live, `uniforms.ts`), and check GL output in `scripts/e2e/fx-gl.mjs`, since node-canvas has no WebGL.
+
+Uploading a 1080×1920 canvas costs about 5 ms in WKWebView, far more than drawing. Pass `keys` to `runPassInto` for inputs that don't change between frames (a transition's frozen incoming scene) so their textures are reused, and `textureHolds()` tells you whether you can skip producing the input at all.
+
+New effects that need GL must be listed by `gpuFeatureUses()` so the Render panel can warn when WebGL2 is missing.
+
+### Pixel loops in WKWebView
+
+Full-frame pixel loops (VHS) run much slower in JavaScriptCore than in V8 if
+written as one big loop. Measured on a 1080×1920 VHS frame:
+
+- Keep each pass in its own small function. Inlined into one large function,
+  the saturation pass took about 40 ms; on its own, about 4.
+- Read and write whole pixels through an `Int32Array` view, not a
+  `Uint32Array`: an opaque pixel read through a Uint32 view is ≥ 2³¹, which
+  JavaScriptCore holds as a double (66 vs 42 ms for the same loop).
+- Use `hash4` from `noise.ts` in per-pixel loops; it returns exactly what
+  `hash` does, without the rest-parameter array.
+
+Time it in the app, not in node or Chromium: `applyVhs` took 17 ms in Chromium
+when it cost 70 in WKWebView.
 
 ### Adding a New Scene FX
 
@@ -296,6 +378,31 @@ logic is split out of `layer-fx.ts`. The one exception is
 non-empty destination; that condition is what catches effects wrongly erasing
 the scene rather than their own bitmap.
 
+Rust tests cover the FFmpeg argument and audio-graph builders; two of them run FFmpeg itself when it is on PATH:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+### Acceptance scripts (`scripts/e2e/`)
+
+Each script generates its test media into `test-media/` (gitignored), writes small `.lcs` projects, and runs the debug app with `LCS_E2E=<script.json>`. On startup the frontend runs the script's jobs in the real webview (`src/lib/e2e.ts`), writes `script.result.json` and quits. The script then inspects the outputs with ffprobe, ffmpeg and node-canvas and prints PASS/FAIL per check. It builds the debug binary and starts Vite if nothing is on :1420; the app window opens while it runs.
+
+```bash
+node scripts/e2e/f2-export.mjs    # A2.1–A2.3: audio in exports
+node scripts/e2e/f1-video.mjs     # A1.1–A1.7: video frames in export and preview
+node scripts/e2e/f2-preview.mjs   # A2.5: preview audio matches the export
+node scripts/e2e/project-io.mjs   # Save, asset import, and the fs scope boundary
+node scripts/e2e/fx-regression.mjs  # FX pack A0.5: exports match a baseline, pixel for pixel
+node scripts/e2e/fx1-disintegrate.mjs  # FX pack P1: disintegrate in real exports, and its cost per frame
+node scripts/e2e/fx2-decrypt-wipe.mjs  # FX pack P2: decrypt and the wipe edge in real exports
+node scripts/e2e/fx3-lens.mjs  # FX pack P3: lens preview matches export (A3.6), all four modes exported
+node scripts/e2e/fx4-vhs.mjs   # FX pack P4: VHS in real exports, with shake, grain and a transition
+node scripts/e2e/fx-gl.mjs     # FX pack P5: A5.1–A5.7, the WebGL2 pass, its transitions, lenses and fallback
+```
+
+`fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.
+
 ## Tauri IPC Protocol
 
 Communication between frontend and Rust uses Tauri's `invoke` API:
@@ -307,6 +414,8 @@ Communication between frontend and Rust uses Tauri's `invoke` API:
 | `write_frame` | TS → Rust | `Uint8Array` (raw RGBA) | Pipe one frame to FFmpeg stdin |
 | `finish_render` | TS → Rust | — | Close stdin, wait for FFmpeg exit |
 | `cancel_render` | TS → Rust | — | Kill FFmpeg process |
+| `e2e_script` | TS → Rust → TS | — / String or null | Debug builds: the `LCS_E2E` script, if any |
+| `e2e_finish` | TS → Rust | result JSON | Debug builds: write the e2e results and quit |
 
 The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-copy transfer of frame data.
 
@@ -316,26 +425,31 @@ The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-
 |--------|-----------|-------------|---------|
 | Opener | `tauri-plugin-opener` | (bundled) | Open URLs/files in system apps |
 | Dialog | `tauri-plugin-dialog` | `@tauri-apps/plugin-dialog` | Native save/open file dialogs |
-| FS | `tauri-plugin-fs` | `@tauri-apps/plugin-fs` | Read local files for media import |
+| FS | `tauri-plugin-fs` | `@tauri-apps/plugin-fs` | Read media; save projects, copy imported assets and fonts, write PNG frames |
 | HTTP | `tauri-plugin-http` | `@tauri-apps/plugin-http` | HTTP requests via Rust (CORS bypass for local AI services) |
 
-Permissions are declared in `src-tauri/capabilities/default.json`. The HTTP plugin is scoped to `http://localhost:*`, `http://127.0.0.1:*`, and `https://*`.
+Permissions are declared in `src-tauri/capabilities/default.json`. The FS plugin may read, `mkdir`, `write_file`, `write_text_file` and `copy_file`, but only inside its runtime scope: app directories, paths picked in a dialog, and project folders granted by `allow_project_dir` (`node scripts/e2e/project-io.mjs` checks that a write outside them is refused). Any new plugin-fs command the frontend calls needs its permission added there. The HTTP plugin is scoped to `http://localhost:*`, `http://127.0.0.1:*`, and `https://*`.
 
 ## FFmpeg Arguments
 
 Video-only render:
 ```
-ffmpeg -y -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
+ffmpeg -y -hide_banner -nostats -loglevel error \
+  -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
   -c:v libx264 -pix_fmt yuv420p -preset medium -crf 23 -movflags +faststart \
-  -an -shortest output.mp4
+  -an output.mp4
 ```
 
-With audio tracks:
+With audio tracks (one `-ss/-t/-i` per track; `-t` is the output length × playback rate):
 ```
-ffmpeg -y -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
-  -ss {start} -t {duration} -i audio1.mp3 \
-  -ss {start} -t {duration} -i audio2.wav \
+ffmpeg -y -hide_banner -nostats -loglevel error \
+  -f rawvideo -pix_fmt rgba -s {w}x{h} -r {fps} -i pipe:0 \
+  -ss 10 -t 2 -i music.wav \
+  -ss 0 -t 2.5 -i tone.wav \
   -c:v libx264 -pix_fmt yuv420p -preset medium -crf 23 -movflags +faststart \
-  -filter_complex "[1]volume=0.80[a0];[2]volume=1.00[a1];[a0][a1]amix=inputs=2:duration=shortest" \
-  -c:a aac -b:a 192k -shortest output.mp4
+  -filter_complex "[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=1,adelay=delays=0:all=1[a0];\
+[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=1,afade=t=in:st=0:d=0.5,adelay=delays=2500:all=1[a1];\
+[a0][a1]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,apad=whole_dur=5,atrim=end=5[aout]" \
+  -map 0:v -map "[aout]" -c:a aac -b:a 192k -shortest output.mp4
 ```
+`apad=whole_dur` and `atrim` make the mix exactly as long as the video (here 5 s = total frames / fps). An endless `apad` with only `-shortest` let the audio run up to half a second past the video when frames arrived at render pace.
