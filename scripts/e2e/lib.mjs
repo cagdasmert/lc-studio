@@ -81,9 +81,19 @@ export function workDir(name) {
 
 // ── Running the app ──────────────────────────────────
 
-const devServerUp = () => fetch('http://localhost:1420').then(() => true, () => false);
+export const devServerUp = () => fetch('http://localhost:1420').then(() => true, () => false);
+export const DEBUG_BIN = join(ROOT, 'src-tauri', 'target', 'debug', 'local-content-studio');
 
-async function ensureDevServer() {
+let built = false;
+/** Build the debug binary, once per script. */
+export function buildDebug() {
+  if (built) return;
+  execFileSync('cargo', ['build', '--manifest-path', join(ROOT, 'src-tauri', 'Cargo.toml')], { stdio: 'inherit' });
+  built = true;
+}
+
+/** Start Vite on :1420 unless something is already there; returns the process it started, or null. */
+export async function ensureDevServer() {
   if (await devServerUp()) return null;
   const vite = spawn(join(ROOT, 'node_modules', '.bin', 'vite'), [], { cwd: ROOT, stdio: 'ignore' });
   for (let i = 0; i < 100; i++) {
@@ -101,10 +111,10 @@ export async function runApp(dir, jobs, timeoutMs = 15 * 60_000) {
   writeFileSync(script, JSON.stringify({ jobs }, null, 2));
   rmSync(resultFile, { force: true });
 
-  execFileSync('cargo', ['build', '--manifest-path', join(ROOT, 'src-tauri', 'Cargo.toml')], { stdio: 'inherit' });
+  buildDebug();
   const vite = await ensureDevServer();
   try {
-    const app = spawn(join(ROOT, 'src-tauri', 'target', 'debug', 'local-content-studio'), [], {
+    const app = spawn(DEBUG_BIN, [], {
       env: { ...process.env, LCS_E2E: script },
       stdio: 'inherit',
     });
@@ -118,6 +128,38 @@ export async function runApp(dir, jobs, timeoutMs = 15 * 60_000) {
   }
   if (!existsSync(resultFile)) throw new Error('the app exited without writing results');
   return JSON.parse(readFileSync(resultFile, 'utf8'));
+}
+
+/**
+ * Run the debug app as a command-line tool (src-tauri/src/cli.rs) with `args`.
+ * The debug build loads its frontend from Vite, so start one first
+ * (ensureDevServer) unless the run is meant to find none. Returns the exit
+ * code, stdout parsed as the result (or null), the stderr lines with the ms
+ * each arrived after launch, and the wall-clock ms.
+ */
+export async function runCli(args, { env = {}, timeoutMs = 15 * 60_000 } = {}) {
+  buildDebug();
+  const t0 = performance.now();
+  const app = spawn(DEBUG_BIN, args, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+  let partial = '';
+  const lines = [];
+  app.stdout.on('data', (d) => { stdout += d; });
+  app.stderr.on('data', (d) => {
+    stderr += d;
+    const parts = (partial + d).split('\n');
+    partial = parts.pop();
+    for (const text of parts) lines.push({ ms: performance.now() - t0, text });
+  });
+  const code = await new Promise((res, rej) => {
+    const timer = setTimeout(() => { app.kill(); rej(new Error(`the app did not exit within ${timeoutMs / 1000} s`)); }, timeoutMs);
+    app.on('close', (c, signal) => { clearTimeout(timer); res(c ?? signal); });
+    app.on('error', (e) => { clearTimeout(timer); rej(e); });
+  });
+  let result = null;
+  try { result = JSON.parse(stdout); } catch { /* not JSON: --help, or a crash */ }
+  return { code, stdout, stderr, result, lines, ms: performance.now() - t0 };
 }
 
 // ── Inspecting outputs ───────────────────────────────

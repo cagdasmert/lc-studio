@@ -17,6 +17,7 @@ import { AISettings } from './components/storyboard/AISettings';
 import { KeyframeEditor } from './components/storyboard/KeyframeEditor';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { saveProject, saveProjectAs, openProject } from './lib/project-io';
+import { cliActive, runCliIfRequested } from './lib/cli';
 import './App.css';
 
 const AUTO_SAVE_INTERVAL = 60_000; // 60 seconds
@@ -76,7 +77,7 @@ function App() {
   useEffect(() => {
     const timer = setInterval(async () => {
       const { composition: comp, projectPath: path, isDirty: dirty } = autoSaveRef.current;
-      if (path && dirty) {
+      if (path && dirty && !cliActive()) {
         try {
           const result = await saveProject(path, comp);
           // Update composition if paths were rewritten during bundling
@@ -91,6 +92,11 @@ function App() {
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(timer);
   }, [markClean, setComposition]);
+
+  // Command-line runs: `local-content-studio render …` (src-tauri/src/cli.rs).
+  useEffect(() => {
+    runCliIfRequested().catch(console.error);
+  }, []);
 
   // Scripted acceptance runs: debug builds started with LCS_E2E (see scripts/e2e/).
   useEffect(() => {

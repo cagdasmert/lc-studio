@@ -8,7 +8,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writeFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import type { ExportFormat, QualityPreset } from '../types';
-import { renderComposition } from '../renderer/capture';
+import { renderProject } from './render-project';
 import { AudioEngine } from '../renderer/audio';
 import { getTotalFrames } from '../renderer/compositor';
 import { MediaBlobCache } from './media-bytes';
@@ -172,11 +172,10 @@ async function runJob(job: E2eJob): Promise<unknown> {
   switch (job.kind) {
     case 'gl':
       return glChecks();
-    case 'render': {
-      const { path, composition } = await openProject(job.project);
-      await renderComposition(composition, job.output, undefined, job.format, job.quality ?? 'medium', path);
+    case 'render':
+      // The command line's render path, so the two can't drift apart.
+      await renderProject({ project: job.project, output: job.output, format: job.format, quality: job.quality ?? 'medium' });
       return undefined;
-    }
     case 'preview': {
       // Open the project in the editor, show each frame, and read the
       // workspace canvas's centre pixel — the composition's centre.

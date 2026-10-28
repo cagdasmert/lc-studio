@@ -289,6 +289,30 @@ The Render Panel (below the canvas) shows the detected FFmpeg version. If FFmpeg
 - **Audio:** AAC at 192kbps (if audio layers are present)
 - **Resolution & FPS:** Matches the composition's output preset (default 1080x1920 @ 30fps)
 
+### From the Command Line
+
+The app binary can also render a project without opening its window, for scripts and agents (such as the `lc-studio-project` skill):
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" render "Spring Launch.lcs" --out "Spring Launch.mp4"
+```
+
+- `<project>` is a `.lcs` folder or the `project.json` inside it.
+- `--out` is the video file. Its extension picks the format (`.mp4`, `.webm`, `.mov`, `.gif`); a path with no extension renders a PNG sequence into that folder. `--format` overrides the extension.
+- `--quality low|medium|high|lossless` (default `medium`), as in the Render panel.
+- `--force` replaces an existing `--out`. Without it, an existing output is refused.
+- `--result <file>` also writes the result to a file. `--timeout <secs>` gives up after that long.
+- `--show` uses the normal visible window. It's for debugging: the window takes focus.
+- `--help` lists the options; `--version` prints the version.
+
+The output is the same as a Render-panel export, frame for frame. The app's window never appears, there's no Dock icon, and it doesn't take focus, so you can keep working. A command-line render is slower than one from the Render panel, about 3.3× on macOS: macOS gives a page nobody can see a lower priority. A 15-second 1080×1920 reel takes about 10 seconds.
+
+The result is one JSON document on stdout: `ok`, `error`, the composition's size, frame count and duration, and any `issues` (such as a video the app can't decode, or GPU effects that fall back). Progress lines go to stderr. The exit code is 0 when the render succeeded, 1 when it ran and failed (for example, FFmpeg isn't installed), and 2 when it never started (a mistyped option, a folder that isn't a project, an output that already exists).
+
+Opening the project in lc-studio while it renders from the command line is fine. The command line never changes the project or the app's recent-projects list.
+
+On Windows, read the result from `--result`, because the app has no console there. On Linux, the app needs a display (run it under `xvfb-run -a` on a machine without one). Both are untested so far.
+
 ## Project Management
 
 ### Saving a Project

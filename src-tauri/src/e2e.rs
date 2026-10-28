@@ -6,8 +6,10 @@
 
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_fs::FsExt;
+
+use crate::cli::CliState;
 
 fn script_path() -> Option<PathBuf> {
     if !cfg!(debug_assertions) {
@@ -17,9 +19,13 @@ fn script_path() -> Option<PathBuf> {
 }
 
 /// The script's JSON, or None on a normal run. Grants the frontend access to
-/// the script's folder, which holds the jobs' projects and outputs.
+/// the script's folder, which holds the jobs' projects and outputs. A
+/// command-line job wins over `LCS_E2E`.
 #[tauri::command]
 pub fn e2e_script<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
+    if app.state::<CliState>().cli.is_some() {
+        return Ok(None);
+    }
     let Some(path) = script_path() else { return Ok(None) };
     let dir = path.parent().ok_or("the e2e script has no folder")?;
     app.fs_scope()
