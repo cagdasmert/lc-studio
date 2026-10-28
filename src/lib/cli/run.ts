@@ -8,8 +8,9 @@ import type { Composition, ExportFormat, QualityPreset } from '../../types';
 import { getTotalFrames } from '../../renderer/compositor';
 import { glAvailable } from '../../renderer/gl/context';
 import { checkFfmpeg } from '../tauri-bridge';
-import { renderProject } from '../render-project';
+import { openForRender, renderProject } from '../render-project';
 import { renderWarnings, type Issue } from './issues';
+import { renderStills, type StillsOptions } from './stills';
 
 /** The job as cli_job sends it: the parsed arguments, already checked by Rust. */
 export interface RenderJob {
@@ -21,7 +22,13 @@ export interface RenderJob {
   format: ExportFormat;
   quality: QualityPreset;
 }
-export type CliJob = RenderJob;
+export interface StillsJob extends StillsOptions {
+  command: 'stills';
+  schema: number;
+  app: string;
+  project: string;
+}
+export type CliJob = RenderJob | StillsJob;
 
 export interface CliResult {
   schema: number;
@@ -68,6 +75,13 @@ async function render(job: RenderJob, result: CliResult, progress: Progress): Pr
   result.data = { output: job.out, format: job.format, quality: job.quality };
 }
 
+async function stills(job: StillsJob, result: CliResult, progress: Progress): Promise<void> {
+  const { path, composition } = await openForRender(job.project);
+  result.composition = summary(composition);
+  result.issues.push(...(await renderWarnings(composition, path)));
+  result.data = await renderStills(composition, path, job, (done, total) => progress(done, total, 'stills'));
+}
+
 export async function runCliJob(job: CliJob): Promise<void> {
   const t0 = performance.now();
   const result: CliResult = {
@@ -110,6 +124,9 @@ export async function runCliJob(job: CliJob): Promise<void> {
     switch (job.command) {
       case 'render':
         await render(job, result, progress);
+        break;
+      case 'stills':
+        await stills(job, result, progress);
         break;
     }
     result.ok = true;

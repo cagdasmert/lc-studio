@@ -305,6 +305,16 @@ The app binary can also render a project without opening its window, for scripts
 - `--show` uses the normal visible window. It's for debugging: the window takes focus.
 - `--help` lists the options; `--version` prints the version.
 
+`stills` draws chosen frames instead of the whole video, plus one contact sheet, to check a project at a glance:
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" stills "Spring Launch.lcs" --out stills
+```
+
+- By default (`--frames auto`) it picks the frames worth looking at: frame 12 (where the hook should already read), each scene once it has settled before its transition, the middle of each transition, the middle of each image morph, and the last frame. `--frames 0,45,90` picks your own frames (counted from 0), and `--frames all` picks every one.
+- It writes `frame-NNNN.png` for each frame, at half size by default (`--scale`, more than 0 and at most 1; at 1 the files are byte-identical to a PNG-sequence render). `sheet.png` puts all of them in a grid, each labelled with its frame number, why it was picked, the time and the scene (`--sheet-scale`, default 0.25). Above 60 frames there's no sheet, only the files.
+- The folder may already exist. Stills replace only their own files.
+
 The output is the same as a Render-panel export, frame for frame. The app's window never appears, there's no Dock icon, and it doesn't take focus, so you can keep working. A command-line render is slower than one from the Render panel, about 3.3× on macOS: macOS gives a page nobody can see a lower priority. A 15-second 1080×1920 reel takes about 10 seconds.
 
 The result is one JSON document on stdout: `ok`, `error`, the composition's size, frame count and duration, and any `issues` (such as a video the app can't decode, or GPU effects that fall back). Progress lines go to stderr. The exit code is 0 when the render succeeded, 1 when it ran and failed (for example, FFmpeg isn't installed), and 2 when it never started (a mistyped option, a folder that isn't a project, an output that already exists).

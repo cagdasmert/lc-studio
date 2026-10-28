@@ -258,7 +258,7 @@ Custom Canvas + FFmpeg pipeline:
 
 ### Command-Line Rendering
 
-`local-content-studio render <project> --out <file|dir>` renders a project with the same renderer, in a hidden window. It prints a JSON result on stdout and exits with 0 (rendered), 1 (ran and failed) or 2 (never started). Agents and scripts use it, including the `lc-studio-project` skill. Frames are identical to a Render-panel export. Hidden renders run about 3.3× slower on macOS, which deprioritises pages nobody can see. Stills, checks and auto-match from the command line are planned (docs/superpowers/specs/2026-10-28-headless-cli-design.md).
+`local-content-studio render <project> --out <file|dir>` renders a project with the same renderer, in a hidden window. It prints a JSON result on stdout and exits with 0 (rendered), 1 (ran and failed) or 2 (never started). Agents and scripts use it, including the `lc-studio-project` skill. Frames are identical to a Render-panel export. Hidden renders run about 3.3× slower on macOS, which deprioritises pages nobody can see. `local-content-studio stills <project> --out <dir>` draws the frames worth checking (the hook, each settled scene, each transition's and morph's middle, the end), or chosen ones, as PNGs plus one labelled contact sheet. Checks and auto-match from the command line are planned (docs/superpowers/specs/2026-10-28-headless-cli-design.md).
 
 ### Visual Storyboard Editor
 

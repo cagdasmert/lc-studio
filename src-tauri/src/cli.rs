@@ -39,14 +39,24 @@ const DRAFT: &str = "this is a draft (build input), not a project — run `lcs.p
 pub const USAGE: &str = "\
 Usage:
   local-content-studio render <project> --out <file|dir> [--format F] [--quality Q] [--force]
+  local-content-studio stills <project> --out <dir> [--frames F] [--scale S] [--sheet-scale S]
   local-content-studio --help | --version
 
   <project>         a .lcs folder, or the project.json inside one
+
+render:
   --out             the video file, or a folder for a PNG sequence
   --format F        mp4 | webm | mov | gif | png-sequence
                     (default: from --out's extension; none means png-sequence)
   --quality Q       low | medium | high | lossless (default: medium)
   --force           replace --out if it exists
+
+stills (writes frame-NNNN.png for each frame and a labelled sheet.png into --out):
+  --frames F        auto (default): the hook, each scene once settled, each transition's
+                    middle, each morph's middle and the last frame; or all; or frame
+                    numbers counted from 0, such as 0,12,90
+  --scale S         size of each frame PNG, more than 0 and at most 1 (default: 0.5)
+  --sheet-scale S   size of each frame on the sheet (default: 0.25)
 
 Common options:
   --result <file>   also write the result JSON to this file
@@ -61,18 +71,30 @@ Exit codes: 0 ran, 1 ran and failed, 2 never ran (usage, not a project, startup)
 #[serde(tag = "command", rename_all = "kebab-case")]
 pub enum Job {
     Render { project: PathBuf, out: PathBuf, format: String, quality: String },
+    #[serde(rename_all = "camelCase")]
+    Stills { project: PathBuf, out: PathBuf, frames: Frames, scale: f64, sheet_scale: f64 },
+}
+
+/// `--frames`: `auto`, `all`, or frame numbers. The frontend, which knows the
+/// video's length, checks that the numbers fall inside it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(untagged)]
+pub enum Frames {
+    Keyword(&'static str),
+    List(Vec<u32>),
 }
 
 impl Job {
     fn name(&self) -> &'static str {
         match self {
             Job::Render { .. } => "render",
+            Job::Stills { .. } => "stills",
         }
     }
 
     fn project(&self) -> &Path {
         match self {
-            Job::Render { project, .. } => project,
+            Job::Render { project, .. } | Job::Stills { project, .. } => project,
         }
     }
 }
@@ -106,13 +128,13 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Launch {
             stderr: String::new(),
             result: None,
         },
-        Some("render") => {
+        Some(command @ ("render" | "stills")) => {
             let mut result = None;
-            match parse_render(args.collect(), &mut result) {
+            match parse_command(command, args.collect(), &mut result) {
                 Ok(cli) => Launch::Cli(cli),
                 Err(message) => Launch::Exit {
                     code: 2,
-                    stdout: failure("render", None, &message, 0),
+                    stdout: failure(command, None, &message, 0),
                     stderr: format!("error: {message}\n\n{USAGE}"),
                     result,
                 },
@@ -134,15 +156,28 @@ pub fn exit_early(code: i32, stdout: &str, stderr: &str, result: Option<&Path>) 
     std::process::exit(code);
 }
 
+/// Options some command takes, beyond the common ones.
+const COMMAND_OPTIONS: &[&str] = &["--out", "--format", "--quality", "--force", "--frames", "--scale", "--sheet-scale"];
+
+fn takes(command: &str, option: &str) -> bool {
+    match command {
+        "render" => matches!(option, "--out" | "--format" | "--quality" | "--force"),
+        "stills" => matches!(option, "--out" | "--frames" | "--scale" | "--sheet-scale"),
+        _ => false,
+    }
+}
+
 /// `--result` is filled in as soon as it's parsed, so a later usage error can still be written there.
-fn parse_render(args: Vec<OsString>, result: &mut Option<PathBuf>) -> Result<Cli, String> {
+fn parse_command(command: &str, args: Vec<OsString>, result: &mut Option<PathBuf>) -> Result<Cli, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("no current folder: {e}"))?;
     let absolute = |p: OsString| {
         let p = PathBuf::from(p);
         if p.is_absolute() { p } else { cwd.join(p) }
     };
-    let (mut project, mut out, mut format, mut quality, mut timeout) = (None, None, None, None, None);
+    let (mut project, mut out, mut timeout) = (None, None, None);
     let (mut force, mut show) = (false, false);
+    // The other options' values, by option.
+    let mut named = std::collections::HashMap::new();
 
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
@@ -154,32 +189,72 @@ fn parse_render(args: Vec<OsString>, result: &mut Option<PathBuf>) -> Result<Cli
         };
         let mut value = || inline.clone().or_else(|| it.next()).ok_or_else(|| format!("{flag} needs a value"));
         match flag.as_str() {
-            "--out" => out = Some(absolute(value()?)),
-            "--format" => format = Some(value()?.to_string_lossy().into_owned()),
-            "--quality" => quality = Some(value()?.to_string_lossy().into_owned()),
             "--result" => *result = Some(absolute(value()?)),
             "--timeout" => {
                 let v = value()?.to_string_lossy().into_owned();
                 let secs = v.parse::<u64>().ok().filter(|&s| s > 0);
                 timeout = Some(Duration::from_secs(secs.ok_or_else(|| format!("--timeout must be a whole number of seconds, not {v:?}"))?));
             }
-            "--force" => force = true,
             "--show" => show = true,
-            f if f.starts_with("--") => return Err(format!("unknown option {f}")),
-            _ if project.is_some() => return Err(format!("unexpected argument {text:?}")),
-            _ => project = Some(absolute(arg)),
+            f if !f.starts_with("--") => {
+                if project.is_some() {
+                    return Err(format!("unexpected argument {text:?}"));
+                }
+                project = Some(absolute(arg));
+            }
+            f if !takes(command, f) => {
+                return Err(if COMMAND_OPTIONS.contains(&f) { format!("{f} doesn't apply to {command}") } else { format!("unknown option {f}") });
+            }
+            "--out" => out = Some(absolute(value()?)),
+            "--force" => force = true,
+            f => {
+                named.insert(f.to_string(), value()?.to_string_lossy().into_owned());
+            }
         }
     }
 
-    let project = check_project(&project.ok_or("render needs a <project>")?)?;
-    let out = out.ok_or("render needs --out")?;
-    let format = match format {
-        Some(f) => one_of(&f, FORMATS, "--format")?,
-        None => format_from_extension(&out)?,
+    let project = check_project(&project.ok_or_else(|| format!("{command} needs a <project>"))?)?;
+    let out = out.ok_or_else(|| format!("{command} needs --out"))?;
+    let named = |option: &str| named.get(option).map(String::as_str);
+    let job = if command == "render" {
+        let format = match named("--format") {
+            Some(f) => one_of(f, FORMATS, "--format")?,
+            None => format_from_extension(&out)?,
+        };
+        let quality = one_of(named("--quality").unwrap_or("medium"), QUALITIES, "--quality")?;
+        let out = check_out(&out, &format, force)?;
+        Job::Render { project, out, format, quality }
+    } else {
+        Job::Stills {
+            project,
+            out: check_out_folder(&out)?,
+            frames: parse_frames(named("--frames").unwrap_or("auto"))?,
+            scale: parse_scale(named("--scale"), 0.5, "--scale")?,
+            sheet_scale: parse_scale(named("--sheet-scale"), 0.25, "--sheet-scale")?,
+        }
     };
-    let quality = one_of(quality.as_deref().unwrap_or("medium"), QUALITIES, "--quality")?;
-    let out = check_out(&out, &format, force)?;
-    Ok(Cli { job: Job::Render { project, out, format, quality }, result: result.clone(), timeout, show })
+    Ok(Cli { job, result: result.clone(), timeout, show })
+}
+
+fn parse_frames(value: &str) -> Result<Frames, String> {
+    match value {
+        "auto" => Ok(Frames::Keyword("auto")),
+        "all" => Ok(Frames::Keyword("all")),
+        _ => value
+            .split(',')
+            .map(|f| f.trim().parse::<u32>())
+            .collect::<Result<Vec<_>, _>>()
+            .map(Frames::List)
+            .map_err(|_| format!("--frames takes auto, all, or frame numbers such as 0,12,90, not {value:?}")),
+    }
+}
+
+fn parse_scale(value: Option<&str>, default: f64, option: &str) -> Result<f64, String> {
+    let Some(v) = value else { return Ok(default) };
+    v.parse::<f64>()
+        .ok()
+        .filter(|s| *s > 0.0 && *s <= 1.0)
+        .ok_or_else(|| format!("{option} must be more than 0 and at most 1, not {v:?}"))
 }
 
 /// The canonical project folder, or why `path` isn't a project lc-studio can open.
@@ -225,11 +300,16 @@ fn one_of(value: &str, allowed: &[&str], flag: &str) -> Result<String, String> {
     }
 }
 
-/// `out` with its parent canonicalized, once it's clear the render may write there.
-fn check_out(out: &Path, format: &str, force: bool) -> Result<PathBuf, String> {
+/// `out` with its parent folder canonicalized.
+fn resolve_out(out: &Path) -> Result<PathBuf, String> {
     let name = out.file_name().ok_or_else(|| format!("--out has no file name: {}", out.display()))?;
     let parent = out.parent().filter(|p| p.is_dir()).ok_or_else(|| format!("--out's folder doesn't exist: {}", out.display()))?;
-    let out = parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?.join(name);
+    Ok(parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?.join(name))
+}
+
+/// A render's `out`, once it's clear the render may write there.
+fn check_out(out: &Path, format: &str, force: bool) -> Result<PathBuf, String> {
+    let out = resolve_out(out)?;
     let folder = format == "png-sequence";
     if out.exists() {
         if folder && !out.is_dir() {
@@ -241,6 +321,15 @@ fn check_out(out: &Path, format: &str, force: bool) -> Result<PathBuf, String> {
         if !force {
             return Err(format!("{} already exists — pass --force to replace it", out.display()));
         }
+    }
+    Ok(out)
+}
+
+/// The stills folder. It may exist: stills replace only their own files.
+fn check_out_folder(out: &Path) -> Result<PathBuf, String> {
+    let out = resolve_out(out)?;
+    if out.exists() && !out.is_dir() {
+        return Err(format!("{} is a file; stills need a folder", out.display()));
     }
     Ok(out)
 }
@@ -304,7 +393,7 @@ impl CliState {
 }
 
 /// The job for the frontend, or None on a normal launch. Grants the project
-/// folder, and creates and grants a PNG sequence's folder.
+/// folder, and creates and grants the folder of a PNG sequence or of stills.
 #[tauri::command]
 pub fn cli_job<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>) -> Result<Option<Value>, String> {
     let Some(cli) = &state.cli else { return Ok(None) };
@@ -312,16 +401,10 @@ pub fn cli_job<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>)
     state.beat();
     let scope = app.fs_scope();
     let granted = match &cli.job {
-        Job::Render { project, out, format, .. } => scope
-            .allow_directory(project, true)
-            .map_err(|e| format!("could not allow {}: {e}", project.display()))
-            .and_then(|()| {
-                if format != "png-sequence" {
-                    return Ok(());
-                }
-                std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-                scope.allow_directory(out, false).map_err(|e| format!("could not allow {}: {e}", out.display()))
-            }),
+        Job::Render { project, out, format, .. } => {
+            grant(&scope, project, true).and_then(|()| if format == "png-sequence" { grant_out(&scope, out) } else { Ok(()) })
+        }
+        Job::Stills { project, out, .. } => grant(&scope, project, true).and_then(|()| grant_out(&scope, out)),
     };
     if let Err(reason) = granted {
         abort(&app, &state, &reason);
@@ -331,6 +414,16 @@ pub fn cli_job<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>)
     job["schema"] = RESULT_SCHEMA.into();
     job["app"] = VERSION.into();
     Ok(Some(job))
+}
+
+fn grant(scope: &tauri::fs::Scope, dir: &Path, recursive: bool) -> Result<(), String> {
+    scope.allow_directory(dir, recursive).map_err(|e| format!("could not allow {}: {e}", dir.display()))
+}
+
+/// Create an output folder and let the frontend write the files directly in it.
+fn grant_out(scope: &tauri::fs::Scope, out: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    grant(scope, out, false)
 }
 
 /// Progress (or, with `total` 0, a heartbeat). Printed to stderr at most once a second.
@@ -450,8 +543,13 @@ mod tests {
     }
 
     fn render(cli: &Cli) -> (&Path, &Path, &str, &str) {
-        let Job::Render { project, out, format, quality } = &cli.job;
+        let Job::Render { project, out, format, quality } = &cli.job else { panic!("not a render: {cli:?}") };
         (project, out, format, quality)
+    }
+
+    fn stills(cli: &Cli) -> (&Path, &Path, &Frames, f64, f64) {
+        let Job::Stills { project, out, frames, scale, sheet_scale } = &cli.job else { panic!("not stills: {cli:?}") };
+        (project, out, frames, *scale, *sheet_scale)
     }
 
     #[test]
@@ -588,5 +686,60 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn stills_defaults() {
+        let (root, project) = with_project("stills-defaults");
+        let out = root.join("stills");
+        let c = cli(&["stills", project.to_str().unwrap(), "--out", out.to_str().unwrap()]);
+        assert_eq!(stills(&c), (project.as_path(), out.as_path(), &Frames::Keyword("auto"), 0.5, 0.25));
+        // The job the frontend gets: camelCase fields, frames as the keyword.
+        let json = serde_json::to_value(&c.job).unwrap();
+        assert_eq!(json["command"], "stills");
+        assert_eq!(json["frames"], "auto");
+        assert_eq!(json["sheetScale"], 0.25);
+    }
+
+    #[test]
+    fn stills_frames_and_scales() {
+        let (root, project) = with_project("stills-frames");
+        let (p, o) = (project.to_str().unwrap(), root.join("stills"));
+        let o = o.to_str().unwrap();
+        let c = cli(&["stills", p, "--out", o, "--frames", "0, 12,90", "--scale=1", "--sheet-scale", "0.1"]);
+        assert_eq!(stills(&c).2, &Frames::List(vec![0, 12, 90]));
+        assert_eq!(serde_json::to_value(&c.job).unwrap()["frames"], json!([0, 12, 90]));
+        assert_eq!((stills(&c).3, stills(&c).4), (1.0, 0.1));
+        assert_eq!(stills(&cli(&["stills", p, "--out", o, "--frames", "all"])).2, &Frames::Keyword("all"));
+        for bad in ["", "first", "1,,2", "-1", "1.5"] {
+            assert!(usage(&["stills", p, "--out", o, "--frames", bad]).contains("--frames takes"), "{bad:?}");
+        }
+        for bad in ["0", "1.5", "-0.5", "half", "NaN"] {
+            assert!(usage(&["stills", p, "--out", o, "--scale", bad]).contains("--scale must be"), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn stills_reuse_their_folder_but_not_a_file() {
+        let (root, project) = with_project("stills-out");
+        let p = project.to_str().unwrap();
+        let out = root.join("stills");
+        fs::create_dir_all(&out).unwrap();
+        assert_eq!(stills(&cli(&["stills", p, "--out", out.to_str().unwrap()])).1, out.as_path());
+        let file = root.join("sheet.png");
+        fs::write(&file, b"png").unwrap();
+        assert!(usage(&["stills", p, "--out", file.to_str().unwrap()]).contains("stills need a folder"));
+        assert!(usage(&["stills", p]).contains("stills needs --out"));
+    }
+
+    #[test]
+    fn options_belong_to_their_command() {
+        let (root, project) = with_project("belong");
+        let p = project.to_str().unwrap();
+        let o = root.join("x");
+        let o = o.to_str().unwrap();
+        assert!(usage(&["stills", p, "--out", o, "--format", "mp4"]).contains("--format doesn't apply to stills"));
+        assert!(usage(&["stills", p, "--out", o, "--force"]).contains("--force doesn't apply to stills"));
+        assert!(usage(&["render", p, "--out", o, "--frames", "auto"]).contains("--frames doesn't apply to render"));
     }
 }
