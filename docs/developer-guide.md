@@ -130,6 +130,7 @@ src/                              # React frontend
       index.ts                    # Asks Rust for a command-line job on startup; autosave off while one runs
       run.ts                      # Runs the job and builds the result document (loaded only for a job)
       stills.ts                   # `stills`: frame PNGs (the export renderer and encoder) and the labelled sheet
+      check.ts                    # `check`: shape, media, fonts, text fit (layoutText), draw and editor checks
       issues.ts                   # The result's issue codes (a closed list) and the Render panel's warnings
     dialog.ts                     # Save file dialog wrapper
     file-utils.ts                 # File picker + blob URL conversion
@@ -415,6 +416,7 @@ node scripts/e2e/fx-gl.mjs     # FX pack P5: A5.1–A5.7, the WebGL2 pass, its t
 ```bash
 node scripts/e2e/cli0-render.mjs [--long]  # CLI spec A0.2–A0.5: render, failure paths, hidden-window speed
 node scripts/e2e/cli1-stills.mjs           # CLI spec A1.2–A1.3: stills match the export, auto frames, the sheet
+node scripts/e2e/cli2-check.mjs            # CLI spec A2.2–A2.4: one fixture per check issue; check writes nothing
 ```
 
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.
@@ -445,7 +447,15 @@ The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-
 1. `cli::parse` (`src-tauri/src/cli.rs`) runs before Tauri starts. A first argument that isn't a command is a normal GUI launch, so "open with" launches that pass a path are unchanged. Usage errors, a folder that isn't a project, a skill draft, and an existing `--out` without `--force` all exit 2 with a JSON result and no window.
 2. `build_main_window` (`lib.rs`) builds the window that `tauri.conf.json` declares with `create: false`. For a command-line job it's hidden, unfocused, with `BackgroundThrottlingPolicy::Disabled` and, on macOS, `ActivationPolicy::Accessory` (no Dock icon). Without `Disabled`, a hidden page is suspended from the start. Even with it, macOS puts WebKit's processes in the background band while the page is hidden, so renders run about 3.3× slower than in a visible window (`render` on `long-gl`: 3.0 s visible, 9.8 s hidden, debug build, M4 Pro). Covered windows are slowed the same way, so this also applies to GUI exports behind other windows. Every visible variant tried took focus. The measurements are in §10 of the spec.
 3. `App.tsx` calls `runCliIfRequested()` (`src/lib/cli/index.ts`) on mount, in every build. It asks `cli_job`, loads `./run` only if there's a job, and keeps autosave off. `cli_job` grants the project folder, and creates and grants a PNG sequence's folder.
-4. `runCliJob` loads through `renderProject` (`src/lib/render-project.ts`): no recent-list entry, bundled fonts awaited before the first frame. It adds the Render panel's warnings as `issues`, refuses video formats without FFmpeg, renders, and sends `cli_finish`. Progress goes to `cli_progress` at most every 250 ms, with a heartbeat every 5 s. Uncaught errors and rejections also end the run. `stills` opens with `openForRender` and draws with `createFrameRenderer` and `encodePng` from `capture.ts`, which the PNG-sequence export uses too, so a still at scale 1 is byte-identical to that frame's export.
+4. `runCliJob` loads through `renderProject` (`src/lib/render-project.ts`): no recent-list entry, bundled fonts awaited before the first frame. It adds the Render panel's warnings as `issues`, refuses video formats without FFmpeg, renders, and sends `cli_finish`. Progress goes to `cli_progress` at most every 250 ms, with a heartbeat every 5 s. Uncaught errors and rejections also end the run. `stills` opens with `openForRender` and draws with `createFrameRenderer` and `encodePng` from `capture.ts`, which the PNG-sequence export uses too, so a still at scale 1 is byte-identical to that frame's export. `check` (`src/lib/cli/check.ts`) runs these steps:
+- **Load:** stops at a load or shape failure.
+- **Media and fonts:** looks for missing media (the files `assetRefs` and scene backgrounds point at) and unusable fonts.
+- **Text fit:** measures text with `layoutText` and `drawnLineWidth` from `draw-text.ts`. `drawTextLayer` uses `layoutText` too, so the two can't disagree; widths stay a separate helper, so drawing doesn't pay for them.
+- **Warnings:** adds the Render panel's warnings, as notes when nothing falls back.
+- **Draw:** draws the chosen frames with the export renderer.
+- **Editor:** puts the project into the store as Open does. Uncaught errors in this step go to an error trap in `run.ts` instead of ending the run. A missing `.canvas-workspace canvas` or any error is an `editor` issue.
+
+A layer `check` itself can't lay out becomes a `draw` issue, not a failed run. `check` sets `ok: true` whenever it finishes; its error issues make the exit code 1. On fx-regression it takes 1.6 s (debug build).
 5. `cli_finish` prints the result on stdout and to `--result`, then exits 1 if `ok` is false or any issue has `severity: "error"`, else 0. It calls `cleanup_before_exit` and `std::process::exit`, because `AppHandle::exit(code)` doesn't pass the code to the process on macOS.
 6. A watchdog thread exits 2, killing any FFmpeg, if `cli_job` isn't called within 30 s (a debug build without Vite never loads), if nothing arrives for 120 s, or when `--timeout` passes. A failure inside `cli_job` takes the same path at once.
 

@@ -262,6 +262,14 @@ common: --result <file>   also write the result JSON to this file
 | R2.8 | **ffmpeg-missing** is a `note` in `check` (a render would fail; stills and the GUI preview wouldn't). |
 | R2.9 | `check` writes nothing anywhere. Its run time on the fx-regression fixture with `auto` frames is under 10 s on the author's Mac, measured and recorded in the developer guide. |
 
+**As built (2026-10-29):**
+- **Text fit:** `layoutText` returns the lines and block height without widths. `drawnLineWidth` measures a line as drawn, so per-frame drawing doesn't pay for widths.
+- **Shape check:** shorthand values such as `"output": "tiktok"` are caught as `load` errors before anything draws.
+- **Drafts:** a draft exits 2 in Rust, as it does for `render`, not with a `load` issue.
+- **Layers `check` can't lay out:** these become `draw` errors, not a failed run.
+- **`ok` and the exit code:** `check` sets `ok: true` when it finishes, and its error issues give exit 1.
+- **Timing (R2.9):** 1.55 s wall on fx-regression.
+
 ### Acceptance
 
 | ID | Check |

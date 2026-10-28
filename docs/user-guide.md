@@ -315,6 +315,25 @@ The app binary can also render a project without opening its window, for scripts
 - It writes `frame-NNNN.png` for each frame, at half size by default (`--scale`, more than 0 and at most 1; at 1 the files are byte-identical to a PNG-sequence render). `sheet.png` puts all of them in a grid, each labelled with its frame number, why it was picked, the time and the scene (`--sheet-scale`, default 0.25). Above 60 frames there's no sheet, only the files.
 - The folder may already exist. Stills replace only their own files.
 
+`check` reports what lc-studio itself finds wrong with a project, without writing anything:
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" check "Spring Launch.lcs"
+```
+
+Each finding in `issues` has a severity (`error`, `warn` or `note`), a code, a message naming the scene and layer, and the frame where it applies. It looks for:
+
+- **`load`:** a project the app can't open, or one whose values aren't the shape the app expects (such as `"output": "tiktok"` instead of a width, height and fps).
+- **`media-missing`:** an image, video, audio file or morph target that isn't there, or that sits outside the project folder where the app may not read it.
+- **`font-missing`:** a font that isn't bundled or installed, so its text falls back to another font, or a font name the canvas can't use as written.
+- **`text-overflow`:** text that doesn't fit its box, measured the way the renderer draws it, including letter spacing and keyframed sizes.
+- **`video-undecodable`** and **`gpu-fallback`:** the Render panel's warnings. When WebGL2 is available, the GPU effects in use are listed as a note.
+- **`draw`:** a frame that fails to draw. By default it draws the same frames `stills` picks; `--frames` chooses others, and `--frames all` draws every one.
+- **`editor`:** a project that crashes lc-studio's editor, which would show a black window when you open it.
+- **`ffmpeg-missing`:** FFmpeg isn't installed, so video exports would fail.
+
+`check` exits 1 when it finds an error, and 0 when it finds only warnings and notes.
+
 The output is the same as a Render-panel export, frame for frame. The app's window never appears, there's no Dock icon, and it doesn't take focus, so you can keep working. A command-line render is slower than one from the Render panel, about 3.3× on macOS: macOS gives a page nobody can see a lower priority. A 15-second 1080×1920 reel takes about 10 seconds.
 
 The result is one JSON document on stdout: `ok`, `error`, the composition's size, frame count and duration, and any `issues` (such as a video the app can't decode, or GPU effects that fall back). Progress lines go to stderr. The exit code is 0 when the render succeeded, 1 when it ran and failed (for example, FFmpeg isn't installed), and 2 when it never started (a mistyped option, a folder that isn't a project, an output that already exists).

@@ -40,6 +40,7 @@ pub const USAGE: &str = "\
 Usage:
   local-content-studio render <project> --out <file|dir> [--format F] [--quality Q] [--force]
   local-content-studio stills <project> --out <dir> [--frames F] [--scale S] [--sheet-scale S]
+  local-content-studio check  <project> [--frames F]
   local-content-studio --help | --version
 
   <project>         a .lcs folder, or the project.json inside one
@@ -58,6 +59,9 @@ stills (writes frame-NNNN.png for each frame and a labelled sheet.png into --out
   --scale S         size of each frame PNG, more than 0 and at most 1 (default: 0.5)
   --sheet-scale S   size of each frame on the sheet (default: 0.25)
 
+check (lists what lc-studio itself finds wrong; writes nothing):
+  --frames F        the frames to draw, as for stills (default: auto)
+
 Common options:
   --result <file>   also write the result JSON to this file
   --timeout <secs>  give up after this many seconds
@@ -73,6 +77,7 @@ pub enum Job {
     Render { project: PathBuf, out: PathBuf, format: String, quality: String },
     #[serde(rename_all = "camelCase")]
     Stills { project: PathBuf, out: PathBuf, frames: Frames, scale: f64, sheet_scale: f64 },
+    Check { project: PathBuf, frames: Frames },
 }
 
 /// `--frames`: `auto`, `all`, or frame numbers. The frontend, which knows the
@@ -89,12 +94,13 @@ impl Job {
         match self {
             Job::Render { .. } => "render",
             Job::Stills { .. } => "stills",
+            Job::Check { .. } => "check",
         }
     }
 
     fn project(&self) -> &Path {
         match self {
-            Job::Render { project, .. } | Job::Stills { project, .. } => project,
+            Job::Render { project, .. } | Job::Stills { project, .. } | Job::Check { project, .. } => project,
         }
     }
 }
@@ -128,7 +134,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Launch {
             stderr: String::new(),
             result: None,
         },
-        Some(command @ ("render" | "stills")) => {
+        Some(command @ ("render" | "stills" | "check")) => {
             let mut result = None;
             match parse_command(command, args.collect(), &mut result) {
                 Ok(cli) => Launch::Cli(cli),
@@ -163,6 +169,7 @@ fn takes(command: &str, option: &str) -> bool {
     match command {
         "render" => matches!(option, "--out" | "--format" | "--quality" | "--force"),
         "stills" => matches!(option, "--out" | "--frames" | "--scale" | "--sheet-scale"),
+        "check" => option == "--frames",
         _ => false,
     }
 }
@@ -214,24 +221,28 @@ fn parse_command(command: &str, args: Vec<OsString>, result: &mut Option<PathBuf
     }
 
     let project = check_project(&project.ok_or_else(|| format!("{command} needs a <project>"))?)?;
-    let out = out.ok_or_else(|| format!("{command} needs --out"))?;
     let named = |option: &str| named.get(option).map(String::as_str);
-    let job = if command == "render" {
-        let format = match named("--format") {
-            Some(f) => one_of(f, FORMATS, "--format")?,
-            None => format_from_extension(&out)?,
-        };
-        let quality = one_of(named("--quality").unwrap_or("medium"), QUALITIES, "--quality")?;
-        let out = check_out(&out, &format, force)?;
-        Job::Render { project, out, format, quality }
-    } else {
-        Job::Stills {
+    let frames = || parse_frames(named("--frames").unwrap_or("auto"));
+    let out = || out.clone().ok_or_else(|| format!("{command} needs --out"));
+    let job = match command {
+        "render" => {
+            let out = out()?;
+            let format = match named("--format") {
+                Some(f) => one_of(f, FORMATS, "--format")?,
+                None => format_from_extension(&out)?,
+            };
+            let quality = one_of(named("--quality").unwrap_or("medium"), QUALITIES, "--quality")?;
+            let out = check_out(&out, &format, force)?;
+            Job::Render { project, out, format, quality }
+        }
+        "stills" => Job::Stills {
             project,
-            out: check_out_folder(&out)?,
-            frames: parse_frames(named("--frames").unwrap_or("auto"))?,
+            out: check_out_folder(&out()?)?,
+            frames: frames()?,
             scale: parse_scale(named("--scale"), 0.5, "--scale")?,
             sheet_scale: parse_scale(named("--sheet-scale"), 0.25, "--sheet-scale")?,
-        }
+        },
+        _ => Job::Check { project, frames: frames()? },
     };
     Ok(Cli { job, result: result.clone(), timeout, show })
 }
@@ -405,6 +416,7 @@ pub fn cli_job<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>)
             grant(&scope, project, true).and_then(|()| if format == "png-sequence" { grant_out(&scope, out) } else { Ok(()) })
         }
         Job::Stills { project, out, .. } => grant(&scope, project, true).and_then(|()| grant_out(&scope, out)),
+        Job::Check { project, .. } => grant(&scope, project, true),
     };
     if let Err(reason) = granted {
         abort(&app, &state, &reason);
@@ -741,5 +753,20 @@ mod tests {
         assert!(usage(&["stills", p, "--out", o, "--format", "mp4"]).contains("--format doesn't apply to stills"));
         assert!(usage(&["stills", p, "--out", o, "--force"]).contains("--force doesn't apply to stills"));
         assert!(usage(&["render", p, "--out", o, "--frames", "auto"]).contains("--frames doesn't apply to render"));
+    }
+
+    #[test]
+    fn check_takes_only_frames() {
+        let (root, project) = with_project("check");
+        let p = project.to_str().unwrap();
+        let c = cli(&["check", p]);
+        assert_eq!(c.job, Job::Check { project: project.clone(), frames: Frames::Keyword("auto") });
+        let json = serde_json::to_value(&c.job).unwrap();
+        assert_eq!((json["command"].as_str(), json["frames"].as_str()), (Some("check"), Some("auto")));
+        assert_eq!(cli(&["check", p, "--frames", "all"]).job, Job::Check { project: project.clone(), frames: Frames::Keyword("all") });
+        let out = root.join("x");
+        assert!(usage(&["check", p, "--out", out.to_str().unwrap()]).contains("--out doesn't apply to check"));
+        assert!(usage(&["check", p, "--frames", "soon"]).contains("--frames takes"));
+        assert!(usage(&["check"]).contains("check needs a <project>"));
     }
 }

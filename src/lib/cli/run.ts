@@ -11,6 +11,7 @@ import { checkFfmpeg } from '../tauri-bridge';
 import { openForRender, renderProject } from '../render-project';
 import { renderWarnings, type Issue } from './issues';
 import { renderStills, type StillsOptions } from './stills';
+import { runCheck } from './check';
 
 /** The job as cli_job sends it: the parsed arguments, already checked by Rust. */
 export interface RenderJob {
@@ -28,7 +29,14 @@ export interface StillsJob extends StillsOptions {
   app: string;
   project: string;
 }
-export type CliJob = RenderJob | StillsJob;
+export interface CheckJob {
+  command: 'check';
+  schema: number;
+  app: string;
+  project: string;
+  frames: 'auto' | 'all' | number[];
+}
+export type CliJob = RenderJob | StillsJob | CheckJob;
 
 export interface CliResult {
   schema: number;
@@ -44,6 +52,9 @@ export interface CliResult {
 }
 
 type Progress = (done: number, total: number, stage: string) => void;
+
+/** While set, uncaught errors go here instead of ending the run (check's editor step). */
+type ErrorTrap = { current: ((message: string) => void) | null };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -82,6 +93,19 @@ async function stills(job: StillsJob, result: CliResult, progress: Progress): Pr
   result.data = await renderStills(composition, path, job, (done, total) => progress(done, total, 'stills'));
 }
 
+/** check's findings are issues; the command itself succeeds unless it couldn't run. */
+async function check(job: CheckJob, result: CliResult, progress: Progress, trap: ErrorTrap): Promise<void> {
+  const { issues, drawn } = await runCheck(
+    () => openForRender(job.project),
+    job.frames,
+    (done, total) => progress(done, total, 'check'),
+    trap,
+    (composition) => { result.composition = summary(composition); },
+  );
+  result.issues.push(...issues);
+  result.data = { drawn };
+}
+
 export async function runCliJob(job: CliJob): Promise<void> {
   const t0 = performance.now();
   const result: CliResult = {
@@ -109,7 +133,9 @@ export async function runCliJob(job: CliJob): Promise<void> {
     await invoke('cli_finish', { result: JSON.stringify(result) });
   };
   // An error that escapes the job still ends the run, rather than leaving it to the watchdog.
+  const trap: ErrorTrap = { current: null };
   const escaped = (err: unknown) => {
+    if (trap.current) return trap.current(message(err));
     if (finished) return;
     result.ok = false;
     result.error = `uncaught: ${message(err)}`;
@@ -127,6 +153,9 @@ export async function runCliJob(job: CliJob): Promise<void> {
         break;
       case 'stills':
         await stills(job, result, progress);
+        break;
+      case 'check':
+        await check(job, result, progress, trap);
         break;
     }
     result.ok = true;
