@@ -32,10 +32,13 @@ const two = (layersA, layersB = [text('b', 'NEXT', { y: 600 })]) => [
   { ...scene('b', 30, layersB), label: 'End', backgroundColor: '#2a1050' },
 ];
 
-// "WIDE" fits its box as wrapping measures it, but 40 px letter spacing draws it wider.
+// One word, "WIDE", fits its box without spacing; with 40 px letter spacing it can't, and
+// one word can't wrap. "WIDE WORDS" fits on one line only without spacing, so with
+// spacing it must wrap to two lines that fit.
 const ctx = createCanvas(10, 10).getContext('2d');
 ctx.font = 'bold 64px sans-serif';
 const wide = Math.ceil(ctx.measureText('WIDE').width * 1.15);
+const twoWords = Math.ceil(ctx.measureText('WIDE WORDS').width * 1.05);
 
 const P = {
   clean: project('clean', two([photo(), text('t', 'HELLO', { zIndex: 1 })])),
@@ -43,6 +46,7 @@ const P = {
     photo(),
     text('long', 'THIS HEADLINE IS FAR TOO LONG FOR ITS BOX', { width: 300, height: 80, zIndex: 1 }),
     text('spaced', 'WIDE', { width: wide, height: 100, y: 500, letterSpacing: 40, zIndex: 2 }),
+    text('wraps', 'WIDE WORDS', { width: twoWords, height: 200, y: 750, letterSpacing: 10, zIndex: 3 }),
   ])),
   missing: project('missing', two([photo(), imageLayer('gone', 'assets/nope.png', { endFrame: 30, width: 200, height: 200, zIndex: 1 })])),
   prores: project('prores', two([photo(), videoLayer('clip', 'assets/prores.mov', { endFrame: 30, zIndex: 1 })]), ['still.png', 'prores.mov']),
@@ -100,7 +104,9 @@ try {
   const long = r.issues.find((i) => i.layerId === 'long');
   const spaced = r.issues.find((i) => i.layerId === 'spaced');
   row('A2.2 overflowing text → text-overflow on that layer, exit 0 (a warning)', r.code === 0 && long?.code === 'text-overflow', long?.message);
-  row('A2.2 letter spacing that draws past the box is caught too', spaced?.code === 'text-overflow' && /widest line/.test(spaced.message), spaced?.message ?? `box ${wide} px; ${r.codes.join(', ')}`);
+  row('A2.2 a letter-spaced word wider than its box is caught', spaced?.code === 'text-overflow' && /widest line/.test(spaced.message), spaced?.message ?? `box ${wide} px; ${r.codes.join(', ')}`);
+  const wraps = r.issues.find((i) => i.layerId === 'wraps');
+  row('A2.2 letter-spaced words wrap at their drawn width, so they fit', !wraps, wraps?.message ?? `box ${twoWords} px`);
 
   r = await check(P.missing);
   row('A2.2 missing image → media-missing, exit 1', r.code === 1 && has(r, 'error', 'media-missing', 'gone'), `exit ${r.code}: ${r.issues.find((i) => i.code === 'media-missing')?.message}`);

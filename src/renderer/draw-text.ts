@@ -31,26 +31,35 @@ export function layoutText(
   const weight = layer.fontWeight === 'normal' ? '' : layer.fontWeight;
   const style = layer.fontStyle === 'normal' ? '' : layer.fontStyle;
   ctx.font = `${style} ${weight} ${fontSize}px ${layer.fontFamily}`.trim();
-  const lines = wrapText(ctx, layer.content, layer.maxWidth || resolved.width, letterSpacing);
-  const lineHeightPx = fontSize * lineHeight;
   const perChar = letterSpacing !== 0 || (!!layer.charAnimation && layer.charAnimation.type !== 'none');
+  const lines = wrapText(ctx, layer.content, layer.maxWidth || resolved.width, letterSpacing, perChar);
+  const lineHeightPx = fontSize * lineHeight;
   return { letterSpacing, lineHeightPx, lines, height: lines.length * lineHeightPx, perChar };
 }
 
 /**
  * A line's width as drawn in ctx's current font: character by character with
  * letter spacing between them when perChar, else the whole line. Wrapping
- * measures without the spacing, so spaced text can draw wider than its box.
+ * uses the same rule, so a wrapped line fits unless one word alone doesn't.
  */
 export function drawnLineWidth(ctx: CanvasRenderingContext2D, line: string, letterSpacing: number, perChar: boolean): number {
-  if (!perChar) return ctx.measureText(line).width;
+  return perChar ? spacedWidth(ctx, line, letterSpacing) : ctx.measureText(line).width;
+}
+
+/** Drawn a character at a time: each character's width, plus the spacing between characters. */
+function spacedWidth(ctx: CanvasRenderingContext2D, text: string, letterSpacing: number, cache?: Map<string, number>): number {
   let width = 0;
   let chars = 0;
-  for (const char of line) {
-    width += ctx.measureText(char).width;
+  for (const char of text) {
+    let w = cache?.get(char);
+    if (w === undefined) {
+      w = ctx.measureText(char).width;
+      cache?.set(char, w);
+    }
+    width += w;
     chars++;
   }
-  return width + letterSpacing * Math.max(0, chars - 1);
+  return chars ? width + letterSpacing * (chars - 1) : 0;
 }
 
 export function drawTextLayer(
@@ -127,30 +136,45 @@ export function drawTextLayer(
   ctx.shadowOffsetY = 0;
 }
 
+/**
+ * Greedy word wrap at the width lines are drawn at (drawnLineWidth). Drawn a
+ * character at a time, a line's width adds up, W(a + ' ' + w) = W(a) +
+ * spacing + W(' ' + w), so it's kept as a running sum rather than re-measured
+ * per word; whole-line measuring stays as it was.
+ */
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
   maxWidth: number,
-  _letterSpacing: number,
+  letterSpacing: number,
+  perChar: boolean,
 ): string[] {
   if (maxWidth <= 0) return text.split('\n');
 
   const paragraphs = text.split('\n');
   const lines: string[] = [];
+  const charWidths = new Map<string, number>();
 
   for (const para of paragraphs) {
     const words = para.split(' ');
     let currentLine = '';
+    let currentWidth = 0;
 
     for (const word of words) {
       const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const metrics = ctx.measureText(testLine);
+      const testWidth = !perChar
+        ? ctx.measureText(testLine).width
+        : currentLine
+          ? currentWidth + letterSpacing + spacedWidth(ctx, ` ${word}`, letterSpacing, charWidths)
+          : spacedWidth(ctx, word, letterSpacing, charWidths);
 
-      if (metrics.width > maxWidth && currentLine) {
+      if (testWidth > maxWidth && currentLine) {
         lines.push(currentLine);
         currentLine = word;
+        currentWidth = perChar ? spacedWidth(ctx, word, letterSpacing, charWidths) : 0;
       } else {
         currentLine = testLine;
+        currentWidth = testWidth;
       }
     }
     lines.push(currentLine);

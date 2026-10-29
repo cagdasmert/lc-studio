@@ -101,7 +101,7 @@ Why this shape:
 
 ### Text, fonts, morph
 
-- `drawTextLayer` (`src/renderer/draw-text.ts`) wraps with the private `wrapText(ctx, text, maxWidth, _letterSpacing)`, which measures **without** letter spacing, while drawing adds it. Spaced text can therefore draw wider than its box. Block height is `lines × fontSize × lineHeight`.
+- `drawTextLayer` (`src/renderer/draw-text.ts`) wraps with the private `wrapText(ctx, text, maxWidth, _letterSpacing)`, which measures **without** letter spacing, while drawing adds it. Spaced text can therefore draw wider than its box. Block height is `lines × fontSize × lineHeight`. *(Fixed 2026-10-29, after this spec: `wrapText` now measures lines as they're drawn, through the same rule as `drawnLineWidth`. Only a single letter-spaced word wider than its box still overflows.)*
 - Project fonts are registered from `assets/fonts/` under a family derived from the file name (`font-manager.ts`). An unknown family falls back silently.
 - `autoMatch(a: ImageBitmap, b: ImageBitmap, view: MorphView, opts)` (`src/lib/morph-match/index.ts`) runs DINOv2 in a worker, reads the model from the bundle (`models/dinov2-small-int8.onnx`) and throws `ModelMissingError` without it. `MorphView` is `{ fitMode, sizeA, sizeB, boxW, boxH }`, built inline in `MorphEditor.tsx:88`. `mergeAuto` (`src/lib/morph-edit.ts`) keeps manual pairs and drops incoming pairs too close to them.
 
@@ -414,4 +414,4 @@ M4 Pro, macOS 27.0.1, on AC power. The debug binary with Vite, as `scripts/e2e/`
 - Moving the e2e `render` and `preview` jobs onto the CLI, leaving `LCS_E2E` for UI-only checks.
 - Retiring `lcs.py`'s copies of app logic once every harness that runs the skill has the app.
 - Windows and Linux acceptance runs for the CLI.
-- Making `wrapText` account for letter spacing (§1). This changes pixels, so it needs its own regression baseline.
+- ~~Making `wrapText` account for letter spacing (§1).~~ Done on `claude/wrap-letter-spacing`: only letter-spaced or character-animated text changes; fx-regression (no spacing) stays identical.
