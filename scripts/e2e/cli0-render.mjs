@@ -3,14 +3,16 @@
 //   A0.2 render → an MP4 with the fixture's size, fps, frame count and audio; stdout is the result
 //   A0.3 a CLI PNG sequence is byte-identical to the e2e render job's
 //   A0.4 failure paths and their exit codes
+//   R0.8 --timeout ends a render with exit 2, kills FFmpeg and leaves no half-written video
 //   A0.5 R0.10 (a) hidden render within 4× the visible e2e render, plus 3 s
 //               (b) with --long: every minute of a 6+ minute render within 15 % of the first
 //               (c) same frames: A0.3, which renders a GL transition
 //
 //   node scripts/e2e/cli0-render.mjs [--long]
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import {
   audioLayer, buildDebug, devServerUp, ensureDevServer, ensureMedia, imageLayer, layer, report, runApp, runCli, scene,
   workDir, writeProject,
@@ -136,6 +138,25 @@ try {
     // (A bare project path is a GUI launch; cli.rs's unit tests cover that without opening a window.)
     r = await runCli(['--help']);
     row('A0.1 --help → exit 0, usage on stdout', r.code === 0 && r.stdout.startsWith('Usage:'));
+  }
+
+  // ── R0.8: a 450-frame render takes ~8 s hidden, so a 3 s --timeout lands while FFmpeg is writing.
+  {
+    const output = out('timeout.mp4');
+    const resultFile = out('timeout.result.json');
+    const r = await runCli(['render', longGl, '--out', output, '--timeout', '3', '--result', resultFile], { timeoutMs: 60_000 });
+    const stop = r.lines.find((l) => /timed out after 3 s \(--timeout\)/.test(l.text));
+    const framesBefore = Math.max(0, ...r.lines.filter((l) => !stop || l.ms <= stop.ms).map((l) => Number(/render (\d+)\//.exec(l.text)?.[1] ?? 0)));
+    row('R0.8 --timeout 3 → exit 2 about 3 s in, saying why', r.code === 2 && !!stop && r.ms < 6000,
+      `exit ${r.code} after ${sec(r.ms)}: ${r.result?.error}`);
+    row('R0.8 … with the render under way when it hit', framesBefore > 0 && framesBefore < 450, `${framesBefore} of 450 frames reported`);
+    const file = existsSync(resultFile) ? JSON.parse(readFileSync(resultFile, 'utf8')) : null;
+    row('R0.8 … a failed result on stdout and in --result', r.result?.ok === false && r.result.command === 'render'
+      && /timed out/.test(r.result.error ?? '') && isDeepStrictEqual(file, r.result), r.result?.error);
+    await new Promise((res) => setTimeout(res, 1000));
+    const orphan = spawnSync('pgrep', ['-fl', output], { encoding: 'utf8' }).stdout.trim();
+    row('R0.8 … FFmpeg was killed: no process still writing the output', !orphan, orphan);
+    row('R0.8 … and no half-written video left at --out', !existsSync(output), existsSync(output) ? `${output} exists` : '');
   }
 
   // ── A0.5 (a)

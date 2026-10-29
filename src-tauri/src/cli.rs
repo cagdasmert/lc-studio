@@ -14,7 +14,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, Runtime};
@@ -391,6 +391,8 @@ fn emit(result: Option<&Path>, doc: &str) {
 
 pub struct CliState {
     pub cli: Option<Cli>,
+    /// A render's video file as it was before the run (size, modified), if it existed.
+    out_before: Option<(u64, Option<SystemTime>)>,
     started: Instant,
     loaded: AtomicBool,
     finished: AtomicBool,
@@ -401,8 +403,10 @@ pub struct CliState {
 impl CliState {
     pub fn new(cli: Option<Cli>) -> Self {
         let now = Instant::now();
+        let out_before = cli.as_ref().and_then(|c| video_out(&c.job)).and_then(file_stamp);
         CliState {
             cli,
+            out_before,
             started: now,
             loaded: AtomicBool::new(false),
             finished: AtomicBool::new(false),
@@ -414,7 +418,38 @@ impl CliState {
     fn beat(&self) {
         *self.last_beat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
     }
+
+    /// After a failed render, delete the video FFmpeg had started writing: a
+    /// truncated file at --out would read as a render. A file left as it was
+    /// before the run (FFmpeg never started) is kept.
+    fn discard_unfinished_video(&self) {
+        let Some(out) = self.cli.as_ref().and_then(|c| video_out(&c.job)) else { return };
+        if written_since(out, self.out_before) {
+            match std::fs::remove_file(out) {
+                Ok(()) => eprintln!("[lcs] removed the unfinished {}", out.display()),
+                Err(e) => eprintln!("[lcs] could not remove the unfinished {}: {e}", out.display()),
+            }
+        }
+    }
 }
+
+/// The video file a render writes; None for a PNG sequence and other commands.
+fn video_out(job: &Job) -> Option<&Path> {
+    match job {
+        Job::Render { out, format, .. } if format != "png-sequence" => Some(out),
+        _ => None,
+    }
+}
+
+fn file_stamp(path: &Path) -> Option<(u64, Option<SystemTime>)> {
+    std::fs::metadata(path).ok().map(|m| (m.len(), m.modified().ok()))
+}
+
+/// Whether `path` exists and isn't the file it was before the run.
+fn written_since(path: &Path, before: Option<(u64, Option<SystemTime>)>) -> bool {
+    file_stamp(path).is_some_and(|now| Some(now) != before)
+}
+
 
 /// The job for the frontend, or None on a normal launch. Grants the project
 /// folder, and creates and grants the folder of a PNG sequence or of stills.
@@ -477,6 +512,9 @@ pub fn cli_finish<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliStat
     }
     let errors = doc["issues"].as_array().is_some_and(|issues| issues.iter().any(|i| i["severity"] == "error"));
     let failed = doc["ok"] != Value::Bool(true) || errors;
+    if failed {
+        state.discard_unfinished_video();
+    }
     // The frontend's text as it is: re-serializing would sort the keys and,
     // without serde_json's float_roundtrip, change the last digit of some numbers.
     emit(cli.result.as_deref(), result.trim_end());
@@ -524,6 +562,7 @@ fn abort<R: Runtime>(app: &AppHandle<R>, state: &CliState, reason: &str) {
             let _ = job.ffmpeg.kill();
         }
     }
+    state.discard_unfinished_video();
     eprintln!("[lcs] {reason}");
     emit(cli.result.as_deref(), &failure(cli.job.name(), Some(cli.job.project()), reason, state.started.elapsed().as_millis()));
     std::process::exit(2);
@@ -797,5 +836,32 @@ mod tests {
         assert!(usage(&["automatch", p, "--layer"]).contains("--layer needs a value"));
         assert!(usage(&["automatch", p, "--frames", "auto"]).contains("--frames doesn't apply to automatch"));
         assert!(usage(&["check", p, "--write"]).contains("--write doesn't apply to check"));
+    }
+
+    #[test]
+    fn only_a_video_this_run_wrote_counts_as_unfinished() {
+        let root = scratch("unfinished");
+        let out = root.join("a.mp4");
+        // Didn't exist before; FFmpeg created it.
+        assert!(!written_since(&out, None));
+        fs::write(&out, b"partial").unwrap();
+        assert!(written_since(&out, None));
+        // Existed before and wasn't touched (FFmpeg never started): keep it.
+        let before = file_stamp(&out);
+        assert!(!written_since(&out, before));
+        // Existed before and FFmpeg rewrote it.
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(&out, b"partial, longer").unwrap();
+        assert!(written_since(&out, before));
+    }
+
+    #[test]
+    fn only_video_renders_have_a_file_to_discard() {
+        let (root, project) = with_project("video-out");
+        let p = project.to_str().unwrap();
+        let mp4 = root.join("a.mp4");
+        assert_eq!(video_out(&cli(&["render", p, "--out", mp4.to_str().unwrap()]).job), Some(mp4.as_path()));
+        assert_eq!(video_out(&cli(&["render", p, "--out", root.join("frames").to_str().unwrap()]).job), None);
+        assert_eq!(video_out(&cli(&["check", p]).job), None);
     }
 }
