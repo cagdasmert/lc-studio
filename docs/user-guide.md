@@ -334,6 +334,15 @@ Each finding in `issues` has a severity (`error`, `warn` or `note`), a code, a m
 
 `check` exits 1 when it finds an error, and 0 when it finds only warnings and notes.
 
+`automatch` places morph pairs with the same model as **Edit points… → Auto-match**, and merges them the same way: your manual pairs stay, and auto pairs keep clear of them.
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" automatch "Spring Launch.lcs" --layer "Before / after" --write
+```
+
+- `--layer` picks an image layer by id or name. Without it, every image layer with a morph is matched. A name shared by two layers is refused, and the error lists their ids.
+- Without `--write`, nothing is saved: the pairs come back in the result. With `--write`, they replace that layer's pairs in `project.json`, and nothing else in the file changes. Check the result mid-morph in lc-studio, as you would after auto-matching in the editor. A few pairs can land on look-alike features.
+
 The output is the same as a Render-panel export, frame for frame. The app's window never appears, there's no Dock icon, and it doesn't take focus, so you can keep working. A command-line render is slower than one from the Render panel, about 3.3× on macOS: macOS gives a page nobody can see a lower priority. A 15-second 1080×1920 reel takes about 10 seconds.
 
 The result is one JSON document on stdout: `ok`, `error`, the composition's size, frame count and duration, and any `issues` (such as a video the app can't decode, or GPU effects that fall back). Progress lines go to stderr. The exit code is 0 when the render succeeded, 1 when it ran and failed (for example, FFmpeg isn't installed), and 2 when it never started (a mistyped option, a folder that isn't a project, an output that already exists).

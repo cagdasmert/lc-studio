@@ -152,7 +152,7 @@ common: --result <file>   also write the result JSON to this file
 
 ### Output
 
-- **stdout:** exactly one JSON document, the result, and nothing else. **stderr:** human-readable progress (`[lcs] render 120/450 (26%)`, at most once a second) and diagnostics. `--result` writes the same JSON to a file, which is the reliable channel on Windows (R0.11). `lcs.py` always passes it.
+- **stdout:** exactly one JSON document, the result, and nothing else. Rust prints the frontend's text as it is, with the frontend's key order and exact numbers. **stderr:** human-readable progress (`[lcs] render 120/450 (26%)`, at most once a second) and diagnostics. `--result` writes the same JSON to a file, which is the reliable channel on Windows (R0.11). `lcs.py` always passes it.
 - The result:
 
 ```jsonc
@@ -291,6 +291,11 @@ common: --result <file>   also write the result JSON to this file
 | R3.2 | Bitmaps A (`src`) and B (`morph.target`) come from `MediaBlobCache`. The view comes from a new `morphViewFor(layer, sizeA, sizeB)` that `MorphEditor.tsx` uses too. `autoMatch(...)` → `mergeAuto(existing, incoming)`. Progress goes to `cli_progress`. |
 | R3.3 | Without `--write`, nothing is written. The merged pairs are in `data.layers[].pairs`. With `--write`, `project.json` is re-read and only those layers' `morph.pairs` (and `savedAt`) are replaced, then written with the app's serialiser. Not through `saveProject`, which bundles assets and is more than this needs. The result says `written: true`. |
 | R3.4 | `ModelMissingError` → `ok: false` with a `model-missing` issue and its message. |
+
+**As built (2026-10-29):**
+- **Image loading:** the images come from `loadMorphImages` (the renderer's media cache, as the editor loads them), not from `MediaBlobCache`.
+- **A3.1's bound:** "every pair within 0.03" can't be met. DINOv2's 14 px patches at 448 px on the long side are 0.031 of a 1080×1920 image's height and 0.056 of its width, and look-alike features give a few confident outliers (the editor's Edit points is for those). The check is now a median error of at most 0.03 and at least 90 % of pairs within 0.06. On a non-repeating 48-shape image, 48 pairs gave a median of 0.015, 45 within 0.06 and a worst of 0.18; on testsrc2's repeating colour bars, the median was 0.043. A wiring fault, such as swapping A and B or using the wrong view, gives a median of about 0.1.
+- **Result output:** `cli_finish` prints the frontend's result text as it is. Re-serializing it changed float digits (see §3).
 
 ### Acceptance
 

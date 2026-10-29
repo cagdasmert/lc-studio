@@ -12,6 +12,8 @@ import { openForRender, renderProject } from '../render-project';
 import { renderWarnings, type Issue } from './issues';
 import { renderStills, type StillsOptions } from './stills';
 import { runCheck } from './check';
+import { runAutomatch } from './automatch';
+import { ModelMissingError } from '../morph-match';
 
 /** The job as cli_job sends it: the parsed arguments, already checked by Rust. */
 export interface RenderJob {
@@ -36,7 +38,15 @@ export interface CheckJob {
   project: string;
   frames: 'auto' | 'all' | number[];
 }
-export type CliJob = RenderJob | StillsJob | CheckJob;
+export interface AutomatchJob {
+  command: 'automatch';
+  schema: number;
+  app: string;
+  project: string;
+  layer: string | null;
+  write: boolean;
+}
+export type CliJob = RenderJob | StillsJob | CheckJob | AutomatchJob;
 
 export interface CliResult {
   schema: number;
@@ -106,6 +116,17 @@ async function check(job: CheckJob, result: CliResult, progress: Progress, trap:
   result.data = { drawn };
 }
 
+async function automatch(job: AutomatchJob, result: CliResult, progress: Progress): Promise<void> {
+  const { path, composition } = await openForRender(job.project);
+  result.composition = summary(composition);
+  try {
+    result.data = await runAutomatch(composition, path, job, (done, total) => progress(done, total, 'automatch'));
+  } catch (err) {
+    if (err instanceof ModelMissingError) result.issues.push({ severity: 'error', code: 'model-missing', message: err.message });
+    throw err;
+  }
+}
+
 export async function runCliJob(job: CliJob): Promise<void> {
   const t0 = performance.now();
   const result: CliResult = {
@@ -130,7 +151,7 @@ export async function runCliJob(job: CliJob): Promise<void> {
     finished = true;
     clearInterval(heartbeat);
     result.ms = Math.round(performance.now() - t0);
-    await invoke('cli_finish', { result: JSON.stringify(result) });
+    await invoke('cli_finish', { result: JSON.stringify(result, null, 2) });
   };
   // An error that escapes the job still ends the run, rather than leaving it to the watchdog.
   const trap: ErrorTrap = { current: null };
@@ -156,6 +177,9 @@ export async function runCliJob(job: CliJob): Promise<void> {
         break;
       case 'check':
         await check(job, result, progress, trap);
+        break;
+      case 'automatch':
+        await automatch(job, result, progress);
         break;
     }
     result.ok = true;

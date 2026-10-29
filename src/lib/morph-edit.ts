@@ -5,6 +5,15 @@ import { mlsRigid, morphControls, type MorphView } from '../renderer/morph-field
 /** Auto-match never places a pair this close (UV) to a manual point. */
 export const MANUAL_CLEARANCE = 0.04;
 
+/** The view the morph editor and auto-match use: the layer's fit and box, and each image's own size. */
+export function morphViewFor(
+  layer: Pick<ImageLayerData, 'fitMode' | 'width' | 'height'>,
+  a: { width: number; height: number },
+  b: { width: number; height: number },
+): MorphView {
+  return { fitMode: layer.fitMode, sizeA: { w: a.width, h: a.height }, sizeB: { w: b.width, h: b.height }, boxW: layer.width, boxH: layer.height };
+}
+
 export function newPairId(): string {
   return `pair-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

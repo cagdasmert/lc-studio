@@ -28,6 +28,6 @@ export async function runCliIfRequested(): Promise<void> {
     // The runner's chunk didn't load: report that instead of waiting for the watchdog.
     const error = `the runner failed to start: ${err instanceof Error ? err.message : String(err)}`;
     const result = { schema: job.schema, app: job.app, command: job.command, project: job.project, ok: false, error, issues: [] };
-    await invoke('cli_finish', { result: JSON.stringify(result) });
+    await invoke('cli_finish', { result: JSON.stringify(result, null, 2) });
   }
 }

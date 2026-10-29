@@ -41,6 +41,7 @@ Usage:
   local-content-studio render <project> --out <file|dir> [--format F] [--quality Q] [--force]
   local-content-studio stills <project> --out <dir> [--frames F] [--scale S] [--sheet-scale S]
   local-content-studio check  <project> [--frames F]
+  local-content-studio automatch <project> [--layer L] [--write]
   local-content-studio --help | --version
 
   <project>         a .lcs folder, or the project.json inside one
@@ -62,6 +63,10 @@ stills (writes frame-NNNN.png for each frame and a labelled sheet.png into --out
 check (lists what lc-studio itself finds wrong; writes nothing):
   --frames F        the frames to draw, as for stills (default: auto)
 
+automatch (DINOv2 morph pairs, merged with manual pairs as Edit points… → Auto-match does):
+  --layer L         the image layer, by id or name (default: every layer with a morph)
+  --write           save the pairs into project.json (default: only print them)
+
 Common options:
   --result <file>   also write the result JSON to this file
   --timeout <secs>  give up after this many seconds
@@ -78,6 +83,7 @@ pub enum Job {
     #[serde(rename_all = "camelCase")]
     Stills { project: PathBuf, out: PathBuf, frames: Frames, scale: f64, sheet_scale: f64 },
     Check { project: PathBuf, frames: Frames },
+    Automatch { project: PathBuf, layer: Option<String>, write: bool },
 }
 
 /// `--frames`: `auto`, `all`, or frame numbers. The frontend, which knows the
@@ -95,12 +101,16 @@ impl Job {
             Job::Render { .. } => "render",
             Job::Stills { .. } => "stills",
             Job::Check { .. } => "check",
+            Job::Automatch { .. } => "automatch",
         }
     }
 
     fn project(&self) -> &Path {
         match self {
-            Job::Render { project, .. } | Job::Stills { project, .. } | Job::Check { project, .. } => project,
+            Job::Render { project, .. }
+            | Job::Stills { project, .. }
+            | Job::Check { project, .. }
+            | Job::Automatch { project, .. } => project,
         }
     }
 }
@@ -134,7 +144,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Launch {
             stderr: String::new(),
             result: None,
         },
-        Some(command @ ("render" | "stills" | "check")) => {
+        Some(command @ ("render" | "stills" | "check" | "automatch")) => {
             let mut result = None;
             match parse_command(command, args.collect(), &mut result) {
                 Ok(cli) => Launch::Cli(cli),
@@ -163,13 +173,14 @@ pub fn exit_early(code: i32, stdout: &str, stderr: &str, result: Option<&Path>) 
 }
 
 /// Options some command takes, beyond the common ones.
-const COMMAND_OPTIONS: &[&str] = &["--out", "--format", "--quality", "--force", "--frames", "--scale", "--sheet-scale"];
+const COMMAND_OPTIONS: &[&str] = &["--out", "--format", "--quality", "--force", "--frames", "--scale", "--sheet-scale", "--layer", "--write"];
 
 fn takes(command: &str, option: &str) -> bool {
     match command {
         "render" => matches!(option, "--out" | "--format" | "--quality" | "--force"),
         "stills" => matches!(option, "--out" | "--frames" | "--scale" | "--sheet-scale"),
         "check" => option == "--frames",
+        "automatch" => matches!(option, "--layer" | "--write"),
         _ => false,
     }
 }
@@ -182,7 +193,7 @@ fn parse_command(command: &str, args: Vec<OsString>, result: &mut Option<PathBuf
         if p.is_absolute() { p } else { cwd.join(p) }
     };
     let (mut project, mut out, mut timeout) = (None, None, None);
-    let (mut force, mut show) = (false, false);
+    let (mut force, mut show, mut write) = (false, false, false);
     // The other options' values, by option.
     let mut named = std::collections::HashMap::new();
 
@@ -214,6 +225,7 @@ fn parse_command(command: &str, args: Vec<OsString>, result: &mut Option<PathBuf
             }
             "--out" => out = Some(absolute(value()?)),
             "--force" => force = true,
+            "--write" => write = true,
             f => {
                 named.insert(f.to_string(), value()?.to_string_lossy().into_owned());
             }
@@ -242,7 +254,8 @@ fn parse_command(command: &str, args: Vec<OsString>, result: &mut Option<PathBuf
             scale: parse_scale(named("--scale"), 0.5, "--scale")?,
             sheet_scale: parse_scale(named("--sheet-scale"), 0.25, "--sheet-scale")?,
         },
-        _ => Job::Check { project, frames: frames()? },
+        "check" => Job::Check { project, frames: frames()? },
+        _ => Job::Automatch { project, layer: named("--layer").map(String::from), write },
     };
     Ok(Cli { job, result: result.clone(), timeout, show })
 }
@@ -416,7 +429,7 @@ pub fn cli_job<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>)
             grant(&scope, project, true).and_then(|()| if format == "png-sequence" { grant_out(&scope, out) } else { Ok(()) })
         }
         Job::Stills { project, out, .. } => grant(&scope, project, true).and_then(|()| grant_out(&scope, out)),
-        Job::Check { project, .. } => grant(&scope, project, true),
+        Job::Check { project, .. } | Job::Automatch { project, .. } => grant(&scope, project, true),
     };
     if let Err(reason) = granted {
         abort(&app, &state, &reason);
@@ -454,7 +467,7 @@ pub fn cli_progress(state: tauri::State<'_, CliState>, done: u32, total: u32, st
     eprintln!("[lcs] {stage} {done}/{total} ({}%)", u64::from(done) * 100 / u64::from(total));
 }
 
-/// Print the frontend's result and exit: 0 if it ran cleanly, 1 if not.
+/// Print the frontend's result (already pretty-printed) and exit: 0 if it ran cleanly, 1 if not.
 #[tauri::command]
 pub fn cli_finish<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliState>, result: String) -> Result<(), String> {
     let cli = state.cli.as_ref().ok_or("not a command-line run")?;
@@ -464,7 +477,9 @@ pub fn cli_finish<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, CliStat
     }
     let errors = doc["issues"].as_array().is_some_and(|issues| issues.iter().any(|i| i["severity"] == "error"));
     let failed = doc["ok"] != Value::Bool(true) || errors;
-    emit(cli.result.as_deref(), &serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?);
+    // The frontend's text as it is: re-serializing would sort the keys and,
+    // without serde_json's float_roundtrip, change the last digit of some numbers.
+    emit(cli.result.as_deref(), result.trim_end());
     // Not app.exit(code): on macOS its code never reaches the process, which exits 0.
     app.cleanup_before_exit();
     std::process::exit(if failed { 1 } else { 0 });
@@ -768,5 +783,19 @@ mod tests {
         assert!(usage(&["check", p, "--out", out.to_str().unwrap()]).contains("--out doesn't apply to check"));
         assert!(usage(&["check", p, "--frames", "soon"]).contains("--frames takes"));
         assert!(usage(&["check"]).contains("check needs a <project>"));
+    }
+
+    #[test]
+    fn automatch_layer_and_write() {
+        let (_root, project) = with_project("automatch");
+        let p = project.to_str().unwrap();
+        assert_eq!(cli(&["automatch", p]).job, Job::Automatch { project: project.clone(), layer: None, write: false });
+        let c = cli(&["automatch", p, "--layer", "Before / after", "--write"]);
+        assert_eq!(c.job, Job::Automatch { project: project.clone(), layer: Some("Before / after".into()), write: true });
+        let json = serde_json::to_value(&c.job).unwrap();
+        assert_eq!((json["command"].as_str(), json["layer"].as_str(), json["write"].as_bool()), (Some("automatch"), Some("Before / after"), Some(true)));
+        assert!(usage(&["automatch", p, "--layer"]).contains("--layer needs a value"));
+        assert!(usage(&["automatch", p, "--frames", "auto"]).contains("--frames doesn't apply to automatch"));
+        assert!(usage(&["check", p, "--write"]).contains("--write doesn't apply to check"));
     }
 }

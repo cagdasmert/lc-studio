@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import type { ImageLayerData, ImageMorphDef, Layer, MorphPair, MorphPoint } from '../../types';
-import { createMediaCache, loadImage } from '../../renderer/media-cache';
-import { resolveAssetPath } from '../../lib/asset-manager';
 import { boxToUv, fitRect, uvToBox, type Rect } from '../../renderer/fit';
 import { MORPH_GRID, renderMorph } from '../../renderer/draw-morph';
 import { buildMorphMesh, type MorphView } from '../../renderer/morph-field';
-import { addPair, clearAuto, deletePair, mergeAuto, movePoint, newPairId } from '../../lib/morph-edit';
+import { addPair, clearAuto, deletePair, mergeAuto, morphViewFor, movePoint, newPairId } from '../../lib/morph-edit';
+import { loadMorphImages } from '../../lib/morph-images';
 import {
   DEFAULT_VIEW, hitPoint, paneXf, toBox, toScreen, zoomAt, type PaneView, type PaneXf,
 } from '../../lib/morph-pane';
@@ -76,24 +75,15 @@ export function MorphEditor({ layer, sceneIndex, onClose }: {
   const target = layer.morph?.target ?? '';
   useEffect(() => {
     let cancelled = false;
-    const cache = createMediaCache();
-    (async () => {
-      await Promise.all([layer.src, target].filter(Boolean).map(async (src) =>
-        loadImage(cache, src, await resolveAssetPath(src, projectPath))));
-      if (!cancelled) setBitmaps({ a: cache.get(layer.src), b: cache.get(target) });
-    })();
+    loadMorphImages(layer.src, target, projectPath).then((images) => {
+      if (!cancelled) setBitmaps(images);
+    });
     return () => { cancelled = true; };
   }, [layer.src, target, projectPath]);
 
   const view: MorphView | null = useMemo(() => {
     if (!bitmaps.a || !bitmaps.b) return null;
-    return {
-      fitMode: layer.fitMode,
-      sizeA: { w: bitmaps.a.width, h: bitmaps.a.height },
-      sizeB: { w: bitmaps.b.width, h: bitmaps.b.height },
-      boxW: layer.width,
-      boxH: layer.height,
-    };
+    return morphViewFor(layer, bitmaps.a, bitmaps.b);
   }, [bitmaps, layer.fitMode, layer.width, layer.height]);
 
   const rectOf = (side: Side): Rect => {
