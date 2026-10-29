@@ -4,20 +4,63 @@ import { createCanvasGradient } from './gradient';
 import { getEasing } from './easing';
 import { hash } from './noise';
 
+export interface TextLayout {
+  letterSpacing: number;
+  lineHeightPx: number;
+  lines: string[];
+  /** The block's height: lines × line height. */
+  height: number;
+  /** Whether lines are drawn a character at a time (letter spacing or a character animation). */
+  perChar: boolean;
+}
+
+/**
+ * The font, wrapped lines and block height drawTextLayer draws at a frame.
+ * Sets ctx.font. The command line's `check` uses it to find text that
+ * doesn't fit its box, with drawnLineWidth.
+ */
+export function layoutText(
+  ctx: CanvasRenderingContext2D,
+  layer: TextLayerData,
+  resolved: ResolvedTransform,
+  frameInLayer: number,
+): TextLayout {
+  const fontSize = resolveNumericProperty(layer.keyframes, 'fontSize', frameInLayer, layer.fontSize);
+  const letterSpacing = resolveNumericProperty(layer.keyframes, 'letterSpacing', frameInLayer, layer.letterSpacing);
+  const lineHeight = resolveNumericProperty(layer.keyframes, 'lineHeight', frameInLayer, layer.lineHeight);
+  const weight = layer.fontWeight === 'normal' ? '' : layer.fontWeight;
+  const style = layer.fontStyle === 'normal' ? '' : layer.fontStyle;
+  ctx.font = `${style} ${weight} ${fontSize}px ${layer.fontFamily}`.trim();
+  const lines = wrapText(ctx, layer.content, layer.maxWidth || resolved.width, letterSpacing);
+  const lineHeightPx = fontSize * lineHeight;
+  const perChar = letterSpacing !== 0 || (!!layer.charAnimation && layer.charAnimation.type !== 'none');
+  return { letterSpacing, lineHeightPx, lines, height: lines.length * lineHeightPx, perChar };
+}
+
+/**
+ * A line's width as drawn in ctx's current font: character by character with
+ * letter spacing between them when perChar, else the whole line. Wrapping
+ * measures without the spacing, so spaced text can draw wider than its box.
+ */
+export function drawnLineWidth(ctx: CanvasRenderingContext2D, line: string, letterSpacing: number, perChar: boolean): number {
+  if (!perChar) return ctx.measureText(line).width;
+  let width = 0;
+  let chars = 0;
+  for (const char of line) {
+    width += ctx.measureText(char).width;
+    chars++;
+  }
+  return width + letterSpacing * Math.max(0, chars - 1);
+}
+
 export function drawTextLayer(
   ctx: CanvasRenderingContext2D,
   layer: TextLayerData,
   resolved: ResolvedTransform,
   frameInLayer: number,
 ): void {
-  const fontSize = resolveNumericProperty(layer.keyframes, 'fontSize', frameInLayer, layer.fontSize);
-  const letterSpacing = resolveNumericProperty(layer.keyframes, 'letterSpacing', frameInLayer, layer.letterSpacing);
-  const lineHeight = resolveNumericProperty(layer.keyframes, 'lineHeight', frameInLayer, layer.lineHeight);
+  const { letterSpacing, lineHeightPx, lines, height: totalHeight } = layoutText(ctx, layer, resolved, frameInLayer);
   const color = resolveColorProperty(layer.keyframes, 'color', frameInLayer, layer.color);
-
-  const weight = layer.fontWeight === 'normal' ? '' : layer.fontWeight;
-  const style = layer.fontStyle === 'normal' ? '' : layer.fontStyle;
-  ctx.font = `${style} ${weight} ${fontSize}px ${layer.fontFamily}`.trim();
   const fillType = layer.fillType ?? 'solid';
   if (fillType !== 'solid' && layer.fillGradient) {
     ctx.fillStyle = createCanvasGradient(ctx, layer.fillGradient, resolved.width, resolved.height);
@@ -34,11 +77,6 @@ export function drawTextLayer(
     ctx.shadowOffsetX = layer.textShadow.offsetX;
     ctx.shadowOffsetY = layer.textShadow.offsetY;
   }
-
-  // Word wrap
-  const lines = wrapText(ctx, layer.content, layer.maxWidth || resolved.width, letterSpacing);
-  const lineHeightPx = fontSize * lineHeight;
-  const totalHeight = lines.length * lineHeightPx;
 
   // Vertical alignment offset
   let yOffset = 0;

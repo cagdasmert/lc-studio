@@ -29,6 +29,7 @@ npm run tauri dev     # Full desktop app with hot-reload
 | `npx tsc --noEmit` | Type-check without emitting |
 | `npm test` | Run the Vitest suite once |
 | `npm run test:watch` | Vitest in watch mode |
+| `src-tauri/target/debug/local-content-studio render <project> --out <file>` | Command-line render (debug build: needs Vite on :1420); see "Command-line mode" |
 
 ## Tech Stack
 
@@ -123,6 +124,16 @@ src/                              # React frontend
     video-support.ts              # Can this webview decode a video? (Render panel warning)
     easing-options.ts             # Grouped easing list for menus
     e2e.ts                        # Debug-only scripted acceptance runs (LCS_E2E)
+    render-project.ts             # Open + render a project (command line and the e2e render job)
+    morph-images.ts               # A morph's two images, decoded as the renderer does (editor and CLI auto-match)
+    key-frames.ts                 # The frames `stills --frames auto` picks: hook, settled, transition, morph, end
+    cli/
+      index.ts                    # Asks Rust for a command-line job on startup; autosave off while one runs
+      run.ts                      # Runs the job and builds the result document (loaded only for a job)
+      stills.ts                   # `stills`: frame PNGs (the export renderer and encoder) and the labelled sheet
+      check.ts                    # `check`: shape, media, fonts, text fit (layoutText), draw and editor checks
+      automatch.ts                # `automatch`: which layers, autoMatch + mergeAuto, the --write patch of project.json
+      issues.ts                   # The result's issue codes (a closed list) and the Render panel's warnings
     dialog.ts                     # Save file dialog wrapper
     file-utils.ts                 # File picker + blob URL conversion
     project-io.ts                 # Project save/load (.lcs.json format)
@@ -150,7 +161,8 @@ src/                              # React frontend
 src-tauri/                        # Rust backend
   src/
     main.rs                       # Desktop entry point
-    lib.rs                        # Tauri app builder + plugin registration
+    lib.rs                        # Tauri app builder, plugin registration, the main window (hidden for CLI runs)
+    cli.rs                        # Command-line mode: argv parsing, cli_* commands, watchdog
     e2e.rs                        # Debug-only LCS_E2E hook for scripts/e2e/
     render/
       mod.rs                      # Module declaration
@@ -401,6 +413,15 @@ node scripts/e2e/fx4-vhs.mjs   # FX pack P4: VHS in real exports, with shake, gr
 node scripts/e2e/fx-gl.mjs     # FX pack P5: A5.1–A5.7, the WebGL2 pass, its transitions, lenses and fallback
 ```
 
+`cli0-render.mjs` runs the debug binary as a command-line tool instead, with `runCli(args)` from `lib.mjs` (start Vite with `ensureDevServer()` first). Run it with nothing on :1420 so it can check that a missing frontend fails cleanly, and with `--long` for the 6.5-minute steadiness check:
+
+```bash
+node scripts/e2e/cli0-render.mjs [--long]  # CLI spec A0.2–A0.5: render, failure paths, hidden-window speed
+node scripts/e2e/cli1-stills.mjs           # CLI spec A1.2–A1.3: stills match the export, auto frames, the sheet
+node scripts/e2e/cli2-check.mjs            # CLI spec A2.2–A2.4: one fixture per check issue; check writes nothing
+node scripts/e2e/cli3-automatch.mjs        # CLI spec A3.1–A3.3: pairs follow a known transform, --write, a missing model
+```
+
 `fx-regression.mjs` exports a fixture that uses every layer FX and scene FX from before the FX pack, plus cuts and zoom transitions, and compares each PNG frame with a baseline in `test-media/fx-regression-baseline/`. Make the baseline on the old code with `--baseline`, then run it without the flag after the change. A change that should not alter existing projects must keep it passing.
 
 ## Tauri IPC Protocol
@@ -416,8 +437,40 @@ Communication between frontend and Rust uses Tauri's `invoke` API:
 | `cancel_render` | TS → Rust | — | Kill FFmpeg process |
 | `e2e_script` | TS → Rust → TS | — / String or null | Debug builds: the `LCS_E2E` script, if any |
 | `e2e_finish` | TS → Rust | result JSON | Debug builds: write the e2e results and quit |
+| `cli_job` | TS → Rust → TS | — / job or null | The command-line job, if any; grants its folders |
+| `cli_progress` | TS → Rust | done, total, stage | Progress to stderr (`total` 0: a heartbeat) |
+| `cli_finish` | TS → Rust | result JSON | Print the result, exit 0 or 1 |
 
 The `write_frame` command receives raw bytes via `tauri::ipc::Request` for zero-copy transfer of frame data.
+
+### Command-line mode
+
+`local-content-studio render <project> --out <file|dir>` (user guide: "From the Command Line"; design: `docs/superpowers/specs/2026-10-28-headless-cli-design.md`). The flow:
+
+1. `cli::parse` (`src-tauri/src/cli.rs`) runs before Tauri starts. A first argument that isn't a command is a normal GUI launch, so "open with" launches that pass a path are unchanged. Usage errors, a folder that isn't a project, a skill draft, and an existing `--out` without `--force` all exit 2 with a JSON result and no window.
+2. `build_main_window` (`lib.rs`) builds the window that `tauri.conf.json` declares with `create: false`. For a command-line job it's hidden, unfocused, with `BackgroundThrottlingPolicy::Disabled` and, on macOS, `ActivationPolicy::Accessory` (no Dock icon). Without `Disabled`, a hidden page is suspended from the start. Even with it, macOS puts WebKit's processes in the background band while the page is hidden, so renders run about 3.3× slower than in a visible window (`render` on `long-gl`: 3.0 s visible, 9.8 s hidden, debug build, M4 Pro). Covered windows are slowed the same way, so this also applies to GUI exports behind other windows. Every visible variant tried took focus. The measurements are in §10 of the spec.
+3. `App.tsx` calls `runCliIfRequested()` (`src/lib/cli/index.ts`) on mount, in every build. It asks `cli_job`, loads `./run` only if there's a job, and keeps autosave off. `cli_job` grants the project folder, and creates and grants a PNG sequence's folder.
+4. `runCliJob` loads through `renderProject` (`src/lib/render-project.ts`): no recent-list entry, bundled fonts awaited before the first frame. It adds the Render panel's warnings as `issues`, refuses video formats without FFmpeg, renders, and sends `cli_finish`. Progress goes to `cli_progress` at most every 250 ms, with a heartbeat every 5 s. Uncaught errors and rejections also end the run. `stills` opens with `openForRender` and draws with `createFrameRenderer` and `encodePng` from `capture.ts`, which the PNG-sequence export uses too, so a still at scale 1 is byte-identical to that frame's export. `check` (`src/lib/cli/check.ts`) runs these steps:
+- **Load:** stops at a load or shape failure.
+- **Media and fonts:** looks for missing media (the files `assetRefs` and scene backgrounds point at) and unusable fonts.
+- **Text fit:** measures text with `layoutText` and `drawnLineWidth` from `draw-text.ts`. `drawTextLayer` uses `layoutText` too, so the two can't disagree; widths stay a separate helper, so drawing doesn't pay for them.
+- **Warnings:** adds the Render panel's warnings, as notes when nothing falls back.
+- **Draw:** draws the chosen frames with the export renderer.
+- **Editor:** puts the project into the store as Open does. Uncaught errors in this step go to an error trap in `run.ts` instead of ending the run. A missing `.canvas-workspace canvas` or any error is an `editor` issue.
+
+A layer `check` itself can't lay out becomes a `draw` issue, not a failed run. `check` sets `ok: true` whenever it finishes; its error issues make the exit code 1. On fx-regression it takes 1.6 s (debug build).
+
+`automatch` (`src/lib/cli/automatch.ts`) does the following:
+- **Images and view:** loads both images with `loadMorphImages` and builds the view with `morphViewFor` (`morph-edit.ts`). The morph editor uses both too, so the two can't match differently.
+- **Matching:** runs `autoMatch` and `mergeAuto`.
+- **`--write`:** re-reads `project.json` and replaces only those layers' `morph.pairs` and `savedAt`; it doesn't go through `saveProject`, which bundles assets.
+- **Missing model:** `ModelMissingError` becomes a `model-missing` issue. The debug build reads the model from `src-tauri/target/debug/models/`.
+
+`cli_finish` prints the frontend's result text as it is (`JSON.stringify(result, null, 2)`) and parses it only to choose the exit code. Re-serializing it through `serde_json::Value` sorted the keys and, without the `float_roundtrip` feature, changed the last digit of some numbers.
+5. `cli_finish` prints the result on stdout and to `--result`, then exits 1 if `ok` is false or any issue has `severity: "error"`, else 0. It calls `cleanup_before_exit` and `std::process::exit`, because `AppHandle::exit(code)` doesn't pass the code to the process on macOS.
+6. A watchdog thread exits 2, killing any FFmpeg, if `cli_job` isn't called within 30 s (a debug build without Vite never loads), if nothing arrives for 120 s, or when `--timeout` passes. A failure inside `cli_job` takes the same path at once. On that path, and when `cli_finish` gets a failed render, `discard_unfinished_video` deletes the video at `--out` if it differs from the file there before the run (size and modified time), so a truncated MP4 never passes for a render, and a file FFmpeg never touched is kept. `cli0-render.mjs` checks this with a 3 s `--timeout`.
+
+The result document's shape (schema 1) is §3 of the spec. lcs.py reads it, so add fields freely, but bump `RESULT_SCHEMA` for any change that breaks a reader. Issue codes are a closed list in `src/lib/cli/issues.ts`. The e2e `render` job goes through `renderProject` too, so the two paths can't drift. `LCS_E2E` is ignored when a command-line job is present.
 
 ## Tauri Plugins
 

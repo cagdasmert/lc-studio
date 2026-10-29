@@ -256,6 +256,10 @@ Custom Canvas + FFmpeg pipeline:
 
 **Deterministic output** — same composition + assets = same render every time.
 
+### Command-Line Rendering
+
+`local-content-studio render <project> --out <file|dir>` renders a project with the same renderer, in a hidden window. It prints a JSON result on stdout and exits with 0 (rendered), 1 (ran and failed) or 2 (never started). Agents and scripts use it, including the `lc-studio-project` skill. Frames are identical to a Render-panel export. Hidden renders run about 3.3× slower on macOS, which deprioritises pages nobody can see. `local-content-studio stills <project> --out <dir>` draws the frames worth checking (the hook, each settled scene, each transition's and morph's middle, the end), or chosen ones, as PNGs plus one labelled contact sheet. `local-content-studio check <project>` reports what the app itself finds wrong: a project it can't load or that crashes its editor, missing media and fonts, text that overflows its box (measured with the renderer's own layout), frames that fail to draw, undecodable video and GPU fallbacks. It writes nothing. `local-content-studio automatch <project> [--layer L] [--write]` places morph pairs with the DINOv2 model, merged with manual pairs as the editor's Auto-match does, and with `--write` saves them into `project.json`. Design: docs/superpowers/specs/2026-10-28-headless-cli-design.md.
+
 ### Visual Storyboard Editor
 
 Full GUI editor with:

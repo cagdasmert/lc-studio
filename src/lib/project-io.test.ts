@@ -24,8 +24,10 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(() => Promise.resolve(()
 vi.mock('@tauri-apps/api/path', () => ({
   join: (...parts: string[]) => Promise.resolve(parts.join('/')),
 }));
+let fileText = project;
+
 vi.mock('@tauri-apps/plugin-fs', () => ({
-  readTextFile: (p: string) => { calls.push(`read:${p}`); return Promise.resolve(project); },
+  readTextFile: (p: string) => { calls.push(`read:${p}`); return Promise.resolve(fileText); },
   writeTextFile: (p: string) => { calls.push(`write:${p}`); return Promise.resolve(); },
   exists: (p: string) => Promise.resolve(p.endsWith('.lcs/project.json')),
 }));
@@ -37,7 +39,9 @@ vi.mock('./asset-manager', () => ({
   ensureProjectDir: (p: string) => { calls.push(`mkdir:${p}`); return Promise.resolve(); },
   bundleAssets: (c: unknown) => Promise.resolve(c),
 }));
-vi.mock('./font-manager', () => ({ loadProjectFonts: () => Promise.resolve() }));
+vi.mock('./font-manager', () => ({
+  loadProjectFonts: () => new Promise<void>((resolve) => setTimeout(() => { calls.push('fonts'); resolve(); }, 0)),
+}));
 
 const store = new Map<string, string>();
 vi.stubGlobal('localStorage', {
@@ -77,5 +81,33 @@ describe('project folder file access', () => {
     const mkdir = calls.indexOf('mkdir:/Users/me/Documents/Launch.lcs');
     expect(grant).toBeGreaterThanOrEqual(0);
     expect(mkdir).toBeGreaterThan(grant);
+  });
+});
+
+describe('loading for a render', () => {
+  beforeEach(() => {
+    calls.length = 0;
+    store.clear();
+    fileText = project;
+  });
+
+  it('adds the project to the recent list unless asked not to', async () => {
+    await loadProjectFromPath('/Users/me/Documents/Launch.lcs', { recent: false });
+    expect(store.size).toBe(0);
+    await loadProjectFromPath('/Users/me/Documents/Launch.lcs');
+    expect(store.get('lcs:recentProjects')).toContain('/Users/me/Documents/Launch.lcs');
+  });
+
+  it('waits for bundled fonts only when asked', async () => {
+    await loadProjectFromPath('/Users/me/Documents/Launch.lcs');
+    expect(calls).not.toContain('fonts');
+    calls.length = 0;
+    await loadProjectFromPath('/Users/me/Documents/Launch.lcs', { awaitFonts: true });
+    expect(calls).toContain('fonts');
+  });
+
+  it('refuses a skill draft with a pointer to the builder', async () => {
+    fileText = JSON.stringify({ draft: { name: 'x', output: 'tiktok', scenes: [] } });
+    await expect(loadProjectFromPath('/Users/me/Documents/Launch.lcs')).rejects.toThrow(/this is a draft.*lcs\.py build/);
   });
 });

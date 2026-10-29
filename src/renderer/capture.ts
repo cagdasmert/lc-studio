@@ -25,8 +25,19 @@ function padFrame(n: number, total: number): string {
   return String(n).padStart(digits, '0');
 }
 
+/** A PNG sequence's file name for a frame, e.g. `frame-0012.png`. */
+export function framePngName(frame: number, totalFrames: number): string {
+  return `frame-${padFrame(frame, totalFrames)}.png`;
+}
+
+/** A canvas as PNG bytes: the one encoder for PNG sequences and command-line stills. */
+export async function encodePng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  const blob = await canvasToBlob(canvas, 'image/png');
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
 /** What one export needs to draw frames, and to let go of afterwards. */
-async function createFrameRenderer(composition: Composition, projectDir: string | null) {
+export async function createFrameRenderer(composition: Composition, projectDir: string | null) {
   const { width, height } = composition.output;
 
   const mediaCache = createMediaCache();
@@ -77,10 +88,7 @@ async function renderPngSequence(
     for (let frame = 0; frame < totalFrames; frame++) {
       await renderer.draw(frame);
 
-      const blob = await canvasToBlob(renderer.canvas, 'image/png');
-      const buffer = new Uint8Array(await blob.arrayBuffer());
-      const filePath = `${outputDir}/frame-${padFrame(frame, totalFrames)}.png`;
-      await writeFile(filePath, buffer);
+      await writeFile(`${outputDir}/${framePngName(frame, totalFrames)}`, await encodePng(renderer.canvas));
 
       onProgress?.(frame + 1, totalFrames);
 

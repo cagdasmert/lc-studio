@@ -108,8 +108,14 @@ export async function openProjectFolder(): Promise<{ path: string; composition: 
   return loadProjectFromPath(dirPath);
 }
 
+/**
+ * `recent: false` keeps the project out of the recent list, and `awaitFonts`
+ * registers its bundled fonts before returning, so a render that starts at
+ * once draws with them (the editor doesn't wait; command-line renders do).
+ */
 export async function loadProjectFromPath(
   path: string,
+  { recent = true, awaitFonts = false }: { recent?: boolean; awaitFonts?: boolean } = {},
 ): Promise<{ path: string; composition: Composition }> {
   let jsonPath: string;
   let projectDir: string;
@@ -144,10 +150,11 @@ export async function loadProjectFromPath(
   }
 
   const composition = await readProjectFile(jsonPath);
-  addToRecent(projectDir, composition.name);
-  // Non-blocking: register any fonts stored in assets/fonts/
+  if (recent) addToRecent(projectDir, composition.name);
+  // Register any fonts stored in assets/fonts/
   if (isV3ProjectDir(projectDir)) {
-    loadProjectFonts(projectDir).catch(() => {});
+    const fonts = loadProjectFonts(projectDir).catch(() => {});
+    if (awaitFonts) await fonts;
   }
   return { path: projectDir, composition };
 }
@@ -169,6 +176,11 @@ async function readProjectFile(path: string): Promise<Composition> {
     file = JSON.parse(text) as ProjectFile;
   } catch {
     throw new Error('Invalid project file: corrupted or malformed JSON');
+  }
+
+  // A draft for the lc-studio-project skill's builder; its shorthand values would crash the editor.
+  if (file && typeof file === 'object' && 'draft' in file) {
+    throw new Error('Invalid project file: this is a draft (build input), not a project — run `lcs.py build` on it and open the .lcs folder it writes');
   }
 
   if (!file.composition || !file.composition.scenes) {

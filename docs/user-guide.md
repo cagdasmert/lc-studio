@@ -289,6 +289,68 @@ The Render Panel (below the canvas) shows the detected FFmpeg version. If FFmpeg
 - **Audio:** AAC at 192kbps (if audio layers are present)
 - **Resolution & FPS:** Matches the composition's output preset (default 1080x1920 @ 30fps)
 
+### From the Command Line
+
+The app binary can also render a project without opening its window, for scripts and agents (such as the `lc-studio-project` skill):
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" render "Spring Launch.lcs" --out "Spring Launch.mp4"
+```
+
+- `<project>` is a `.lcs` folder or the `project.json` inside it.
+- `--out` is the video file. Its extension picks the format (`.mp4`, `.webm`, `.mov`, `.gif`); a path with no extension renders a PNG sequence into that folder. `--format` overrides the extension.
+- `--quality low|medium|high|lossless` (default `medium`), as in the Render panel.
+- `--force` replaces an existing `--out`. Without it, an existing output is refused.
+- `--result <file>` also writes the result to a file. `--timeout <secs>` gives up after that long.
+- `--show` uses the normal visible window. It's for debugging: the window takes focus.
+- `--help` lists the options; `--version` prints the version.
+
+`stills` draws chosen frames instead of the whole video, plus one contact sheet, to check a project at a glance:
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" stills "Spring Launch.lcs" --out stills
+```
+
+- By default (`--frames auto`) it picks the frames worth looking at: frame 12 (where the hook should already read), each scene once it has settled before its transition, the middle of each transition, the middle of each image morph, and the last frame. `--frames 0,45,90` picks your own frames (counted from 0), and `--frames all` picks every one.
+- It writes `frame-NNNN.png` for each frame, at half size by default (`--scale`, more than 0 and at most 1; at 1 the files are byte-identical to a PNG-sequence render). `sheet.png` puts all of them in a grid, each labelled with its frame number, why it was picked, the time and the scene (`--sheet-scale`, default 0.25). Above 60 frames there's no sheet, only the files.
+- The folder may already exist. Stills replace only their own files.
+
+`check` reports what lc-studio itself finds wrong with a project, without writing anything:
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" check "Spring Launch.lcs"
+```
+
+Each finding in `issues` has a severity (`error`, `warn` or `note`), a code, a message naming the scene and layer, and the frame where it applies. It looks for:
+
+- **`load`:** a project the app can't open, or one whose values aren't the shape the app expects (such as `"output": "tiktok"` instead of a width, height and fps).
+- **`media-missing`:** an image, video, audio file or morph target that isn't there, or that sits outside the project folder where the app may not read it.
+- **`font-missing`:** a font that isn't bundled or installed, so its text falls back to another font, or a font name the canvas can't use as written.
+- **`text-overflow`:** text that doesn't fit its box, measured the way the renderer draws it, including letter spacing and keyframed sizes.
+- **`video-undecodable`** and **`gpu-fallback`:** the Render panel's warnings. When WebGL2 is available, the GPU effects in use are listed as a note.
+- **`draw`:** a frame that fails to draw. By default it draws the same frames `stills` picks; `--frames` chooses others, and `--frames all` draws every one.
+- **`editor`:** a project that crashes lc-studio's editor, which would show a black window when you open it.
+- **`ffmpeg-missing`:** FFmpeg isn't installed, so video exports would fail.
+
+`check` exits 1 when it finds an error, and 0 when it finds only warnings and notes.
+
+`automatch` places morph pairs with the same model as **Edit points… → Auto-match**, and merges them the same way: your manual pairs stay, and auto pairs keep clear of them.
+
+```bash
+"/Applications/Local Content Studio.app/Contents/MacOS/local-content-studio" automatch "Spring Launch.lcs" --layer "Before / after" --write
+```
+
+- `--layer` picks an image layer by id or name. Without it, every image layer with a morph is matched. A name shared by two layers is refused, and the error lists their ids.
+- Without `--write`, nothing is saved: the pairs come back in the result. With `--write`, they replace that layer's pairs in `project.json`, and nothing else in the file changes. Check the result mid-morph in lc-studio, as you would after auto-matching in the editor. A few pairs can land on look-alike features.
+
+The output is the same as a Render-panel export, frame for frame. The app's window never appears, there's no Dock icon, and it doesn't take focus, so you can keep working. A command-line render is slower than one from the Render panel, about 3.3× on macOS: macOS gives a page nobody can see a lower priority. A 15-second 1080×1920 reel takes about 10 seconds.
+
+The result is one JSON document on stdout: `ok`, `error`, the composition's size, frame count and duration, and any `issues` (such as a video the app can't decode, or GPU effects that fall back). Progress lines go to stderr. The exit code is 0 when the render succeeded, 1 when it ran and failed (for example, FFmpeg isn't installed), and 2 when it never started (a mistyped option, a folder that isn't a project, an output that already exists) or ran past `--timeout`. A render that fails or times out leaves no half-written video at `--out`.
+
+Opening the project in lc-studio while it renders from the command line is fine. The command line never changes the project or the app's recent-projects list.
+
+On Windows, read the result from `--result`, because the app has no console there. On Linux, the app needs a display (run it under `xvfb-run -a` on a machine without one). Both are untested so far.
+
 ## Project Management
 
 ### Saving a Project
