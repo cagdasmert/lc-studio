@@ -2,6 +2,7 @@
 //
 // CLI spec A2.1: layoutText's lines are the lines drawTextLayer draws, and
 // drawnLineWidth is their width as drawn, with and without letter spacing.
+// Wrapping measures lines that same way, so spaced text fits its box.
 import { describe, expect, it } from 'vitest';
 import { createCanvas } from 'canvas';
 import type { ResolvedTransform, TextLayerData } from '../types';
@@ -66,7 +67,7 @@ describe('drawnLineWidth', () => {
     const last = calls[calls.length - 1];
     const extent = last[1] + ctx.measureText(last[0]).width - calls[0][1];
     expect(drawnLineWidth(ctx, lines[0], letterSpacing, perChar)).toBeCloseTo(extent);
-    // Wrapping measured without the spacing, so the drawn line is wider than the measured one.
+    // The spacing makes the drawn line wider than measureText says.
     expect(drawnLineWidth(ctx, lines[0], letterSpacing, perChar)).toBeGreaterThan(ctx.measureText(lines[0]).width);
   });
 
@@ -74,5 +75,44 @@ describe('drawnLineWidth', () => {
     const ctx = ctx2d();
     const { lines, letterSpacing, perChar } = layoutText(ctx, text({ content: 'NARROW' }), box, 0);
     expect(drawnLineWidth(ctx, lines[0], letterSpacing, perChar)).toBe(ctx.measureText('NARROW').width);
+  });
+});
+
+describe('wrapping with letter spacing', () => {
+  it('wraps at the drawn width, so every line fits its box', () => {
+    const ctx = ctx2d();
+    const plain = layoutText(ctx, text(), box, 0);
+    const spaced = layoutText(ctx, text({ letterSpacing: 12 }), box, 0);
+    expect(spaced.lines.length).toBeGreaterThan(plain.lines.length);
+    for (const line of spaced.lines) {
+      expect(drawnLineWidth(ctx, line, 12, true)).toBeLessThanOrEqual(box.width);
+    }
+  });
+
+  it('breaks a line that only fit as measured without the spacing', () => {
+    const ctx = ctx2d();
+    ctx.font = 'bold 40px sans-serif';
+    const narrow = { ...box, width: Math.ceil(ctx.measureText('WIDE WORDS').width * 1.05) };
+    expect(layoutText(ctx, text({ content: 'WIDE WORDS' }), narrow, 0).lines).toEqual(['WIDE WORDS']);
+    const spaced = layoutText(ctx, text({ content: 'WIDE WORDS', letterSpacing: 10 }), narrow, 0);
+    expect(spaced.lines).toEqual(['WIDE', 'WORDS']);
+    for (const line of spaced.lines) expect(drawnLineWidth(ctx, line, 10, true)).toBeLessThanOrEqual(narrow.width);
+  });
+
+  it('wraps unspaced text exactly as whole-line measuring did', () => {
+    const ctx = ctx2d();
+    const layer = text({ content: 'Stop scrolling, the spring launch is here\nand it is bright' });
+    const got = layoutText(ctx, layer, box, 0).lines;
+    // The rule before letter spacing counted: greedy, each candidate line measured whole.
+    const want: string[] = [];
+    for (const para of layer.content.split('\n')) {
+      let line = '';
+      for (const word of para.split(' ')) {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width > box.width && line) { want.push(line); line = word; } else line = test;
+      }
+      want.push(line);
+    }
+    expect(got).toEqual(want);
   });
 });
